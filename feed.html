@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFF9F4">
+<meta name="description" content="看看同学们都在分享什么。">
+<title>同学们的分享 · 校园拾光</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">🌿</span>
+      <span>内容广场</span>
+    </a>
+    <button class="btn btn-soft btn-sm" id="refresh" type="button">↻ 刷新</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="row-between" style="padding:18px 0 12px">
+    <p class="text-sm text-muted" id="feed-count"></p>
+    <a class="btn btn-primary btn-sm" href="post.html">✏️ 我要分享</a>
+  </div>
+
+  <div class="notice notice-info" id="notice" hidden></div>
+
+  <div id="feed"></div>
+
+</main>
+
+<nav class="tabbar">
+  <div class="tabbar-inner">
+    <a class="tabbar-item" data-tab="home" href="index.html">
+      <span class="tabbar-icon">🏠</span><span>首页</span>
+    </a>
+    <a class="tabbar-item" data-tab="feed" href="feed.html">
+      <span class="tabbar-icon">🌿</span><span>广场</span>
+    </a>
+    <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
+      <span class="tabbar-icon">✏️</span><span class="tabbar-label">分享</span>
+    </a>
+    <a class="tabbar-item" data-tab="profile" href="profile.html">
+      <span class="tabbar-icon">🙂</span><span>我的</span>
+    </a>
+  </div>
+</nav>
+
+<footer class="site-footer">
+  看到喜欢的内容，轻轻点一下 🤍 就好。
+</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/feed.js"></script>
+</body>
+</html>

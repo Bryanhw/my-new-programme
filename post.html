@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFF9F4">
+<title>分享此刻 · 校园拾光</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">✏️</span>
+      <span>分享此刻</span>
+    </a>
+    <a class="link-plain" href="feed.html">先逛逛</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <p class="text-sm text-muted" id="identity-line" style="padding:16px 0 4px">…</p>
+
+  <div class="notice notice-info" id="notice" hidden></div>
+
+  <form class="card" id="post-form" novalidate>
+
+    <div class="field">
+      <label class="label" for="content">想说点什么</label>
+      <textarea class="textarea" id="content" name="content"
+        placeholder="今天发生了什么？&#10;食堂的菜、路上的晚霞、一节课的走神、或者只是想说说话……"></textarea>
+      <div class="counter" id="counter">0 / 1000</div>
+    </div>
+
+    <div class="field">
+      <span class="label">加一张照片（可选）</span>
+
+      <div class="upload" id="upload-box">
+        <div class="upload-icon">🖼</div>
+        <div class="upload-text">点击选择图片，或把图片拖到这里</div>
+        <div class="hint">支持 jpg / png / gif / webp，最大 5MB</div>
+      </div>
+      <input type="file" id="image" accept="image/*">
+
+      <div class="preview hidden" id="preview-box">
+        <img id="preview-img" alt="即将分享的图片">
+        <button class="preview-remove" type="button" id="remove-image" title="移除图片">×</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="switch-row">
+        <span class="switch-text">
+          匿名发布
+          <small>开启后不会显示你的昵称和学校</small>
+        </span>
+        <button class="switch" type="button" id="anon-switch"
+          role="switch" aria-checked="false" aria-label="匿名发布"></button>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" type="submit" id="submit">发布分享</button>
+
+    <p class="hint text-center mt-16">
+      发布即表示你愿意把它分享给同学们。<br>
+      请不要发布他人的隐私信息。
+    </p>
+
+  </form>
+
+</main>
+
+<nav class="tabbar">
+  <div class="tabbar-inner">
+    <a class="tabbar-item" data-tab="home" href="index.html">
+      <span class="tabbar-icon">🏠</span><span>首页</span>
+    </a>
+    <a class="tabbar-item" data-tab="feed" href="feed.html">
+      <span class="tabbar-icon">🌿</span><span>广场</span>
+    </a>
+    <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
+      <span class="tabbar-icon">✏️</span><span class="tabbar-label">分享</span>
+    </a>
+    <a class="tabbar-item" data-tab="profile" href="profile.html">
+      <span class="tabbar-icon">🙂</span><span>我的</span>
+    </a>
+  </div>
+</nav>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/post.js"></script>
+</body>
+</html>

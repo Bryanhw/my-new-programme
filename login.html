@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFF9F4">
+<title>登录 / 注册 · 校园拾光</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">🌤</span>
+      <span>校园拾光</span>
+    </a>
+    <a class="link-plain" href="feed.html">先逛逛</a>
+  </div>
+</header>
+
+<main class="wrap" style="max-width:520px">
+
+  <div class="notice notice-info mt-24" id="notice" hidden></div>
+
+  <div class="auth-card mt-16">
+    <div class="auth-head">
+      <h1 class="auth-title">欢迎来到校园拾光</h1>
+      <p class="auth-sub">注册一个账号，让分享有个名字；<br>或者先匿名看看，随时都能注册。</p>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button class="tab active" type="button" data-panel="login">登 录</button>
+      <button class="tab" type="button" data-panel="register">注 册</button>
+    </div>
+
+    <!-- ---------------- 登录 ---------------- -->
+    <div id="panel-login">
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label class="label" for="login-phone">手机号</label>
+          <input class="input" id="login-phone" name="phone" type="tel"
+            inputmode="numeric" maxlength="11" autocomplete="tel"
+            placeholder="11 位手机号">
+        </div>
+
+        <div class="field">
+          <label class="label" for="login-password">密码</label>
+          <input class="input" id="login-password" name="password" type="password"
+            autocomplete="current-password" placeholder="你的密码">
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" id="login-submit">登 录</button>
+      </form>
+    </div>
+
+    <!-- ---------------- 注册 ---------------- -->
+    <div id="panel-register" class="hidden">
+      <form id="register-form" novalidate>
+        <div class="field">
+          <label class="label" for="reg-phone">手机号</label>
+          <input class="input" id="reg-phone" name="phone" type="tel"
+            inputmode="numeric" maxlength="11" autocomplete="tel"
+            placeholder="11 位手机号">
+          <p class="hint">手机号只作为登录账号，不会收到任何短信，也不会公开展示完整号码。</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="reg-school">学校</label>
+          <input class="input" id="reg-school" name="school" type="text"
+            maxlength="40" placeholder="例如：××大学 / ××学院" autocomplete="organization">
+        </div>
+
+        <div class="field">
+          <label class="label" for="reg-nickname">昵称（可稍后再设置）</label>
+          <input class="input" id="reg-nickname" name="nickname" type="text"
+            maxlength="20" placeholder="想让同学们怎么称呼你？">
+        </div>
+
+        <div class="field">
+          <label class="label" for="reg-password">密码</label>
+          <input class="input" id="reg-password" name="password" type="password"
+            autocomplete="new-password" placeholder="至少 6 位">
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" id="register-submit">注 册</button>
+      </form>
+    </div>
+
+    <div class="divider">或者</div>
+
+    <button class="btn btn-ghost btn-block" type="button" id="anon-btn">
+      🌙 先匿名看看，不注册
+    </button>
+    <p class="hint text-center mt-16">
+      匿名进入后可以正常浏览和发布（发布时可选择是否匿名）。<br>
+      之后随时能注册账号，把昵称补上。
+    </p>
+  </div>
+
+</main>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/auth.js"></script>
+</body>
+</html>

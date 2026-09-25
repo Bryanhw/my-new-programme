@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFF9F4">
+<title>我的 · 校园拾光</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">🙂</span>
+      <span>我的</span>
+    </a>
+    <button class="link-plain" type="button" id="signout">退出登录</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="notice notice-info mt-16" id="notice" hidden></div>
+
+  <div class="notice notice-warn mt-16 hidden" id="anon-tip">
+    你现在是<strong>匿名访客</strong>，换个设备就找不回这些内容了。
+    <a href="login.html">注册一个账号</a>可以把内容留下来。
+  </div>
+
+  <section class="card profile-hero" id="profile-hero">
+    <div class="profile-avatar" id="profile-avatar">…</div>
+    <div class="profile-name" id="profile-name">加载中…</div>
+    <div class="profile-sub" id="profile-sub"></div>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-num" id="stat-posts">0</div>
+        <div class="stat-label">我的分享</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="stat-likes">0</div>
+        <div class="stat-label">匿名发布</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="stat-days">1</div>
+        <div class="stat-label">在这里的天数</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="nickname-card">
+    <h3 class="section-title mb-16">设置昵称</h3>
+    <form id="nickname-form" novalidate>
+      <div class="field">
+        <input class="input" id="nickname-input" type="text" maxlength="20"
+          placeholder="例如：爱睡午觉的小林">
+        <p class="hint">昵称会显示在你发布的每条分享上，随时可以改。留空则显示为「同学 xxxx」。</p>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit" id="nickname-submit">保存昵称</button>
+    </form>
+  </section>
+
+  <section id="mine-card">
+    <div class="section-head mt-24">
+      <h2 class="section-title">📮 我发布的</h2>
+    </div>
+    <div id="mine-list"></div>
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <div class="tabbar-inner">
+    <a class="tabbar-item" data-tab="home" href="index.html">
+      <span class="tabbar-icon">🏠</span><span>首页</span>
+    </a>
+    <a class="tabbar-item" data-tab="feed" href="feed.html">
+      <span class="tabbar-icon">🌿</span><span>广场</span>
+    </a>
+    <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
+      <span class="tabbar-icon">✏️</span><span class="tabbar-label">分享</span>
+    </a>
+    <a class="tabbar-item" data-tab="profile" href="profile.html">
+      <span class="tabbar-icon">🙂</span><span>我的</span>
+    </a>
+  </div>
+</nav>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/profile.js"></script>
+</body>
+</html>
