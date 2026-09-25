@@ -122,9 +122,12 @@ npx serve .
 五个页面都带上了 `og:title` / `og:description` / `og:image`，链接发到微信、QQ、微博
 时会展开成卡片，而不是一条光秃秃的网址。
 
-分享图是 `assets/img/og-cover.png`（1200×630）。它由
-`.deepworks/tmp/og/make_og.ps1` 用系统 GDI+ 画出（改文案只需改同目录的
-`strings.json`，不必重新做图）。
+分享图是 `assets/img/og-cover.png`（1200×630）。它是用系统 GDI+ 精确渲染中文画出来的，
+要改文案就改 `tools/og-strings.json`，然后重新生成：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
+```
 
 > ⚠️ 发布到正式域名后，请把每个 `<head>` 里的
 > `og:image` 从相对路径改成完整网址，例如
