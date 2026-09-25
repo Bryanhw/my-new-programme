@@ -89,7 +89,15 @@ window.CAMPUS_CONFIG = {
 ```
 
 > `anon public key` 就是设计给前端用的公开密钥，可以安全地放进代码里。
+> 新版控制台里它可能显示为 `sb_publishable_...`，同样填到 `SUPABASE_ANON_KEY` 即可，
+> 两种写法都能用。
 > ⚠️ 但**绝对不要**把 `service_role` key 放进来。
+>
+> 两个常见坑：
+> 1. `SUPABASE_URL` 只填项目地址（`https://xxxx.supabase.co`），
+>    **不要**把 API 文档里的 `/rest/v1/` 一起复制进来；
+> 2. 两个值都要用引号包住，中间用英文逗号结束，否则整个 `config.js` 会报语法错误，
+>    页面会一直停在「等待配置」状态。
 
 ### 本地预览
 

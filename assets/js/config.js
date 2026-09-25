@@ -15,10 +15,10 @@
 
 window.CAMPUS_CONFIG = {
   // 例：https://abcdefghijklmn.supabase.co
-  SUPABASE_URL: "https://your-project-ref.supabase.co",
+  SUPABASE_URL: "https://gvmqmzgzwnvseubpvqdx.supabase.co",
 
-  // 例：eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....
-  SUPABASE_ANON_KEY: "your-anon-public-key",
+  // anon public key（设计上就是公开的，可以放在前端代码里）
+  SUPABASE_ANON_KEY: "sb_publishable_6hPbAMsGr-N24t5aiz7yeA_Oi_0iF9a",
 
   // 图片存储桶名称（与 SQL 脚本中保持一致）
   BUCKET: "post-images",
