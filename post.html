@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#FFF9F4">
+<meta name="theme-color" content="#CB9243">
 <meta name="description" content="写下今天的一句话，或者分享一张照片。可以匿名，也可以留下名字。">
 <!-- 分享卡片（发布到正式域名后，把 og:image 换成完整网址） -->
 <meta property="og:type" content="website">
@@ -31,7 +31,7 @@
 
 <main class="wrap">
 
-  <p class="text-sm text-muted" id="identity-line" style="padding:16px 0 4px">…</p>
+  <p class="text-sm on-gold" id="identity-line" style="padding:16px 0 4px">…</p>
 
   <div class="notice notice-info" id="notice" hidden></div>
 
@@ -87,15 +87,33 @@
     <a class="tabbar-item" data-tab="home" href="index.html">
       <span class="tabbar-icon">🏠</span><span>首页</span>
     </a>
-    <a class="tabbar-item" data-tab="feed" href="feed.html">
-      <span class="tabbar-icon">🌿</span><span>广场</span>
-    </a>
     <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
-      <span class="tabbar-icon">✏️</span><span class="tabbar-label">分享</span>
+      <span class="tabbar-icon">✏️</span><span class="tabbar-label">发布</span>
     </a>
-    <a class="tabbar-item" data-tab="profile" href="profile.html">
-      <span class="tabbar-icon">🙂</span><span>我的</span>
-    </a>
+    <details class="tab-more" id="tab-more">
+      <summary class="tabbar-item" data-tab="more">
+        <span class="tabbar-icon">☰</span><span>更多</span>
+      </summary>
+      <div class="menu-sheet">
+        <a class="menu-item" data-tab="feed" href="feed.html">
+          <span class="menu-icon">🌿</span>
+          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
+        </a>
+        <a class="menu-item" data-tab="profile" href="profile.html">
+          <span class="menu-icon">🙂</span>
+          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
+        </a>
+        <div class="menu-sep"></div>
+        <a class="menu-item" data-tab="login" href="login.html">
+          <span class="menu-icon">🔑</span>
+          <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="about" href="index.html#about">
+          <span class="menu-icon">🌤</span>
+          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
+        </a>
+      </div>
+    </details>
   </div>
 </nav>
 

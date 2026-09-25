@@ -524,15 +524,46 @@ window.Campus = (function () {
     el.textContent = "";
   }
 
-  /** 底部导航当前高亮 */
+  /** 底部导航当前高亮（藏在二级菜单里的页面，会把一级入口「更多」点亮） */
   function markTabbar(active) {
     var items = document.querySelectorAll(".tabbar-item");
+    var matched = false;
     for (var i = 0; i < items.length; i++) {
       var key = items[i].getAttribute("data-tab");
-      if (key === active) items[i].classList.add("active");
+      if (key === active) { items[i].classList.add("active"); matched = true; }
       else items[i].classList.remove("active");
     }
+
+    var more = document.getElementById("tab-more");
+    if (!more) return;
+    more.classList.remove("tabbar-active");
+    var inner = more.querySelectorAll(".menu-item");
+    for (var j = 0; j < inner.length; j++) {
+      var innerKey = inner[j].getAttribute("data-tab");
+      if (!matched && innerKey === active) {
+        inner[j].classList.add("active");
+        more.classList.add("tabbar-active");
+      } else {
+        inner[j].classList.remove("active");
+      }
+    }
   }
+
+  /* 二级菜单：点面板外面、或按 Esc 就收起来（details 本身做不到） */
+  function bindMoreMenu() {
+    function close() {
+      var more = document.getElementById("tab-more");
+      if (more && more.open) more.open = false;
+    }
+    document.addEventListener("click", function (e) {
+      var more = document.getElementById("tab-more");
+      if (more && more.open && !more.contains(e.target)) close();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" || e.key === "Esc") close();
+    });
+  }
+  bindMoreMenu();
 
   /** 配置相关的排查步骤（配置未就绪时给用户看的） */
   function setupHint() {
