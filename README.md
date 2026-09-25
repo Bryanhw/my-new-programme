@@ -117,6 +117,20 @@ npx serve .
 仓库已推送到 GitHub，网页本身是纯静态的，直接在仓库
 **Settings → Pages** 里把 Source 设为 `main` 分支根目录即可获得线上地址。
 
+### 分享卡片（og 图）
+
+五个页面都带上了 `og:title` / `og:description` / `og:image`，链接发到微信、QQ、微博
+时会展开成卡片，而不是一条光秃秃的网址。
+
+分享图是 `assets/img/og-cover.png`（1200×630）。它由
+`.deepworks/tmp/og/make_og.ps1` 用系统 GDI+ 画出（改文案只需改同目录的
+`strings.json`，不必重新做图）。
+
+> ⚠️ 发布到正式域名后，请把每个 `<head>` 里的
+> `og:image` 从相对路径改成完整网址，例如
+> `https://你的域名/assets/img/og-cover.png`。
+> 微信等平台**只认绝对地址**，相对路径会导致卡片没有图。
+
 ---
 
 ## 数据库结构
