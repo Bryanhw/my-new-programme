@@ -874,8 +874,10 @@ input[type="file"] { display: none; }
 }
 .home-photo img {
   width: 100%;
+  height: auto;                /* 必须显式声明：否则 HTML 上的 height="1279" 会把盒子钉成 1279px 高，
+                                  aspect-ratio 随即失效，照片会以原始像素只截出中间一条 —— 竖屏上像被放大了一样 */
   display: block;
-  aspect-ratio: 1706 / 1130;   /* 4:3 轻微裁成 3:2，手机上不至于太长 */
+  aspect-ratio: 1706 / 1130;   /* 宽屏：4:3 轻微裁成 3:2，首页不至于被一张图撑得太长 */
   object-fit: cover;
   object-position: center 52%;
 }
@@ -1287,6 +1289,8 @@ body.modal-open { overflow: hidden; }
   .footer-brand { font-size: 43px; }
   .menu-sheet { width: 214px; }
   .home-photo { margin-top: 18px; border-width: 4px; }
+  /* 窄屏/竖屏：恢复照片原始 4:3，整张都在画面里，不再把中间一条放大 */
+  .home-photo img { aspect-ratio: 1706 / 1279; object-position: center; }
 }
 
 /* 减少动效偏好 */
