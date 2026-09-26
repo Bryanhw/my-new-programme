@@ -5,6 +5,14 @@
 
 > 来自最初的想法：*a platform for students to share their feelings, their pictures, etc.*
 
+## 线上地址
+
+- 网址：<https://bryanhw.github.io/my-new-programme/>
+- 托管：GitHub Pages，直接发布 `main` 分支根目录，**没有构建步骤**（改完推上去就是新的）
+- 数据：数据库 / 登录 / 图片仍全部走 Supabase，GitHub 只负责把静态网页发出去
+- 提示：`github.io` 在部分国内网络下访问不稳定，给同学发链接前先自己打开试一下；
+  换成自己的域名只要在 Pages 设置里填 Custom domain（本站全用相对路径，不用改代码）
+
 ---
 
 ## 这个网站能做什么
@@ -153,13 +161,23 @@ npx serve .
 
 ### 部署到 GitHub Pages
 
-仓库已推送到 GitHub，网页本身是纯静态的，直接在仓库
-**Settings → Pages** 里把 Source 设为 `main` 分支根目录即可获得线上地址。
+已上线：<https://bryanhw.github.io/my-new-programme/>
+
+本站是纯静态的，所以发布方式就是「把 `main` 推上去」：
+
+1. 仓库 **Settings → Pages**
+2. **Source** 选 `Deploy from a branch`
+3. **Branch** 选 `main`，目录选 `/(root)`，Save
+4. 等 1～3 分钟（Actions 标签页能看到 `pages build and deployment` 跑完）
+
+> 根目录放的 `.nojekyll` 是给 GitHub Pages 的：它默认用 Jekyll 处理站点，
+> 有 `_` 开头的文件就会被吞掉。本站现在没有这种文件，加这个空文件是防止以后踩坑。
 
 ### 分享卡片（og 图）
 
-五个页面都带上了 `og:title` / `og:description` / `og:image`，链接发到微信、QQ、微博
-时会展开成卡片，而不是一条光秃秃的网址。
+六个页面（主页、广场、发布、我的、登录、常见问题）都带上了 `og:title` / `og:url` /
+`og:description` / `og:image`，链接发到微信、QQ、微博时会展开成卡片，
+而不是一条光秃秃的网址。
 
 分享图是 `assets/img/og-cover.png`（1200×630）。它是用系统 GDI+ 精确渲染中文画出来的，
 要改文案就改 `tools/og-strings.json`，然后重新生成：
@@ -168,10 +186,13 @@ npx serve .
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 ```
 
-> ⚠️ 发布到正式域名后，请把每个 `<head>` 里的
-> `og:image` 从相对路径改成完整网址，例如
-> `https://你的域名/assets/img/og-cover.png`。
-> 微信等平台**只认绝对地址**，相对路径会导致卡片没有图。
+> ✅ 六个页面的 `og:image` 已经写成完整网址
+> （`https://bryanhw.github.io/my-new-programme/assets/img/og-cover.png`），
+> 并且补上了 `og:url`。微信等平台**只认绝对地址**，相对路径会导致卡片没有图——
+> 所以这步是上线的必要动作，不是可选项。
+>
+> 如果以后换了域名（自定义域名 / 换平台），记得把六个 `<head>` 里的
+> `og:image` 和 `og:url` 一起改掉，否则卡片会指向旧地址或抓不到图。
 
 ---
 
