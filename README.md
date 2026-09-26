@@ -401,6 +401,24 @@ update public.reports set status = 'resolved' where post_id = '帖子 id';
 > 面向同学的版本在 [`faq.html`](faq.html)（页头「☰ 更多 → ❓ 常见问题」），
 > 上面这些问题都用更口语化的说法写了一遍。
 
+### 页脚免责声明
+
+主页（`index.html`）页脚在大字 slogan 下面有一行法律声明，原文是：
+
+> 本网页含有 AI 生成的产物，未侵犯版权；网站所有者对本网站访客的发言都不予置评，
+> 将对不合规的帖子进行下架处理。
+
+- 位置：`index.html` 的 `footer.site-footer` 里，`.footer-note` 之下新增的 `p.footer-legal`
+- 样式：`assets/css/style.css` 的 `.footer-legal`（12.5px / 1.85 行高，与上文之间一条发丝线，
+  最宽 560px 居中）
+- ⚠️ 颜色必须用 `--ink`（`#3B2A1B`）：它在金底 `#CB9243` 上实测 **5.04:1**，达到 WCAG AA
+  的小字标准（4.5:1）。不要顺手改成 `--text-muted` / `--text-faint`（约 1.23:1），
+  也别照抄上面 `.footer-note` 的 `rgba(59, 42, 27, .62)`（合成后 2.62:1，连大字的 3:1
+  都不到）——那种淡色是给「这里没有热搜，也没有排名」这类装饰性句子用的，
+  这行是给访客看的声明，得能读清。
+- 目前只放在**主页**。如果要全站铺开，把这段 `p.footer-legal` 复制进另外五个页面的
+  `footer.site-footer` 即可（广场、发布、我的、登录、常见问题六个页脚结构完全一致）。
+
 ## License
 
 MIT

@@ -988,6 +988,21 @@ input[type="file"] { display: none; }
   color: rgba(59, 42, 27, 0.62);
 }
 
+/* 免责声明：落在大字收尾下面的一行小字，用发丝线跟 slogan 隔开。
+   ⚠️ 颜色必须用 --ink(#3B2A1B)：它在金底 #CB9243 上实测 5.04:1，达到 WCAG AA 小字标准；
+   上面 .footer-note 那种 rgba(59,42,27,.62) 合成后只有 2.62:1（连大字的 3:1 都不到），
+   只适合「没有热搜也没有排名」这类装饰性句子，不适合带法律含义的声明。
+   改这里之前先想清楚这一条。 */
+.footer-legal {
+  max-width: 560px;
+  margin: 22px auto 0;
+  padding-top: 18px;
+  border-top: 1px solid rgba(59, 42, 27, 0.18);
+  font-size: 12.5px;
+  line-height: 1.85;
+  color: var(--ink);
+}
+
 /* ------------------------------ 工具类 ------------------------------ */
 .row        { display: flex; align-items: center; gap: 10px; }
 .row-between{ display: flex; align-items: center; justify-content: space-between; gap: 10px; }
