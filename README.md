@@ -408,7 +408,8 @@ update public.reports set status = 'resolved' where post_id = '帖子 id';
 > 本网页含有 AI 生成的产物，未侵犯版权；网站所有者对本网站访客的发言都不予置评，
 > 将对不合规的帖子进行下架处理。
 
-- 位置：`index.html` 的 `footer.site-footer` 里，`.footer-note` 之下新增的 `p.footer-legal`
+- 位置：六个页面（主页、广场、发布、我的、登录、常见问题）的 `footer.site-footer` 里，
+  `.footer-note` 之下新增的 `p.footer-legal`，六处文案逐字一致
 - 样式：`assets/css/style.css` 的 `.footer-legal`（12.5px / 1.85 行高，与上文之间一条发丝线，
   最宽 560px 居中）
 - ⚠️ 颜色必须用 `--ink`（`#3B2A1B`）：它在金底 `#CB9243` 上实测 **5.04:1**，达到 WCAG AA
@@ -416,8 +417,8 @@ update public.reports set status = 'resolved' where post_id = '帖子 id';
   也别照抄上面 `.footer-note` 的 `rgba(59, 42, 27, .62)`（合成后 2.62:1，连大字的 3:1
   都不到）——那种淡色是给「这里没有热搜，也没有排名」这类装饰性句子用的，
   这行是给访客看的声明，得能读清。
-- 目前只放在**主页**。如果要全站铺开，把这段 `p.footer-legal` 复制进另外五个页面的
-  `footer.site-footer` 即可（广场、发布、我的、登录、常见问题六个页脚结构完全一致）。
+- **六个页面都有**。六页页脚结构完全一致：改文案要六处一起改（别只改一处，
+  否则各页说法不一致），新增页面时也要同步补上这一段。
 
 ## License
 
