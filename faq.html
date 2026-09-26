@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#CB9243">
+<meta name="description" content="关于校园拾光的常见问题：匿名到什么程度、要不要注册、图片多大、怎么找回内容。">
+<!-- 分享卡片（发布到正式域名后，把 og:image 换成完整网址） -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="校园拾光">
+<meta property="og:title" content="常见问题 · 校园拾光">
+<meta property="og:description" content="匿名到什么程度？要不要注册？图片多大？这里把常被问到的事情一次说清楚。">
+<meta property="og:image" content="assets/img/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<title>常见问题 · 校园拾光</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">❓</span>
+      <span>常见问题</span>
+    </a>
+    <a class="link-plain" href="feed.html">先逛逛</a>
+    <details class="nav-more" id="tab-more">
+      <summary class="nav-btn" aria-label="更多入口">
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </summary>
+      <div class="menu-sheet">
+        <a class="menu-item" data-tab="feed" href="feed.html">
+          <span class="menu-icon">🌿</span>
+          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
+        </a>
+        <a class="menu-item" data-tab="profile" href="profile.html">
+          <span class="menu-icon">🙂</span>
+          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="faq" href="faq.html">
+          <span class="menu-icon">❓</span>
+          <span class="menu-text"><b>常见问题</b><small>匿名、图片、找回内容</small></span>
+        </a>
+        <div class="menu-sep"></div>
+        <a class="menu-item" data-tab="login" href="login.html">
+          <span class="menu-icon">🔑</span>
+          <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="about" href="index.html#about">
+          <span class="menu-icon">🌤</span>
+          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
+        </a>
+      </div>
+    </details>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="notice notice-info mt-16" id="notice" hidden></div>
+
+  <section class="card mt-16">
+    <h1 class="section-title mb-8">❓ 常被问到的几件事</h1>
+    <p class="text-sm text-muted" style="line-height:1.95">
+      这里把匿名、昵称、图片、找回内容这些事一次说清楚。<br>
+      还有没写到的，可以直接在内容广场里问问其他同学。
+    </p>
+  </section>
+
+  <div class="faq-list mt-16">
+
+    <details class="faq-item">
+      <summary>发内容需要注册吗？</summary>
+      <div class="faq-body">
+        <p>不需要。发布页可以直接「匿名进入」，写一句话就能发出去。</p>
+        <p>如果你打算长期写，建议用 11 位手机号注册一个账号：内容会跟着账号走，换手机也能找回来。注册不需要短信验证码。</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>匿名发布，是匿到什么程度？</summary>
+      <div class="faq-body">
+        <p>勾选「匿名发布」之后，这条分享只会显示成「匿名同学」，不显示昵称，也不显示学校。内容广场的接口也不会把作者账号返回给浏览器。</p>
+        <p>需要你自己留意的两件事：一是<strong>图片本身</strong>可能带着信息（门牌号、工牌、聊天截图里的头像），发之前看一眼；二是后台仍然记着这条分享属于哪个账号 —— 这是为了让你能删除自己的内容。</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>可以只留一个昵称、不公开手机号吗？</summary>
+      <div class="faq-body">
+        <p>可以。昵称只是署名，会显示在你没有勾选匿名的分享上，随时能改。</p>
+        <p>手机号只有你自己在「我的」页看得到，而且是脱敏的（<code>138****8888</code>）。数据库里的手机号只有本人能读到，别人即使直接调接口也读不到。</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>为什么用手机号，而不是邮箱？</summary>
+      <div class="faq-body">
+        <p>手机号只是一个登录用的标识：我们不发短信、不打电话，也不会把它显示出来。用它可以让注册更短一点，也能让你不用为了发一句话再多注册一个邮箱。</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>匿名访客发的内容，换设备还能看到吗？</summary>
+      <div class="faq-body">
+        <p>看不到。匿名身份存在这个浏览器里，清空浏览器数据或换一台设备，就找不回来了。</p>
+        <p>如果这些文字对你有点重要，花一分钟注册一个账号，内容就会跟着账号走。</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>能发几张图片？多大？</summary>
+      <div class="faq-body">
+        <p>一条分享一张图片，支持 jpg / png / gif / webp，单张 5MB 以内。选择后会上传到存储空间，只有登录用户能上传。</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>写错了、后悔了，能删掉吗？</summary>
+      <div class="faq-body">
+        <p>可以。在「我的」页面，每条自己的分享下面都有「删除这条」，删掉就不能恢复了，所以按下去之前想一下。</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>为什么没有热搜、排名、粉丝数？</summary>
+      <div class="faq-body">
+        <p>故意的。这里只留下「今天的分享」和一个轻轻的 🤍 —— 点一下表示喜欢，不显示榜单，也不统计谁更受欢迎。</p>
+        <p>我们希望它更像校园里的一条长椅，而不是一个比赛场。</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>遇到不友善的内容怎么办？</summary>
+      <div class="faq-body">
+        <p>目前还没有举报按钮（会尽快补上）。如果看到让你不舒服的内容，可以先告诉自己信任的同学或老师；涉及隐私或骚扰的内容，我们会在有举报入口之后统一处理。</p>
+        <p>也请你在发布时别写到别人的隐私 —— 这是这里唯一一条硬规矩。</p>
+      </div>
+    </details>
+
+  </div>
+
+  <div class="cta-row mt-24" style="margin-bottom:24px">
+    <a class="btn btn-primary btn-lg btn-block" href="post.html">✏️ 去写一条</a>
+    <a class="btn btn-ghost btn-block" href="feed.html">🌿 先看看同学们</a>
+  </div>
+
+</main>
+
+<nav class="tabbar">
+  <div class="tabbar-inner">
+    <a class="tabbar-item" data-tab="home" href="index.html">
+      <span class="tabbar-icon">🏠</span><span>首页</span>
+    </a>
+    <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
+      <span class="tabbar-icon">✏️</span><span class="tabbar-label">发布</span>
+    </a>
+  </div>
+</nav>
+
+<footer class="site-footer">
+  <div class="footer-brand">校园拾光</div>
+  <p class="footer-line">把今天的心事和光，留在这里</p>
+  <p class="footer-note">有问题先看看这一页，答案通常就在这里</p>
+</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/faq.js"></script>
+</body>
+</html>

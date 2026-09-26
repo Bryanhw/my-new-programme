@@ -91,7 +91,8 @@ button, input, textarea, select {
 .site-header {
   position: sticky;
   top: 0;
-  z-index: 30;
+  /* 高于底部 tabbar(40)：二级菜单从页头向下展开时要盖住页面内容 */
+  z-index: 45;
   backdrop-filter: blur(14px);
   background: rgba(203, 146, 67, 0.72);
   border-bottom: 1px solid var(--ink-line);
@@ -143,6 +144,40 @@ button, input, textarea, select {
 }
 .header-user a { color: var(--ink-solid); text-decoration: underline; text-underline-offset: 2px; }
 .header-user a:hover { color: #A8451A; }
+
+/* 页头右上角的「更多」入口：一级按钮 + 向下展开的二级菜单 */
+.nav-more {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.nav-btn {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  cursor: pointer;
+  color: var(--ink);
+  background: rgba(255, 253, 251, 0.30);
+  border: 1px solid rgba(255, 253, 251, 0.48);
+  list-style: none;                /* summary 当按钮用：去掉默认三角 */
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.nav-btn::-webkit-details-marker { display: none; }
+.nav-btn::marker { content: ""; }
+.nav-btn:hover { background: rgba(255, 253, 251, 0.58); }
+.nav-more[open] > .nav-btn,
+.nav-more.tabbar-active > .nav-btn {
+  background: var(--ink-solid);
+  color: var(--ink-sun);
+  border-color: rgba(43, 29, 17, 0.62);
+}
+.nav-more > .nav-btn:focus-visible {
+  outline: 2px solid var(--ink-solid);
+  outline-offset: 2px;
+}
 
 /* 直接落在金色画布上的链接（卡片外的零星链接） */
 .on-gold a { color: var(--ink-solid); text-decoration: underline; text-underline-offset: 2px; }
@@ -210,22 +245,13 @@ button, input, textarea, select {
   border: 1px solid rgba(43, 29, 17, 0.5);
 }
 
-/* 太阳光晕装饰 */
-.sun {
-  width: 108px;
-  height: 108px;
-  margin: 0 auto 20px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 34% 30%, #FFF8EA 0%, #FFE2B4 55%, #F0C06B 100%);
-  box-shadow: 0 0 0 12px rgba(255, 253, 251, 0.18),
-              0 0 0 26px rgba(255, 253, 251, 0.10),
-              0 16px 36px rgba(59, 42, 27, 0.22);
-  animation: breathe 5.5s var(--ease) infinite;
-}
-
-@keyframes breathe {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.045); }
+/* 学校正门（AI 生成 → 抠掉绿底 → 透明 PNG），替代原来的太阳装饰 */
+.hero-gate {
+  display: block;
+  width: min(330px, 86%);
+  height: auto;
+  margin: 0 auto 10px;
+  filter: drop-shadow(0 14px 26px rgba(59, 42, 27, 0.30));
 }
 
 /* ------------------------------ 主行动按钮 ------------------------------ */
@@ -768,8 +794,8 @@ input[type="file"] { display: none; }
 .tabbar-icon { font-size: 19px; line-height: 1.1; }
 
 .tabbar-center {
-  flex: 0 0 66px;
-  margin: 0 4px;
+  flex: 1 1 0;
+  margin: 0;
 }
 .tabbar-center .tabbar-icon {
   width: 52px;
@@ -785,53 +811,36 @@ input[type="file"] { display: none; }
 }
 .tabbar-center .tabbar-label { margin-top: 3px; }
 
-/* ============ 二级菜单：一级「更多」+ 向上滑出的面板 ============ */
-.tab-more {
-  flex: 1;
-  position: relative;
-}
-
-.tab-more > summary {
-  width: 100%;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.tab-more[open] > summary,
-.tab-more.tabbar-active > summary { color: var(--ink-sun); }
-.tab-more > summary:focus-visible {
-  outline: 2px solid var(--ink-sun);
-  outline-offset: -2px;
-}
-
-/* 面板本体 */
+/* ============ 二级菜单：页头右上角「☰」+ 向下滑出的面板 ============ */
+/* 面板本体（挂在 .nav-more 这个 details 上，从页头往下展开） */
 .menu-sheet {
   position: absolute;
-  right: -6px;
-  bottom: calc(100% + 14px);
+  right: -2px;
+  top: calc(100% + 12px);
   width: 236px;
   padding: 8px;
   border-radius: 20px;
   background: rgba(255, 253, 251, 0.98);
   border: 1px solid rgba(203, 146, 67, 0.30);
   box-shadow: 0 18px 48px rgba(43, 27, 15, 0.34);
-  animation: sheetUp 0.22s var(--ease) both;
+  animation: sheetDown 0.22s var(--ease) both;
 }
-/* 指向「更多」的小尖角 */
+/* 指向「☰」的小尖角（在面板顶部，尖朝上） */
 .menu-sheet::after {
   content: "";
   position: absolute;
-  right: 28px;
-  top: 100%;
+  right: 15px;
+  bottom: 100%;
   width: 12px;
   height: 12px;
   background: rgba(255, 253, 251, 0.98);
   border-right: 1px solid rgba(203, 146, 67, 0.30);
   border-bottom: 1px solid rgba(203, 146, 67, 0.30);
-  transform: translateY(-6px) rotate(45deg);
+  transform: translateY(6px) rotate(225deg);
 }
 
-@keyframes sheetUp {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+@keyframes sheetDown {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -1006,18 +1015,150 @@ input[type="file"] { display: none; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ------------------------------ 刷新按钮上的线性图标 ------------------------------ */
+.icon-refresh {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+.btn.is-loading { opacity: 0.72; cursor: progress; }
+.btn.is-loading .icon-refresh { animation: spin 0.8s linear infinite; }
+
+/* ------------------------------ 发帖昵称弹窗 ------------------------------ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(43, 29, 17, 0.52);
+  backdrop-filter: blur(3px);
+  animation: fadeIn 0.16s var(--ease) both;
+}
+.modal-backdrop[hidden] { display: none; }
+
+/* 弹窗打开时锁住背景滚动 */
+body.modal-open { overflow: hidden; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  width: 100%;
+  max-width: 372px;
+  padding: 22px 20px 18px;
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 26px 64px rgba(43, 27, 15, 0.44);
+  animation: sheetDown 0.2s var(--ease) both;
+}
+.modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 7px;
+}
+.modal-text {
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.modal-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 16px;
+  font-family: inherit;
+  border-radius: 14px;
+  border: 1.5px solid rgba(203, 146, 67, 0.44);
+  background: #FFFDFB;
+  color: var(--text);
+}
+.modal-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(203, 146, 67, 0.20);
+}
+.modal-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 16px;
+}
+.modal-link {
+  align-self: center;
+  padding: 4px 6px;
+}
+
+/* ------------------------------ 常见问题页 ------------------------------ */
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.faq-item {
+  background: var(--surface);
+  border: 1px solid rgba(203, 146, 67, 0.26);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.faq-item > summary {
+  position: relative;
+  padding: 15px 44px 15px 16px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.faq-item > summary::-webkit-details-marker { display: none; }
+.faq-item > summary::marker { content: ""; }
+.faq-item > summary::after {
+  content: "";
+  position: absolute;
+  right: 19px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--brand);
+  border-bottom: 2px solid var(--brand);
+  transform: translateY(-70%) rotate(45deg);
+  transition: transform 0.2s var(--ease);
+}
+.faq-item[open] > summary::after { transform: translateY(-30%) rotate(-135deg); }
+.faq-body {
+  padding: 0 16px 15px;
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: var(--text-muted);
+}
+.faq-body p + p { margin-top: 8px; }
+.faq-body code {
+  background: rgba(203, 146, 67, 0.14);
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 12.5px;
+}
+
 /* ------------------------------ 响应式 ------------------------------ */
 @media (max-width: 520px) {
   .hero-title { font-size: 23px; }
   .card { padding: 17px; border-radius: var(--radius-md); }
   .hero { padding: 24px 0 6px; }
-  .sun { width: 92px; height: 92px; margin-bottom: 16px; }
+  .hero-gate { width: min(272px, 84%); margin-bottom: 6px; }
   .btn-lg { font-size: 15.5px; padding: 15px 30px; }
   .stat-num { font-size: 17px; }
   .pill { font-size: 12px; padding: 6px 13px; }
   .empty-icon { width: 74px; height: 74px; font-size: 30px; }
   .footer-brand { font-size: 43px; }
-  .menu-sheet { width: 218px; right: -10px; }
+  .menu-sheet { width: 214px; }
   .home-photo { margin-top: 18px; border-width: 4px; }
 }
 

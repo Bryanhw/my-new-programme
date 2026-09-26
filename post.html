@@ -26,6 +26,37 @@
       <span>分享此刻</span>
     </a>
     <a class="link-plain" href="feed.html">先逛逛</a>
+    <details class="nav-more" id="tab-more">
+      <summary class="nav-btn" aria-label="更多入口">
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </summary>
+      <div class="menu-sheet">
+        <a class="menu-item" data-tab="feed" href="feed.html">
+          <span class="menu-icon">🌿</span>
+          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
+        </a>
+        <a class="menu-item" data-tab="profile" href="profile.html">
+          <span class="menu-icon">🙂</span>
+          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="faq" href="faq.html">
+          <span class="menu-icon">❓</span>
+          <span class="menu-text"><b>常见问题</b><small>匿名、图片、找回内容</small></span>
+        </a>
+        <div class="menu-sep"></div>
+        <a class="menu-item" data-tab="login" href="login.html">
+          <span class="menu-icon">🔑</span>
+          <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="about" href="index.html#about">
+          <span class="menu-icon">🌤</span>
+          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
+        </a>
+      </div>
+    </details>
   </div>
 </header>
 
@@ -90,32 +121,27 @@
     <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
       <span class="tabbar-icon">✏️</span><span class="tabbar-label">发布</span>
     </a>
-    <details class="tab-more" id="tab-more">
-      <summary class="tabbar-item" data-tab="more">
-        <span class="tabbar-icon">☰</span><span>更多</span>
-      </summary>
-      <div class="menu-sheet">
-        <a class="menu-item" data-tab="feed" href="feed.html">
-          <span class="menu-icon">🌿</span>
-          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
-        </a>
-        <a class="menu-item" data-tab="profile" href="profile.html">
-          <span class="menu-icon">🙂</span>
-          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
-        </a>
-        <div class="menu-sep"></div>
-        <a class="menu-item" data-tab="login" href="login.html">
-          <span class="menu-icon">🔑</span>
-          <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
-        </a>
-        <a class="menu-item" data-tab="about" href="index.html#about">
-          <span class="menu-icon">🌤</span>
-          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
-        </a>
-      </div>
-    </details>
   </div>
 </nav>
+
+<!-- 匿名访客发布前的昵称弹窗（参考 padlet：先给你一个可以改的名字） -->
+<div class="modal-backdrop" id="nick-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nick-modal-title">
+    <h3 class="modal-title" id="nick-modal-title">要不要署个名字？</h3>
+    <p class="modal-text">
+      不写名字的话，这条会显示成「匿名同学」。<br>
+      写一个名字就只显示这个名字 —— 手机号和学校都不会公开。
+    </p>
+    <input class="modal-input" id="nick-input" type="text" maxlength="20"
+           placeholder="例如：图书馆三楼的小猫" autocomplete="off">
+    <p class="modal-hint">最多 20 个字；发布后也能在「我的」里修改。</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-block" type="button" id="nick-save">就用这个名字发布</button>
+      <button class="btn btn-ghost btn-block" type="button" id="nick-keep-anon">保持匿名，直接发布</button>
+      <button class="link-plain modal-link" type="button" id="nick-cancel">先等等，我改一下内容</button>
+    </div>
+  </div>
+</div>
 
 <footer class="site-footer">
   <div class="footer-brand">校园拾光</div>

@@ -236,7 +236,8 @@ window.Campus = (function () {
     return getIdentity().then(function (id) {
       if (!id.user) throw new Error("请先登录或选择匿名进入，再发布内容");
 
-      var profilePromise = id.isRegistered ? getProfile() : Promise.resolve(null);
+      // 匿名访客也可能设过昵称（见 saveNickname / 发帖弹窗），所以一律取一次资料
+      var profilePromise = getProfile();
 
       return profilePromise.then(function (profile) {
         var school = (profile && profile.school) || "";
@@ -600,6 +601,32 @@ window.Campus = (function () {
       "</div>";
   }
 
+  /* ------------------------------------------------------------------
+   * 8. 资料：保存昵称
+   * ------------------------------------------------------------------ */
+
+  /**
+   * 保存昵称（注册用户和匿名访客都能用：RLS 的 profiles_update_self 只允许改自己那一行）
+   * @param {string} nickname 最多 20 个字，空字符串表示清空
+   */
+  function saveNickname(nickname) {
+    if (!client) return Promise.reject(new Error(configError));
+
+    var name = String(nickname == null ? "" : nickname).trim();
+    if (name.length > 20) return Promise.reject(new Error("昵称最多 20 个字"));
+
+    return getIdentity().then(function (id) {
+      if (!id.user) throw new Error("请先登录或匿名进入，再设置昵称");
+      return client.from("profiles")
+        .update({ nickname: name || null, updated_at: new Date().toISOString() })
+        .eq("id", id.user.id)
+        .then(function (res) {
+          if (res.error) throw new Error("昵称没保存上：" + res.error.message);
+          return name;
+        });
+    });
+  }
+
   /** 防抖 */
   function debounce(fn, wait) {
     var timer = null;
@@ -611,7 +638,7 @@ window.Campus = (function () {
   }
 
   /* ------------------------------------------------------------------
-   * 8. 导出
+   * 9. 导出
    * ------------------------------------------------------------------ */
   return {
     // 环境
@@ -643,6 +670,7 @@ window.Campus = (function () {
     deletePost: deletePost,
     toggleLike: toggleLike,
     imageUrl: imageUrl,
+    saveNickname: saveNickname,
 
     // UI
     escapeHtml: escapeHtml,

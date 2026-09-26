@@ -26,6 +26,37 @@
       <span>我的</span>
     </a>
     <button class="link-plain" type="button" id="signout">退出登录</button>
+    <details class="nav-more" id="tab-more">
+      <summary class="nav-btn" aria-label="更多入口">
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </summary>
+      <div class="menu-sheet">
+        <a class="menu-item" data-tab="feed" href="feed.html">
+          <span class="menu-icon">🌿</span>
+          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
+        </a>
+        <a class="menu-item" data-tab="profile" href="profile.html">
+          <span class="menu-icon">🙂</span>
+          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="faq" href="faq.html">
+          <span class="menu-icon">❓</span>
+          <span class="menu-text"><b>常见问题</b><small>匿名、图片、找回内容</small></span>
+        </a>
+        <div class="menu-sep"></div>
+        <a class="menu-item" data-tab="login" href="login.html">
+          <span class="menu-icon">🔑</span>
+          <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="about" href="index.html#about">
+          <span class="menu-icon">🌤</span>
+          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
+        </a>
+      </div>
+    </details>
   </div>
 </header>
 
@@ -65,10 +96,13 @@
       <div class="field">
         <input class="input" id="nickname-input" type="text" maxlength="20"
           placeholder="例如：爱睡午觉的小林">
-        <p class="hint">昵称会显示在你发布的每条分享上，随时可以改。留空则显示为「同学 xxxx」。</p>
+        <p class="hint">昵称会显示在你发布的每条分享上（勾选了匿名的那条除外），随时可以改。</p>
       </div>
       <button class="btn btn-primary btn-block" type="submit" id="nickname-submit">保存昵称</button>
     </form>
+    <p class="hint mt-16" id="anon-nick-tip">
+      匿名访客也能设置昵称：设置后，没有勾选匿名的分享就会用这个名字署名。
+    </p>
   </section>
 
   <section id="mine-card">
@@ -88,30 +122,6 @@
     <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
       <span class="tabbar-icon">✏️</span><span class="tabbar-label">发布</span>
     </a>
-    <details class="tab-more" id="tab-more">
-      <summary class="tabbar-item" data-tab="more">
-        <span class="tabbar-icon">☰</span><span>更多</span>
-      </summary>
-      <div class="menu-sheet">
-        <a class="menu-item" data-tab="feed" href="feed.html">
-          <span class="menu-icon">🌿</span>
-          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
-        </a>
-        <a class="menu-item" data-tab="profile" href="profile.html">
-          <span class="menu-icon">🙂</span>
-          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
-        </a>
-        <div class="menu-sep"></div>
-        <a class="menu-item" data-tab="login" href="login.html">
-          <span class="menu-icon">🔑</span>
-          <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
-        </a>
-        <a class="menu-item" data-tab="about" href="index.html#about">
-          <span class="menu-icon">🌤</span>
-          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
-        </a>
-      </div>
-    </details>
   </div>
 </nav>
 

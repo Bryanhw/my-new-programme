@@ -25,7 +25,7 @@
   function load() {
     if (loading) return;
     loading = true;
-    if (refreshBtn) refreshBtn.disabled = true;
+    setRefreshLoading(true);
     feedEl.innerHTML = skeletonList();
 
     C.listPosts(50).then(function (posts) {
@@ -50,8 +50,15 @@
       if (retry) retry.addEventListener("click", load);
     }).then(function () {
       loading = false;
-      if (refreshBtn) refreshBtn.disabled = false;
+      setRefreshLoading(false);
     });
+  }
+
+  /* 刷新按钮：加载中变成转圈的线性图标（CSS 里 .is-loading 驱动动画） */
+  function setRefreshLoading(on) {
+    if (!refreshBtn) return;
+    refreshBtn.disabled = on;
+    refreshBtn.classList.toggle("is-loading", on);
   }
 
   /* 点赞 */

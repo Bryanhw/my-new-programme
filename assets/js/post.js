@@ -41,7 +41,17 @@
         return;
       }
       if (id.isAnonymous) {
-        identityEl.innerHTML = '当前身份：<strong>匿名访客</strong>（发布时不会显示你的账号） · <a href="login.html">注册一个账号</a>';
+        // 匿名访客也可能设过昵称，看一下现在会以什么名字出现
+        C.getProfile().then(function (p) {
+          var nickname = (p && p.nickname) ? p.nickname : "";
+          var tail = ' · <a href="login.html">注册一个账号</a>';
+          if (nickname) {
+            identityEl.innerHTML = "当前身份：<strong>匿名访客</strong>，会以「" +
+              C.escapeHtml(nickname) + "」署名" + tail;
+          } else {
+            identityEl.innerHTML = "当前身份：<strong>匿名访客</strong>，发布时不会显示账号，也可以给自己写个昵称" + tail;
+          }
+        });
         return;
       }
       C.getProfile().then(function (p) {
@@ -134,8 +144,75 @@
   });
 
   /* ---------------------------------------------------------------
+   * 昵称弹窗：匿名访客第一次署名时问一下（参考 padlet 的做法）
+   *   「就用这个名字发布」→ 保存昵称后署名发布
+   *   「保持匿名」        → 直接按匿名发布
+   *   Esc / 点背景 / 取消 → 回到表单，什么都不发
+   * --------------------------------------------------------------- */
+  var nickModal   = document.getElementById("nick-modal");
+  var nickInput   = document.getElementById("nick-input");
+  var nickSaveBtn = document.getElementById("nick-save");
+  var nickKeepBtn = document.getElementById("nick-keep-anon");
+  var nickCancelBtn = document.getElementById("nick-cancel");
+  var nickResolve = null;
+
+  function lockScroll(on) {
+    if (document.body && document.body.classList) {
+      document.body.classList.toggle("modal-open", on);
+    }
+  }
+
+  function closeNickModal(result) {
+    if (!nickModal || nickModal.hidden) return;
+    nickModal.hidden = true;
+    lockScroll(false);
+    var resolve = nickResolve;
+    nickResolve = null;
+    if (resolve) resolve(result);
+  }
+
+  function askNickname() {
+    // 兜底：页面里没有弹窗结构时，按「保持匿名」继续，不要让发布卡住
+    if (!nickModal) return Promise.resolve({ keepAnon: true });
+
+    setLoading(false);
+    nickModal.hidden = false;
+    lockScroll(true);
+    nickInput.value = "";
+    setTimeout(function () { nickInput.focus(); }, 30);
+    return new Promise(function (resolve) { nickResolve = resolve; });
+  }
+
+  if (nickModal) {
+    nickSaveBtn.addEventListener("click", function () {
+      var name = nickInput.value.trim();
+      if (!name) { nickInput.focus(); return; }
+      closeNickModal({ nickname: name });
+    });
+    nickKeepBtn.addEventListener("click", function () { closeNickModal({ keepAnon: true }); });
+    nickCancelBtn.addEventListener("click", function () { closeNickModal(null); });
+    nickModal.addEventListener("click", function (e) {
+      if (e.target === nickModal) closeNickModal(null);
+    });
+    nickInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); nickSaveBtn.click(); }
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !nickModal.hidden) { e.preventDefault(); closeNickModal(null); }
+    });
+  }
+
+  /* ---------------------------------------------------------------
    * 提交
    * --------------------------------------------------------------- */
+  function publish(content, isAnonymous) {
+    return C.createPost({
+      content: content,
+      file: selectedFile,
+      isAnonymous: isAnonymous
+    });
+  }
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     C.hideNotice(noticeEl);
@@ -160,10 +237,30 @@
         if (go) window.location.href = "login.html";
         throw new Error("__aborted__");
       }
-      return C.createPost({
-        content: content,
-        file: selectedFile,
-        isAnonymous: anon
+
+      // 匿名访客 + 没勾匿名：问一下要不要署个名字
+      var needAsk = id.isAnonymous && !anon;
+      var check = needAsk
+        ? C.getProfile().then(function (p) { return !(p && p.nickname); })
+        : Promise.resolve(false);
+
+      return check.then(function (shouldAsk) {
+        if (!shouldAsk) return { isAnonymous: anon };
+
+        return askNickname().then(function (decision) {
+          if (!decision) throw new Error("__aborted__");
+          if (!decision.nickname) return { isAnonymous: true };
+
+          setLoading(true);
+          var name = decision.nickname;
+          return C.saveNickname(name).then(function () {
+            C.showNotice(noticeEl, "ok", "记住了，以后就用「" + name + "」署名。");
+            return { isAnonymous: false };
+          });
+        });
+      }).then(function (opt) {
+        setLoading(true);
+        return publish(content, opt.isAnonymous);
       });
     }).then(function () {
       // 发布成功后清空表单，避免重复提交或返回本页时看到旧内容

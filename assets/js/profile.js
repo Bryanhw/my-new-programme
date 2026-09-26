@@ -28,6 +28,7 @@
 
   var currentUser = null;
   var currentProfile = null;
+  var currentIsAnon = false;
 
   document.title = "我的 · " + C.SITE_NAME;
   C.markTabbar("profile");
@@ -61,21 +62,17 @@
       }
 
       currentUser = id.user;
+      currentIsAnon = !!id.isAnonymous;
 
-      if (id.isAnonymous) {
-        anonTip.classList.remove("hidden");
-        nickCard.classList.add("hidden");
-      } else {
-        anonTip.classList.add("hidden");
-        nickCard.classList.remove("hidden");
-      }
+      // 匿名访客也能设置昵称：设置后，没有勾选匿名的分享就会用这个名字署名
+      if (id.isAnonymous) anonTip.classList.remove("hidden");
+      else anonTip.classList.add("hidden");
+      nickCard.classList.remove("hidden");
 
       C.getProfile().then(function (p) {
         currentProfile = p;
         renderHero(id, p);
-        if (id.isRegistered) {
-          nickInput.value = (p && p.nickname) || "";
-        }
+        nickInput.value = (p && p.nickname) || "";
       });
 
       loadMyPosts(id);
@@ -83,11 +80,12 @@
   }
 
   function renderHero(id, p) {
+    var nick = (p && p.nickname) || "";
     var label;
-    if (id.isAnonymous) label = "匿名访客";
-    else label = (p && p.nickname) ? p.nickname : "还没设置昵称";
+    if (id.isAnonymous) label = nick ? nick + "（匿名访客）" : "匿名访客";
+    else label = nick || "还没设置昵称";
 
-    avatarEl.textContent = id.isAnonymous ? "🌙" : C.initial(label);
+    avatarEl.textContent = (id.isAnonymous && !nick) ? "🌙" : C.initial(nick || label);
     nameEl.textContent = label;
 
     var parts = [];
@@ -179,15 +177,12 @@
     nickBtn.disabled = true;
     nickBtn.innerHTML = '<span class="spinner"></span>';
 
-    C.client().from("profiles")
-      .update({ nickname: value || null, updated_at: new Date().toISOString() })
-      .eq("id", currentUser.id)
-      .then(function (res) {
-        if (res.error) throw new Error(res.error.message);
+    C.saveNickname(value)
+      .then(function (saved) {
         currentProfile = currentProfile || {};
-        currentProfile.nickname = value || null;
-        C.showNotice(noticeEl, "ok", value ? "昵称已更新为「" + value + "」" : "已清空昵称");
-        renderHero({ isAnonymous: false }, currentProfile);
+        currentProfile.nickname = saved || null;
+        C.showNotice(noticeEl, "ok", saved ? "昵称已更新为「" + saved + "」" : "已清空昵称");
+        renderHero({ isAnonymous: currentIsAnon }, currentProfile);
       })
       .catch(function (err) {
         C.showNotice(noticeEl, "error", "保存失败：" + err.message);

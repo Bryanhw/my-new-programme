@@ -25,7 +25,45 @@
       <span class="brand-mark">🌿</span>
       <span>内容广场</span>
     </a>
-    <button class="btn btn-soft btn-sm" id="refresh" type="button">↻ 刷新</button>
+    <button class="btn btn-soft btn-sm" id="refresh" type="button">
+      <svg class="icon-refresh" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/>
+        <path d="M20.5 4.6V10H15"/>
+      </svg>
+      <span>刷新</span>
+    </button>
+    <details class="nav-more" id="tab-more">
+      <summary class="nav-btn" aria-label="更多入口">
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </summary>
+      <div class="menu-sheet">
+        <a class="menu-item" data-tab="feed" href="feed.html">
+          <span class="menu-icon">🌿</span>
+          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
+        </a>
+        <a class="menu-item" data-tab="profile" href="profile.html">
+          <span class="menu-icon">🙂</span>
+          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="faq" href="faq.html">
+          <span class="menu-icon">❓</span>
+          <span class="menu-text"><b>常见问题</b><small>匿名、图片、找回内容</small></span>
+        </a>
+        <div class="menu-sep"></div>
+        <a class="menu-item" data-tab="login" href="login.html">
+          <span class="menu-icon">🔑</span>
+          <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="about" href="index.html#about">
+          <span class="menu-icon">🌤</span>
+          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
+        </a>
+      </div>
+    </details>
   </div>
 </header>
 
@@ -50,30 +88,6 @@
     <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
       <span class="tabbar-icon">✏️</span><span class="tabbar-label">发布</span>
     </a>
-    <details class="tab-more" id="tab-more">
-      <summary class="tabbar-item" data-tab="more">
-        <span class="tabbar-icon">☰</span><span>更多</span>
-      </summary>
-      <div class="menu-sheet">
-        <a class="menu-item" data-tab="feed" href="feed.html">
-          <span class="menu-icon">🌿</span>
-          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
-        </a>
-        <a class="menu-item" data-tab="profile" href="profile.html">
-          <span class="menu-icon">🙂</span>
-          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
-        </a>
-        <div class="menu-sep"></div>
-        <a class="menu-item" data-tab="login" href="login.html">
-          <span class="menu-icon">🔑</span>
-          <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
-        </a>
-        <a class="menu-item" data-tab="about" href="index.html#about">
-          <span class="menu-icon">🌤</span>
-          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
-        </a>
-      </div>
-    </details>
   </div>
 </nav>
 
