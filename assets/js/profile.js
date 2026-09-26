@@ -23,6 +23,9 @@
   var mineCard   = document.getElementById("mine-card");
   var mineEl     = document.getElementById("mine-list");
 
+  var reportsCard = document.getElementById("reports-card");
+  var reportsEl   = document.getElementById("reports-list");
+
   var signOutBtn = document.getElementById("signout");
   var anonTip    = document.getElementById("anon-tip");
 
@@ -42,6 +45,7 @@
       heroEl.innerHTML = C.setupCard();
       nickCard.classList.add("hidden");
       mineCard.classList.add("hidden");
+      reportsCard.classList.add("hidden");
       signOutBtn.classList.add("hidden");
       return;
     }
@@ -57,6 +61,7 @@
           '<a class="btn btn-primary btn-block mt-16" href="login.html">去登录 / 注册</a>';
         nickCard.classList.add("hidden");
         mineCard.classList.add("hidden");
+        reportsCard.classList.add("hidden");
         signOutBtn.classList.add("hidden");
         return;
       }
@@ -76,6 +81,7 @@
       });
 
       loadMyPosts(id);
+      loadMyReports();
     });
   }
 
@@ -130,6 +136,24 @@
       }).join("");
     }).catch(function (err) {
       mineEl.innerHTML = '<div class="notice notice-error">加载失败：' + C.escapeHtml(err.message) + "</div>";
+    });
+  }
+
+  /* 我举报过的内容：没有就整块藏起来，免得没用过的同学看着奇怪 */
+  function loadMyReports() {
+    C.listMyReports().then(function (reports) {
+      if (!reports.length) {
+        reportsCard.classList.add("hidden");
+        return;
+      }
+      reportsCard.classList.remove("hidden");
+      reportsEl.innerHTML = reports.map(function (r) {
+        return C.renderReportReceipt(r);
+      }).join("");
+    }).catch(function () {
+      // 读不到举报记录不该影响「我的」页其他部分：给一句轻提示，不报红
+      reportsCard.classList.remove("hidden");
+      reportsEl.innerHTML = '<p class="receipt-empty">暂时读不到举报记录，稍后再看看。</p>';
     });
   }
 

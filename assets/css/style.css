@@ -1106,6 +1106,10 @@ body.modal-open { overflow: hidden; }
 .tag-review { background: #FFF4DA; color: #8A5A12; }
 .tag-reject { background: #FFEFEF; color: #C0392B; }
 
+/* 举报处理结果：沿用站点里已有那套绿，以及一个中性灰棕 */
+.tag-done  { background: #EFFAF0; color: #2E7D42; }
+.tag-quiet { background: #F6F1EC; color: #6B5B50; }
+
 /* 卡片底部的「举报」入口：低调，但点起来足够大 */
 .report-btn {
   font-size: 12.5px;
@@ -1165,6 +1169,57 @@ body.modal-open { overflow: hidden; }
   line-height: 1.6;
   min-height: 62px;
   resize: vertical;
+}
+
+/* ------------------------------ 我的举报回执 ------------------------------ */
+/* 「我的」页里列出自己举报过的内容处理到哪一步了，只有本人看得到 */
+.receipt {
+  background: var(--surface);
+  border: 1px solid rgba(203, 146, 67, 0.26);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 13px 15px;
+  margin-bottom: 10px;
+}
+.receipt:last-child { margin-bottom: 0; }
+.receipt-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+.receipt-time {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.receipt-quote {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink);
+  background: var(--surface-soft);
+  border-radius: 10px;
+  padding: 9px 12px;
+  word-break: break-word;
+}
+.receipt-meta {
+  margin-top: 9px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+.receipt-note {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.receipt-empty {
+  font-size: 13px;
+  line-height: 1.7;
+  /* 这块提示直接落在金底上，所以用金底专用的深色，不能用 --text-muted */
+  color: var(--ink-soft);
 }
 
 /* ------------------------------ 常见问题页 ------------------------------ */

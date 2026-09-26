@@ -650,6 +650,92 @@ window.Campus = (function () {
   });
 
   /* ------------------------------------------------------------------
+   * 6.6 我的举报回执（在「我的」页看自己举报过的内容处理得怎样了）
+   *     · 数据库只允许读到自己的举报（RLS：reporter_id = auth.uid()）
+   *     · 被举报的内容若已删除或不再公开，关联结果就是 null，这里照样显示状态
+   * ------------------------------------------------------------------ */
+
+  var REPORT_COLUMNS = "id, reason, detail, status, created_at, " +
+    "posts(content, display_name, is_anonymous, status, created_at, image_path)";
+
+  var REPORT_STATE = {
+    open:     { label: "处理中", className: "tag-review", note: "我们已经收到，正在核查。" },
+    resolved: { label: "已处理", className: "tag-done",   note: "谢谢你的反馈，这条内容已经被处理。" },
+    ignored:  { label: "未违规", className: "tag-quiet",  note: "我们核查过了，这条内容暂时没有发现问题。" }
+  };
+
+  /** 举报状态的中文名（认不出的状态按「处理中」显示，不吓人） */
+  function reportStatusLabel(status) {
+    var s = REPORT_STATE[String(status || "open")];
+    return s ? s.label : REPORT_STATE.open.label;
+  }
+
+  function reportStatusClass(status) {
+    var s = REPORT_STATE[String(status || "open")];
+    return s ? s.className : REPORT_STATE.open.className;
+  }
+
+  function reportStatusNote(status) {
+    var s = REPORT_STATE[String(status || "open")];
+    return s ? s.note : REPORT_STATE.open.note;
+  }
+
+  /**
+   * 取我提交过的举报（最新在前），没登录时返回空数组
+   * @param {number} [limit] 默认 30
+   */
+  function listMyReports(limit) {
+    if (!client) return Promise.reject(new Error(configError));
+
+    return getIdentity().then(function (id) {
+      if (!id.user) return [];
+
+      return client.from("reports")
+        .select(REPORT_COLUMNS)
+        .eq("reporter_id", id.user.id)
+        .order("created_at", { ascending: false })
+        .limit(limit || 30)
+        .then(function (res) {
+          if (res.error) throw new Error("加载失败：" + res.error.message);
+          return res.data || [];
+        });
+    });
+  }
+
+  /** 被举报内容现在的样子（已经看不到的就直说，不猜） */
+  function reportedExcerpt(post) {
+    if (!post) return "这条内容现在看不到了（可能已被删除或下架）";
+
+    var text = String(post.content == null ? "" : post.content).trim();
+    if (text.length > 40) text = text.slice(0, 40) + "…";
+
+    var who = post.is_anonymous ? "匿名同学" : (String(post.display_name || "").trim() || "同学");
+    if (!text) return "「" + who + "」发的一张图片";
+    return "「" + who + "」：" + text;
+  }
+
+  /**
+   * 一条举报回执
+   * @param {object} report listMyReports() 里的一行
+   */
+  function renderReportReceipt(report) {
+    var r = report || {};
+
+    return '<div class="receipt">' +
+        '<div class="receipt-top">' +
+          '<span class="tag ' + reportStatusClass(r.status) + '">' +
+            escapeHtml(reportStatusLabel(r.status)) + "</span>" +
+          '<span class="receipt-time">' + escapeHtml(timeAgo(r.created_at)) + "</span>" +
+        "</div>" +
+        '<div class="receipt-quote">' + escapeHtml(reportedExcerpt(r.posts)) + "</div>" +
+        '<div class="receipt-meta">举报原因：' + escapeHtml(reportReasonLabel(r.reason)) +
+          (r.detail ? " · 你写的说明：" + escapeHtml(r.detail) : "") +
+        "</div>" +
+        '<div class="receipt-note">' + escapeHtml(reportStatusNote(r.status)) + "</div>" +
+      "</div>";
+  }
+
+  /* ------------------------------------------------------------------
    * 7. UI 工具
    * ------------------------------------------------------------------ */
 
@@ -918,6 +1004,11 @@ window.Campus = (function () {
     reportPost: reportPost,
     openReportDialog: openReportDialog,
     reportReasons: REPORT_REASONS,
+    listMyReports: listMyReports,
+    reportStatusLabel: reportStatusLabel,
+    reportStatusNote: reportStatusNote,
+    reportedExcerpt: reportedExcerpt,
+    renderReportReceipt: renderReportReceipt,
 
     // UI
     escapeHtml: escapeHtml,
