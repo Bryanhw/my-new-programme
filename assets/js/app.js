@@ -382,7 +382,120 @@ window.Campus = (function () {
 
   /* ------------------------------------------------------------------
    * 6. 图片上传
+   *
+   *    上传前先压缩：手机直出的照片常有 3–5MB，而同学多是用手机流量
+   *    刷这个站，原图会让每次浏览都等很久。压到「最长边 1600px 的 JPEG」
+   *    后通常只剩几百 KB，手机屏幕上几乎看不出差别。
+   *
+   *    三条原则（宁愿不压，也不要把用户的东西弄坏）：
+   *      1. 只在「确定更小」时才替换：压完反而更大就用原图；
+   *      2. 任何一步失败（取不到尺寸、canvas 不可用、编码抛错）都退回原文件，
+   *         压缩绝不导致「发布失败」；
+   *      3. 动图（gif）与矢量图（svg）不重编码，避免动画丢失或糊掉。
    * ------------------------------------------------------------------ */
+
+  var IMAGE_MAX_EDGE = 1600;              // 最长边上限（px）
+  var IMAGE_QUALITY = 0.8;                // JPEG 质量：肉眼无损与体积的平衡点
+  var IMAGE_COMPRESS_OVER = 300 * 1024;   // 小于 300KB 的文件不值得折腾
+  var IMAGE_SKIP_TYPES = /^image\/(gif|svg\+xml)$/;
+
+  /** 读出图片本身（优先 createImageBitmap：顺带按 EXIF 把手机照片摆正） */
+  function loadImage(file) {
+    if (typeof window.createImageBitmap === "function") {
+      try {
+        return window.createImageBitmap(file, { imageOrientation: "from-image" })
+          .catch(function () { return window.createImageBitmap(file); });
+      } catch (e) { /* 老浏览器没有这个参数形态，走下面 <img> 兜底 */ }
+    }
+    return new Promise(function (resolve, reject) {
+      if (!window.URL || typeof window.URL.createObjectURL !== "function") {
+        reject(new Error("当前浏览器不支持读取本地图片"));
+        return;
+      }
+      var url = window.URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        if (window.URL.revokeObjectURL) window.URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = function () {
+        if (window.URL.revokeObjectURL) window.URL.revokeObjectURL(url);
+        reject(new Error("图片解码失败"));
+      };
+      img.src = url;
+    });
+  }
+
+  /** 把 dataURL 还原成 Blob（老浏览器没有 canvas.toBlob 时的兜底） */
+  function dataUrlToBlob(dataUrl) {
+    var parts = String(dataUrl).split(",");
+    var mime = /data:([^;]+)/.exec(parts[0] || "");
+    var bin = window.atob(parts[1] || "");
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: (mime && mime[1]) || "image/jpeg" });
+  }
+
+  /** canvas → Blob；编码不出来就 resolve(null)，由调用方决定退回原图 */
+  function canvasToBlob(canvas, type, quality) {
+    return new Promise(function (resolve) {
+      if (typeof canvas.toBlob === "function") {
+        try {
+          canvas.toBlob(function (blob) { resolve(blob || null); }, type, quality);
+          return;
+        } catch (e) { /* 落到 toDataURL */ }
+      }
+      try { resolve(dataUrlToBlob(canvas.toDataURL(type, quality))); }
+      catch (e) { resolve(null); }
+    });
+  }
+
+  /**
+   * 上传前的图片压缩。
+   * @returns {Promise<File|Blob>} 压缩后的 JPEG，或原文件（不需要/没压成）
+   */
+  function compressImage(file) {
+    if (!file || typeof file.size !== "number" || file.size <= IMAGE_COMPRESS_OVER) {
+      return Promise.resolve(file);
+    }
+    var type = file.type || "";
+    if (type.indexOf("image/") !== 0 || IMAGE_SKIP_TYPES.test(type)) {
+      return Promise.resolve(file);
+    }
+
+    return Promise.resolve().then(function () {
+      return loadImage(file);
+    }).then(function (src) {
+      var w = src.width || src.naturalWidth || 0;
+      var h = src.height || src.naturalHeight || 0;
+      if (!w || !h) throw new Error("拿不到图片尺寸");
+
+      var scale = Math.min(1, IMAGE_MAX_EDGE / Math.max(w, h));
+      var tw = Math.max(1, Math.round(w * scale));
+      var th = Math.max(1, Math.round(h * scale));
+
+      var canvas = document.createElement("canvas");
+      canvas.width = tw;
+      canvas.height = th;
+      var ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas 不可用");
+
+      // 先铺一层白底：PNG 的透明区域转成 JPEG 会变黑，铺白最接近肉眼预期
+      if (typeof ctx.fillRect === "function") {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, tw, th);
+      }
+      ctx.drawImage(src, 0, 0, tw, th);
+      if (typeof src.close === "function") src.close();
+
+      return canvasToBlob(canvas, "image/jpeg", IMAGE_QUALITY);
+    }).then(function (blob) {
+      if (!blob || !blob.size || blob.size >= file.size) return file;
+      return blob;
+    }).catch(function () {
+      return file;   // 压缩失败不是错误，最多就是白白多花点流量
+    });
+  }
 
   function uploadImage(file, userId) {
     if (!client) return Promise.reject(new Error(configError));
@@ -395,19 +508,24 @@ window.Campus = (function () {
       return Promise.reject(new Error("请选择图片文件"));
     }
 
-    var ext = extOf(file.name, file.type);
-    var path = userId + "/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "." + ext;
+    // 先压缩、再上传。返回值只可能是「更小的 JPEG」或「原文件」，
+    // 所以扩展名和 content-type 都要跟着实际要传的那个对象走。
+    return compressImage(file).then(function (payload) {
+      var compressed = payload !== file;
+      var ext = compressed ? extOf("", payload.type) : extOf(file.name, file.type);
+      var path = userId + "/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "." + ext;
 
-    return client.storage.from(BUCKET).upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
-      contentType: file.type || "image/jpeg"
-    }).then(function (res) {
-      if (res.error) {
-        throw new Error("图片上传失败：" + res.error.message +
-          "（请确认已在 Supabase 执行 docs/supabase-setup.sql 建好 post-images 存储桶）");
-      }
-      return path;
+      return client.storage.from(BUCKET).upload(path, payload, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: payload.type || file.type || "image/jpeg"
+      }).then(function (res) {
+        if (res.error) {
+          throw new Error("图片上传失败：" + res.error.message +
+            "（请确认已在 Supabase 执行 docs/supabase-setup.sql 建好 post-images 存储桶）");
+        }
+        return path;
+      });
     });
   }
 
@@ -1003,6 +1121,11 @@ window.Campus = (function () {
     toggleLike: toggleLike,
     imageUrl: imageUrl,
     saveNickname: saveNickname,
+
+    // 图片：compressImage 是「上传前压缩」的入口，
+    // uploadImage 平时由 createPost 调用，导出出来是为了能单独自测。
+    compressImage: compressImage,
+    uploadImage: uploadImage,
 
     // 举报
     reportPost: reportPost,
