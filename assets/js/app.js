@@ -265,7 +265,10 @@ window.Campus = (function () {
             display_name: displayName,
             school: school || null,
             content: content || null,
-            image_path: imagePath
+            image_path: imagePath,
+            // 新内容一律进待审核：数据库里 RLS 的 posts_insert_self
+            // 也只接受 status = 'pending'，自己改不成 approved。
+            status: "pending"
           };
           return client.from("posts").insert(row).select().single().then(function (res) {
             if (res.error) throw new Error("发布失败：" + res.error.message);
@@ -278,7 +281,8 @@ window.Campus = (function () {
 
   // 前端只取「需要展示」的字段：故意不返回 author_id，
   // 避免匿名帖的身份通过接口被直接读取（见 README「关于匿名的边界」）。
-  var POST_COLUMNS = "id, is_anonymous, display_name, school, content, image_path, created_at";
+  // status 用来显示「审核中 / 未通过」角标：只有本人看得见自己的待审核内容。
+  var POST_COLUMNS = "id, is_anonymous, display_name, school, content, image_path, created_at, status";
 
   /** 给一批帖子补上点赞数与「我是否点过」 */
   function attachLikes(posts) {
@@ -422,6 +426,230 @@ window.Campus = (function () {
   }
 
   /* ------------------------------------------------------------------
+   * 6.5 举报（看到违规内容时上报给站点主人）
+   *     · 只能以自己的身份举报（数据库 RLS：reporter_id = auth.uid()）
+   *     · 同一条内容只能举报一次（数据库唯一约束，重复提交会给出友好提示）
+   *     · 举报提交后自己改不了也删不掉，处理与否由站点主人在后台决定
+   * ------------------------------------------------------------------ */
+
+  var REPORT_REASONS = [
+    { key: "illegal", label: "违法违规", hint: "涉政、诈骗、赌博、毒品等" },
+    { key: "porn",    label: "色情低俗", hint: "露骨的图片或文字" },
+    { key: "ad",      label: "广告营销", hint: "拉群、兼职、卖号、刷单" },
+    { key: "abuse",   label: "人身攻击", hint: "辱骂、挂人、歧视" },
+    { key: "privacy", label: "隐私泄露", hint: "泄露他人姓名、照片、联系方式" },
+    { key: "other",   label: "其他",     hint: "说不清是哪一类就选这个" }
+  ];
+
+  /** 举报原因的中文名（后台展示与提示文案用） */
+  function reportReasonLabel(key) {
+    for (var i = 0; i < REPORT_REASONS.length; i++) {
+      if (REPORT_REASONS[i].key === key) return REPORT_REASONS[i].label;
+    }
+    return "其他";
+  }
+
+  /**
+   * 提交一条举报
+   * @param {string} postId 被举报的帖子 id
+   * @param {string} reason 原因 key（见 REPORT_REASONS）
+   * @param {string} [detail] 补充说明，最多 200 字
+   */
+  function reportPost(postId, reason, detail) {
+    if (!client) return Promise.reject(new Error(configError));
+    if (!postId) return Promise.reject(new Error("没找到要举报的内容，刷新一下再试"));
+
+    var key = String(reason || "");
+    var known = false;
+    for (var i = 0; i < REPORT_REASONS.length; i++) {
+      if (REPORT_REASONS[i].key === key) known = true;
+    }
+    if (!known) return Promise.reject(new Error("请先选择举报原因"));
+
+    var text = String(detail == null ? "" : detail).trim();
+    if (text.length > 200) text = text.slice(0, 200);
+
+    return getIdentity().then(function (id) {
+      if (!id.user) throw new Error("请先登录或匿名进入，再举报");
+
+      return client.from("reports").insert({
+        post_id: postId,
+        reporter_id: id.user.id,
+        reason: key,
+        detail: text || null,
+        status: "open"
+      }).then(function (res) {
+        if (!res.error) return { reason: key, detail: text };
+
+        var msg = String(res.error.message || "");
+        var duplicate = res.error.code === "23505" || /duplicate|unique/i.test(msg);
+        if (duplicate) throw new Error("你已经举报过这条内容了，我们正在处理中");
+        throw new Error("举报没提交上：" + (msg || "请稍后重试"));
+      });
+    });
+  }
+
+  /* ---------------- 举报弹窗（由 app.js 动态生成，六个页面通用） ---------------- */
+
+  var reportPostId = null;
+  var reportWrap = null;
+
+  function reportModalHtml() {
+    var options = "";
+    for (var i = 0; i < REPORT_REASONS.length; i++) {
+      var r = REPORT_REASONS[i];
+      options +=
+        '<label class="report-option">' +
+          '<input type="radio" name="report-reason" value="' + r.key + '">' +
+          '<span class="report-option-body">' +
+            '<span class="report-option-label">' + escapeHtml(r.label) + "</span>" +
+            '<span class="report-option-hint">' + escapeHtml(r.hint) + "</span>" +
+          "</span>" +
+        "</label>";
+    }
+
+    return '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">' +
+        '<h3 class="modal-title" id="report-modal-title">举报这条分享</h3>' +
+        '<p class="modal-text">' +
+          "举报会直接送到站点管理员那里，由人工核查。<br>" +
+          "恶意举报同样会被处理，所以请如实选择。" +
+        "</p>" +
+        '<div class="report-reasons">' + options + "</div>" +
+        '<textarea class="modal-input report-detail" id="report-detail" rows="3" maxlength="200" ' +
+          'placeholder="补充说明（选填，最多 200 字）"></textarea>' +
+        '<p class="modal-hint" id="report-hint" hidden></p>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-primary btn-block" type="button" id="report-submit">提交举报</button>' +
+          '<button class="link-plain modal-link" type="button" id="report-cancel">算了，不举报了</button>' +
+        "</div>" +
+      "</div>";
+  }
+
+  /** 弹窗里的各个元素（页面里没有真实 DOM 时会拿到空集合，逻辑会安全跳过） */
+  function reportEls(wrap) {
+    return {
+      wrap: wrap,
+      radios: wrap && wrap.querySelectorAll ? wrap.querySelectorAll("input") : [],
+      detail: document.getElementById("report-detail"),
+      hint: document.getElementById("report-hint"),
+      submit: document.getElementById("report-submit")
+    };
+  }
+
+  function checkedReason(radios) {
+    for (var i = 0; i < radios.length; i++) {
+      var r = radios[i];
+      if (r && r.name === "report-reason" && r.checked) return r.value;
+    }
+    return "";
+  }
+
+  function closeReportDialog() {
+    if (reportWrap) reportWrap.hidden = true;
+    reportPostId = null;
+    if (document.body) document.body.classList.remove("modal-open");
+  }
+
+  /** 第一次用到举报时才把弹窗建出来（六个页面共用，所以放在 app.js 里） */
+  function ensureReportDialog() {
+    if (reportWrap) return reportWrap;
+    if (!document.body) return null;
+
+    var wrap = document.createElement("div");
+    wrap.className = "modal-backdrop";
+    wrap.id = "report-modal";
+    wrap.hidden = true;
+    wrap.innerHTML = reportModalHtml();
+    document.body.appendChild(wrap);
+    reportWrap = wrap;
+
+    wrap.addEventListener("click", function (e) {
+      // 点半透明背景、或点「算了」都算取消
+      var el = e.target;
+      var cancel = el && el.closest ? el.closest("#report-cancel") : null;
+      if (cancel || el === wrap) closeReportDialog();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if ((e.key === "Escape" || e.key === "Esc") && reportWrap && !reportWrap.hidden) {
+        closeReportDialog();
+      }
+    });
+
+    var els = reportEls(wrap);
+    if (els.submit) {
+      els.submit.addEventListener("click", function () {
+        var cur = reportEls(wrap);
+        var reason = checkedReason(cur.radios);
+
+        if (!reason) {
+          showNotice(cur.hint, "warn", "先选一个举报原因吧");
+          return;
+        }
+
+        cur.submit.disabled = true;
+        cur.submit.innerHTML = '<span class="spinner"></span><span>正在提交…</span>';
+
+        reportPost(reportPostId, reason, cur.detail ? cur.detail.value : "")
+          .then(function (r) {
+            showNotice(cur.hint, "ok",
+              "已收到你的举报（" + reportReasonLabel(r.reason) + "），我们会尽快核查。");
+            setTimeout(function () {
+              closeReportDialog();
+              var pageNotice = document.getElementById("notice");
+              if (pageNotice) {
+                showNotice(pageNotice, "ok", "举报已提交，感谢你帮忙维护这里的氛围。");
+                setTimeout(function () { hideNotice(pageNotice); }, 4000);
+              }
+            }, 900);
+          })
+          .catch(function (err) {
+            showNotice(cur.hint, "error", err.message);
+          })
+          .then(function () {
+            cur.submit.disabled = false;
+            cur.submit.textContent = "提交举报";
+          });
+      });
+    }
+
+    return wrap;
+  }
+
+  /**
+   * 打开举报弹窗
+   * @param {string} postId 被举报的帖子 id
+   * @returns {boolean} 是否成功打开
+   */
+  function openReportDialog(postId) {
+    if (blockIfNotReady(document.getElementById("notice"))) return false;
+
+    var wrap = ensureReportDialog();
+    if (!wrap) return false;
+
+    reportPostId = postId;
+
+    // 每次打开都清掉上一次的选择
+    var els = reportEls(wrap);
+    for (var i = 0; i < els.radios.length; i++) els.radios[i].checked = false;
+    if (els.detail) els.detail.value = "";
+    if (els.hint) hideNotice(els.hint);
+    if (els.submit) { els.submit.disabled = false; els.submit.textContent = "提交举报"; }
+
+    wrap.hidden = false;
+    if (document.body) document.body.classList.add("modal-open");
+    return true;
+  }
+
+  /* 卡片上的「举报」按钮统一在这里接管，各页面不用再写一遍 */
+  document.addEventListener("click", function (e) {
+    var el = e.target;
+    var btn = el && el.closest ? el.closest("[data-report]") : null;
+    if (!btn) return;
+    openReportDialog(btn.getAttribute("data-report"));
+  });
+
+  /* ------------------------------------------------------------------
    * 7. UI 工具
    * ------------------------------------------------------------------ */
 
@@ -473,6 +701,17 @@ window.Campus = (function () {
     return '<div class="avatar" aria-hidden="true">' + escapeHtml(initial(post.display_name)) + "</div>";
   }
 
+  /** 审核状态角标：只有本人看得到自己的待审核 / 未通过内容，所以角标也基本只有本人可见 */
+  function statusTag(status) {
+    if (status === "pending") {
+      return '<span class="tag tag-review">审核中</span>';
+    }
+    if (status === "rejected") {
+      return '<span class="tag tag-reject">未通过</span>';
+    }
+    return "";
+  }
+
   /** 渲染单条帖子卡片 */
   function renderPostCard(post) {
     var url = imageUrl(post.image_path);
@@ -489,6 +728,7 @@ window.Campus = (function () {
     html += '<div class="post-meta">';
     html += '<div class="post-name">' + escapeHtml(name);
     if (post.is_anonymous) html += '<span class="tag">匿名</span>';
+    html += statusTag(post.status);
     html += "</div>";
     html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + "</div>";
     html += "</div></div>";
@@ -506,6 +746,8 @@ window.Campus = (function () {
     html += "<span>" + (post.like_count || 0) + "</span>";
     html += "</button>";
     html += '<span class="post-time">' + escapeHtml(timeAgo(post.created_at)) + "</span>";
+    html += '<button class="link-plain report-btn" type="button" data-report="' + escapeHtml(post.id) +
+      '">举报</button>';
     html += "</div></article>";
 
     return html;
@@ -672,12 +914,18 @@ window.Campus = (function () {
     imageUrl: imageUrl,
     saveNickname: saveNickname,
 
+    // 举报
+    reportPost: reportPost,
+    openReportDialog: openReportDialog,
+    reportReasons: REPORT_REASONS,
+
     // UI
     escapeHtml: escapeHtml,
     timeAgo: timeAgo,
     greeting: greeting,
     initial: initial,
     renderPostCard: renderPostCard,
+    statusTag: statusTag,
     showNotice: showNotice,
     hideNotice: hideNotice,
     markTabbar: markTabbar,

@@ -265,8 +265,8 @@
     }).then(function () {
       // 发布成功后清空表单，避免重复提交或返回本页时看到旧内容
       resetForm();
-      C.showNotice(noticeEl, "ok", "发布成功，正在带你去看看大家的分享…");
-      setTimeout(function () { window.location.href = "feed.html"; }, 700);
+      C.showNotice(noticeEl, "ok", "已提交审核，通过后就会出现在内容广场。先带你去看看大家的分享…");
+      setTimeout(function () { window.location.href = "feed.html"; }, 1200);
     }).catch(function (err) {
       if (err && err.message === "__aborted__") { setLoading(false); return; }
       C.showNotice(noticeEl, "error", err.message);

@@ -19,8 +19,10 @@
 | 📱 手机号注册 | 填手机号 + 学校 + 密码即可注册，**不发真实短信**，手机号只作登录账号 |
 | 🙂 昵称 | 随时设置/修改昵称（最多 20 字），会显示在自己发布的分享上 |
 | 🌿 内容广场 | 浏览所有同学的分享，可以点 🤍 回应，右上角一键刷新 |
-| 📮 我的 | 查看自己发过的内容、删除、改昵称、退出登录 |
-| ❓ 常见问题 | 匿名到什么程度、昵称与手机号、图片格式、删掉的内容、找回分享，一次说清楚 |
+| 🕵️ 发布先审核 | 新发布的分享先进入「审核中」，站点主人在后台点通过之后，其他同学才看得到 |
+| 🚩 举报不当内容 | 每条分享右下角都有「举报」，选一个原因提交；举报只有站点管理员看得到 |
+| 📮 我的 | 查看自己发过的内容（含还在审核中的）、删除、改昵称、退出登录 |
+| ❓ 常见问题 | 匿名到什么程度、昵称与手机号、图片格式、删掉的内容、审核要等多久、怎么举报、找回分享，一次说清楚 |
 | 👀 无需登录浏览 | 未登录也能看广场内容，想发布时再登录/匿名进入 |
 
 ---
@@ -42,14 +44,14 @@ my-new-programme/
 ├── post.html               发布页（文字 + 图片 + 匿名开关 + 署名弹窗）
 ├── login.html              登录 / 注册 / 匿名进入
 ├── profile.html            我的（昵称、我的发布、退出）
-├── faq.html                常见问题（9 个折叠问答）
+├── faq.html                常见问题（10 个折叠问答）
 ├── assets/
 │   ├── css/style.css       全部样式（#CB9243 金底 + 奶油卡片 + 页头二级菜单）
 │   ├── img/campus-space.jpg 主页照片（og-cover.png 是分享卡片）
 │   ├── img/school-gate.png 主页校门插画（AI 生成 + 抠成透明背景，可随时替换）
 │   ├── js/
 │   │   ├── config.js       ← 唯一需要你修改的文件
-│   │   ├── app.js          共享模块：Supabase 客户端、会话、发帖、点赞、上传
+│   │   ├── app.js          共享模块：Supabase 客户端、会话、发帖、点赞、上传、举报
 │   │   ├── home.js         主页逻辑
 │   │   ├── feed.js         广场逻辑
 │   │   ├── post.js         发布逻辑
@@ -58,7 +60,8 @@ my-new-programme/
 │   │   └── faq.js          常见问题页逻辑（只负责点亮菜单）
 │   └── vendor/supabase.js  supabase-js v2（已本地化，不依赖境外 CDN）
 └── docs/
-    └── supabase-setup.sql  数据库初始化脚本（建表 + 策略 + 存储桶）
+    ├── supabase-setup.sql        数据库初始化脚本（建表 + 策略 + 存储桶，已含审核/举报）
+    └── supabase-moderation.sql   内容审核 + 举报的增量迁移（给已经在用的项目补上）
 ```
 
 ---
@@ -70,7 +73,18 @@ my-new-programme/
 1. 打开 <https://supabase.com>，注册并新建一个项目（免费额度足够个人使用）
 2. 项目创建完成后进入 **SQL Editor**，新建查询，把
    [`docs/supabase-setup.sql`](docs/supabase-setup.sql) 的内容整段粘贴进去执行
-   → 这一步会创建 `profiles` / `posts` / `likes` 三张表、所有安全策略，以及 `post-images` 存储桶
+   → 这一步会创建 `profiles` / `posts` / `likes` / `reports` 四张表、所有安全策略，
+   以及 `post-images` 存储桶；`posts.status`（内容审核状态）也已包含在内
+
+> 🔁 **已经在用的项目？** 再执行一次
+> [`docs/supabase-moderation.sql`](docs/supabase-moderation.sql) 就能把审核与举报补上。
+> 这个脚本可以重复执行（不会重复建表）；执行完建议把历史帖一次性标成已通过：
+>
+> ```sql
+> update public.posts set status = 'approved' where status = 'pending';
+> ```
+>
+> 不执行的话，历史帖会因为默认值变成「审核中」，只有作者自己看得到。
 
 ### 第 2 步：开启两项认证设置
 
@@ -165,7 +179,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 | `display_name` / `school` | text | 发布时的署名快照（改昵称不影响历史帖） |
 | `content` | text | 文字 |
 | `image_path` | text | 图片在存储桶里的路径 |
+| `status` | text | 审核状态：`pending`（待审核，默认）/ `approved`（已通过）/ `rejected`（未通过） |
 | `created_at` | timestamptz | 发布时间 |
+
+**`reports`** — 举报
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | uuid | 主键 |
+| `post_id` | uuid | 被举报的分享（分享被删除时一起删掉） |
+| `reporter_id` | uuid | 举报人 |
+| `reason` | text | 原因：`illegal` / `porn` / `ad` / `abuse` / `privacy` / `other` |
+| `detail` | text | 补充说明（选填，最多 200 字） |
+| `status` | text | 处理状态：`open`（待处理，默认）/ `resolved` / `ignored` |
+| `created_at` | timestamptz | 举报时间 |
+
+> `reports` 上有 `unique (post_id, reporter_id)`：同一个人对同一条内容只能举报一次，
+> 重复提交会给出友好提示，而不是报数据库错误。
 
 **`likes`** — 回应（`post_id` + `user_id` 联合主键，天然防重复点赞）
 
@@ -174,9 +204,57 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 | 表 | 读 | 写 |
 | --- | --- | --- |
 | `profiles` | 仅本人（手机号属于隐私，不对外开放） | 仅本人可写自己的资料 |
-| `posts` | 所有人（含未登录访客） | 登录/匿名身份可插入自己名下的帖；仅本人可删除 |
+| `posts` | 所有人可见**已通过**的帖；作者自己还能看到自己的待审/未通过帖 | 登录/匿名身份可插入自己名下的帖，且插入时**只能是 `pending`**；仅本人可删除（**没有任何更新策略**，所以学生改不动审核状态） |
+| `reports` | 仅举报人自己（被举报者看不到是谁举报的） | 仅本人可提交举报，提交后不可修改、不可删除 |
 | `likes` | 所有人 | 仅本人可增删自己的点赞 |
 | `storage.objects` | `post-images` 桶公开读 | 登录身份可上传；文件所有者可删除 |
+
+### 内容审核：一条分享怎么才会出现在广场
+
+新发布的分享一律是 `pending`（前端写入时就被数据库约束钉死），
+所以**只有作者自己**能在「我的」和广场里看到，旁边带一个「审核中」小角标。
+站点主人（你）在 Supabase 里点一下通过，别人才能看到：
+
+```sql
+-- 看看有哪些在等审核（视图里还带上了举报数量，先看有举报的）
+select id, created_at, display_name, excerpt, report_count
+from public.review_queue
+order by created_at desc;
+
+-- 通过
+update public.posts set status = 'approved' where id = '帖子 id';
+
+-- 不通过（作者自己仍能看到，角标会变成「未通过」）
+update public.posts set status = 'rejected' where id = '帖子 id';
+```
+
+几个要点：
+
+- 学生**改不了**这个状态：`posts` 表上没有给普通用户的 `update` 策略，这是刻意留白
+- 待审和未通过的帖子不会出现在别人的广场里，这是数据库层面的过滤，不是前端藏起来的
+- `docs/supabase-moderation.sql` 末尾还附了一段**可选的**触发器（默认注释掉）：
+  当一条分享被 3 个不同的人举报时自动退回 `pending`，避免漏看
+
+### 举报：收到之后怎么办
+
+每条分享右下角都有「举报」，六个原因（违法违规 / 色情低俗 / 广告营销 /
+人身攻击 / 隐私泄露 / 其他），可以补一句说明。举报是**私密**的：只有管理员和举报人自己看得到。
+
+```sql
+-- 待处理的举报（按被举报的分享聚合）
+select p.id as post_id, count(*) as open_reports,
+       string_agg(r.reason, ', ') as reasons, p.excerpt
+from public.reports r join public.review_queue p on p.id = r.post_id
+where r.status = 'open'
+group by p.id, p.excerpt
+order by open_reports desc;
+
+-- 处理完标记一下，免得重复看
+update public.reports set status = 'resolved' where post_id = '帖子 id';
+```
+
+同一个人对同一条内容只能举报一次（唯一约束），举报提交后本人也不能改、不能删，
+所以不需要担心「举报被撤回」这种情况；恶意举报同样会被处理，页面上有写明。
 
 ### 关于匿名的边界
 
@@ -201,6 +279,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 **发图片报错**
 确认已经完整执行 `docs/supabase-setup.sql`，即 `post-images` 桶和它的三条策略都已创建。
 
+**发布成功了，但广场里看不到自己的分享？**
+这是正常的：新分享默认是「审核中」，只有你自己看得到（「我的」页面也能看到它）。
+站点主人在 Supabase 里把 `posts.status` 改成 `approved` 之后，其他同学才会看到。
+详见上面的「内容审核」。
+
+**怎么举报一条不当内容？**
+打开广场，每条分享右下角都有「举报」，选一个原因提交即可。举报只有管理员看得到，
+同一条内容每人只能举报一次，提交后自己不能修改或撤回。
+
+**想给某条被举报的内容加个「先隐藏」的自动规则？**
+`docs/supabase-moderation.sql` 末尾有一段默认注释掉的触发器，
+打开注释执行后，被 3 个不同的人举报的分享会自动退回「审核中」。
+
 **页面顶部提示「尚未填写 Supabase 配置」**
 `assets/js/config.js` 里还是示例值，需要换成你自己项目的 URL 和 anon key。
 
@@ -217,6 +308,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 - 匿名发布不会在数据里留下可被前端读取的昵称/学校（署名是发布瞬间的快照）
 - 匿名访客也可以给自己起一个昵称：发布前的小弹窗会问一次，写下的名字只作为署名显示，
   手机号和学校依然不会公开
+- 举报人的身份只有管理员能看到，被举报的同学不会收到「谁举报了你」这种信息
+- 新内容默认先审核：这样在公开的校园场景里，出问题的内容不会先被所有人看到
 - 请在站点内提醒同学：不发布他人隐私信息，友善发言
 
 > 面向同学的版本在 [`faq.html`](faq.html)（页头「☰ 更多 → ❓ 常见问题」），

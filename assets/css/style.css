@@ -1029,8 +1029,13 @@ input[type="file"] { display: none; }
   position: fixed;
   inset: 0;
   z-index: 70;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  /* 手机横屏、小屏时弹窗可能比屏幕高：让遮罩自己可以滚动，
+     再配合子元素的 margin:auto，做到「装得下就居中、装不下就能滚」 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 18px;
   background: rgba(43, 29, 17, 0.52);
   backdrop-filter: blur(3px);
@@ -1046,6 +1051,7 @@ body.modal-open { overflow: hidden; }
 .modal {
   width: 100%;
   max-width: 372px;
+  margin: auto;
   padding: 22px 20px 18px;
   border-radius: 22px;
   background: var(--surface);
@@ -1093,6 +1099,72 @@ body.modal-open { overflow: hidden; }
 .modal-link {
   align-self: center;
   padding: 4px 6px;
+}
+
+/* ------------------------------ 审核状态角标 ------------------------------ */
+/* 和「匿名」角标同一套尺寸，只换颜色：待审核偏暖黄、未通过偏红 */
+.tag-review { background: #FFF4DA; color: #8A5A12; }
+.tag-reject { background: #FFEFEF; color: #C0392B; }
+
+/* 卡片底部的「举报」入口：低调，但点起来足够大 */
+.report-btn {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  padding: 2px;
+}
+.report-btn:hover { color: var(--brand-strong); text-decoration: underline; }
+
+/* ------------------------------ 举报弹窗 ------------------------------ */
+/* 外壳复用 .modal-backdrop / .modal，这里只补原因列表和补充说明 */
+.report-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.report-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: #FFFDFB;
+  cursor: pointer;
+  transition: border-color 0.16s var(--ease), background 0.16s var(--ease);
+}
+.report-option:hover { border-color: rgba(203, 146, 67, 0.5); }
+.report-option input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--brand);
+}
+.report-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.report-option-label { font-size: 14px; font-weight: 600; color: var(--text); }
+.report-option-hint  { font-size: 11.5px; color: var(--text-faint); }
+
+/* 选中整行变色，触屏上比一个小圆点清楚得多 */
+.report-option:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-ghost);
+}
+/* 老浏览器没有 :has() 时，至少让选中的那一个看得清 */
+@supports not selector(:has(*)) {
+  .report-option input:checked { outline: 2px solid var(--brand); outline-offset: 2px; }
+}
+
+.report-detail {
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 62px;
+  resize: vertical;
 }
 
 /* ------------------------------ 常见问题页 ------------------------------ */
