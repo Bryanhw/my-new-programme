@@ -61,7 +61,8 @@ my-new-programme/
 │   └── vendor/supabase.js  supabase-js v2（已本地化，不依赖境外 CDN）
 └── docs/
     ├── supabase-setup.sql        数据库初始化脚本（建表 + 策略 + 存储桶，已含审核/举报）
-    └── supabase-moderation.sql   内容审核 + 举报的增量迁移（给已经在用的项目补上）
+    ├── supabase-moderation.sql   内容审核 + 举报的增量迁移（给已经在用的项目补上）
+    └── supabase-moderation-flat.sql  上面那份的「一条语句一行、无注释」粘贴版
 ```
 
 ---
@@ -85,6 +86,10 @@ my-new-programme/
 > ```
 >
 > 不执行的话，历史帖会因为默认值变成「审核中」，只有作者自己看得到。
+>
+> 📋 **粘贴时如果报 `42601 syntax error`**：多半是复制过程中丢了几行注释，导致上一条语句和
+> 下一行粘在一起。改贴 [`docs/supabase-moderation-flat.sql`](docs/supabase-moderation-flat.sql)
+> —— 那份把注释和换行去掉了，一条语句占一行，粘贴结果只会有两种：全对，或报错的那一行本身就是问题。
 
 ### 第 2 步：开启两项认证设置
 
