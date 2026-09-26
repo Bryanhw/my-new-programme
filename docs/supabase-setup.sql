@@ -251,6 +251,47 @@ drop policy if exists "post_images_owner_delete" on storage.objects;
 create policy "post_images_owner_delete" on storage.objects
   for delete to authenticated using (bucket_id = 'post-images' and owner = auth.uid());
 
+-- ---------------------------------------------------------------------
+-- 12. 匿名帖的作者字段：接口层隔离
+--     撤掉 posts 表的整表 select，改为「按列授权」—— author_id 从此对
+--     anon / authenticated 不可读，只有 service_role（后台、SQL Editor）能看全。
+--     「我的发布」改由视图 my_posts 在服务端按 auth.uid() 推导，前端不再需要
+--     （也没有权限）用 author_id 过滤。详见 docs/supabase-anon-privacy.sql。
+--     注意：select=* 与 Prefer: return=representation（RETURNING *）都会因此 42501，
+--     接口要写清字段名；前端删除不带 .select()、插入带列名，所以不受影响。
+-- ---------------------------------------------------------------------
+revoke select on public.posts from public;
+revoke select on public.posts from anon, authenticated;
+
+grant select (id, is_anonymous, display_name, school, content, image_path, created_at, status)
+  on public.posts to anon, authenticated;
+
+-- 站点自己的后台密钥（service_role）照旧能看全表。
+grant select on public.posts to service_role;
+
+drop view if exists public.my_posts;
+create view public.my_posts as
+select
+  p.id,
+  p.author_id,
+  p.is_anonymous,
+  p.display_name,
+  p.school,
+  p.content,
+  p.image_path,
+  p.created_at,
+  p.status
+from public.posts p
+where p.author_id = auth.uid();
+
+comment on view public.my_posts is
+  '我的发布：按 auth.uid() 在服务端过滤，替代客户端的 author_id=eq.<uid> 过滤';
+
+grant select on public.my_posts to anon, authenticated;
+
+-- 让 PostgREST 立刻刷新 schema 缓存（正常会自动触发，这里显式做一次更稳）。
+notify pgrst, 'reload schema';
+
 -- =====================================================================
 --  执行完成后，请到 Authentication -> Providers 检查两项设置：
 --   1) Email：关闭 "Confirm email"（否则用手机号注册的账号无法登录）

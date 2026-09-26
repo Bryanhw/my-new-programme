@@ -61,9 +61,11 @@ my-new-programme/
 │   │   └── faq.js          常见问题页逻辑（只负责点亮菜单）
 │   └── vendor/supabase.js  supabase-js v2（已本地化，不依赖境外 CDN）
 └── docs/
-    ├── supabase-setup.sql        数据库初始化脚本（建表 + 策略 + 存储桶，已含审核/举报）
+    ├── supabase-setup.sql        数据库初始化脚本（建表 + 策略 + 存储桶，已含审核/举报/匿名加固）
     ├── supabase-moderation.sql   内容审核 + 举报的增量迁移（给已经在用的项目补上）
-    └── supabase-moderation-flat.sql  上面那份的「一条语句一行、无注释」粘贴版
+    ├── supabase-moderation-flat.sql  上面那份的「一条语句一行、无注释」粘贴版
+    ├── supabase-anon-privacy.sql     匿名加固：撤掉 `posts.author_id` 的读权限 + `my_posts` 视图
+    └── supabase-anon-privacy-flat.sql  上面那份的粘贴版
 ```
 
 ---
@@ -91,6 +93,16 @@ my-new-programme/
 > 📋 **粘贴时如果报 `42601 syntax error`**：多半是复制过程中丢了几行注释，导致上一条语句和
 > 下一行粘在一起。改贴 [`docs/supabase-moderation-flat.sql`](docs/supabase-moderation-flat.sql)
 > —— 那份把注释和换行去掉了，一条语句占一行，粘贴结果只会有两种：全对，或报错的那一行本身就是问题。
+>
+> 🔒 **匿名加固（让接口层也读不到作者）**：如果你的项目是在这次改动之前建的，再执行一次
+> [`docs/supabase-anon-privacy.sql`](docs/supabase-anon-privacy.sql)。它会撤掉 `posts.author_id`
+> 的读权限、改成只开放 8 个展示字段，并建一个 `my_posts` 视图承接「我的发布」。
+> 这个脚本同样可以重复执行。
+>
+> ⚠️ **这一步要和前端一起上**：迁移之后，旧版 `assets/js/app.js` 的「我的发布」会读不出数据
+> （它还在用 `author_id` 过滤）。请先 `git pull` 拿到配套的前端，再执行迁移；
+> 万一前端没跟上，用脚本末尾的注释行 `grant select on public.posts to anon, authenticated;`
+> 先把权限还原回去。
 
 ### 第 2 步：开启两项认证设置
 
@@ -180,7 +192,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | uuid | 主键 |
-| `author_id` | uuid | 发布者 |
+| `author_id` | uuid | 发布者（**不对 `anon` / `authenticated` 开放读取**，见「关于匿名的边界」） |
 | `is_anonymous` | boolean | 是否匿名 |
 | `display_name` / `school` | text | 发布时的署名快照（改昵称不影响历史帖） |
 | `content` | text | 文字 |
@@ -210,7 +222,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 | 表 | 读 | 写 |
 | --- | --- | --- |
 | `profiles` | 仅本人（手机号属于隐私，不对外开放） | 仅本人可写自己的资料 |
-| `posts` | 所有人可见**已通过**的帖；作者自己还能看到自己的待审/未通过帖 | 登录/匿名身份可插入自己名下的帖，且插入时**只能是 `pending`**；仅本人可删除（**没有任何更新策略**，所以学生改不动审核状态） |
+| `posts` | 所有人可见**已通过**的帖；作者自己还能看到自己的待审/未通过帖（列级只开放展示字段，`author_id` 不可读） | 登录/匿名身份可插入自己名下的帖，且插入时**只能是 `pending`**；仅本人可删除（**没有任何更新策略**，所以学生改不动审核状态） |
+| `my_posts`（视图） | 只返回 `author_id = auth.uid()` 的行，即「我的发布」（含待审/未通过）；未登录调用得到空集 | 只读视图，不承接写入 |
 | `reports` | 仅举报人自己（被举报者看不到是谁举报的） | 仅本人可提交举报，提交后不可修改、不可删除 |
 | `likes` | 所有人 | 仅本人可增删自己的点赞 |
 | `storage.objects` | `post-images` 桶公开读 | 登录身份可上传；文件所有者可删除 |
@@ -282,13 +295,39 @@ update public.reports set status = 'resolved' where post_id = '帖子 id';
 
 ### 关于匿名的边界
 
-匿名帖在数据库里仍然记录 `author_id`（用于「我的发布」和删除权限），
-但前端接口**不会返回这个字段**，所以界面上、以及普通用户通过页面能看到的数据里，
-都不会暴露匿名帖的发布者身份。
+匿名帖在数据库里仍然记录 `author_id`（「我的发布」和「仅本人可删除」都要靠它），
+但**它已经不是接口能读到的字段了**：
 
-如果你想做得更彻底（让即使直接调用 API 也拿不到匿名帖的作者），
-可以在 Supabase 里再加一层：建一个 `security_invoker` 视图把匿名帖的 `author_id` 置空，
-再用 RPC 函数 `my_posts()` 来取「我的发布」。当前的实现属于「够用且低风险」的版本。
+- `posts` 对 `anon` / `authenticated` 撤掉了整表 `select`，改成按列授权，只开放
+  `id, is_anonymous, display_name, school, content, image_path, created_at, status`
+  这 8 个展示字段；请求里只要出现 `author_id`（哪怕只是拿它当过滤条件），
+  接口就直接回 `42501 permission denied for column author_id`。
+  列级权限同样管住 `WHERE` 和 `ORDER BY`，所以 `author_id=eq.<uuid>` 这种反查也走不通。
+- 「我的发布」改走视图 `public.my_posts`：它在**服务端**用 `auth.uid()` 过滤，
+  只返回调用者自己的行（含待审核 / 未通过）。前端因此不需要、也没有权限拿
+  `author_id` 去过滤，未登录调用自然得到空集。
+- 站点主人用 `service_role`（后台 / SQL Editor）不受影响，照旧能看全表。
+
+加固脚本是 [`docs/supabase-anon-privacy.sql`](docs/supabase-anon-privacy.sql)
+（老项目执行一次，可重复执行）；[`docs/supabase-setup.sql`](docs/supabase-setup.sql)
+里也已包含这一段，全新部署默认就是安全状态。
+
+> 顺带说明一处**有意偏离**：早先这里建议过「用 `security_invoker` 视图把匿名帖的
+> `author_id` 置空，再用 RPC 函数取我的发布」。这个方案其实不成立 ——
+> `security_invoker` 视图是**以调用者的身份**执行的，它引用 `author_id` 依然需要调用者
+> 有这一列的读权限；而且它拦不住「直接查基础表」。所以现在用的是
+> **撤列权 + 默认（definer）视图**：列权限在数据出口处就掐断了，视图在服务端认人。
+
+> 写接口或手写请求时要注意两个坑：① **不要用 `select=*`**，`*` 会展开成所有列，
+> 同样撞上列权限（`42501`），要写清需要的字段；② **写操作别要求回显整行** ——
+> 客户端加 `Prefer: return=representation` 时，PostgREST 会生成 `RETURNING *`，
+> 删除 / 更新一条帖就会因为 `author_id` 而 `42501`。前端没有这个烦恼：
+> `deletePost()` 不带 `.select()`（走 `return=minimal`），发帖插入时显式给了列名。
+
+**还没有一起处理的一条通道**：`likes` 仍是「所有人可读」，而点赞记录里带 `user_id`，
+所以如果你已经知道某个账号的 uuid，还是能反查它点过哪些赞。不过现在 `posts` 不再返回
+`author_id`，「uuid ↔ 匿名帖作者」这座桥已经断了。想更彻底可以把点赞的读取改成
+「只给计数 + 自己是否点过」（例如 `post_likes` 视图），前端 `attachLikes` 相应调整。
 
 ---
 
@@ -330,6 +369,8 @@ update public.reports set status = 'resolved' where post_id = '帖子 id';
 
 - 手机号只作为登录账号，界面上仅以 `138****8888` 形式展示给本人
 - 匿名发布不会在数据里留下可被前端读取的昵称/学校（署名是发布瞬间的快照）
+- 匿名帖的作者账号在**接口层**也读不到：`posts.author_id` 对前端角色已撤权，
+  「我的发布」由服务端视图 `my_posts` 按登录身份返回（细节见「关于匿名的边界」）
 - 匿名访客也可以给自己起一个昵称：发布前的小弹窗会问一次，写下的名字只作为署名显示，
   手机号和学校依然不会公开
 - 举报人的身份只有管理员能看到，被举报的同学不会收到「谁举报了你」这种信息

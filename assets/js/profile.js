@@ -80,7 +80,7 @@
         nickInput.value = (p && p.nickname) || "";
       });
 
-      loadMyPosts(id);
+      loadMyPosts();
       loadMyReports();
     });
   }
@@ -109,8 +109,8 @@
     }
   }
 
-  function loadMyPosts(id) {
-    C.listMyPosts(id.user.id).then(function (posts) {
+  function loadMyPosts() {
+    C.listMyPosts().then(function (posts) {
       statPosts.textContent = posts.length;
 
       var anonCount = 0;
@@ -175,7 +175,7 @@
       })
       .then(function () {
         C.showNotice(noticeEl, "ok", "已删除");
-        loadMyPosts(currentUser);
+        loadMyPosts();
         setTimeout(function () { C.hideNotice(noticeEl); }, 2500);
       })
       .catch(function (err) {

@@ -270,7 +270,9 @@ window.Campus = (function () {
             // 也只接受 status = 'pending'，自己改不成 approved。
             status: "pending"
           };
-          return client.from("posts").insert(row).select().single().then(function (res) {
+          // 这里必须列出列名：数据库已撤销 posts.author_id 的读权限，
+          // select=* 会整条失败（42501），列出来才只回显需要的展示字段。
+          return client.from("posts").insert(row).select(POST_COLUMNS).single().then(function (res) {
             if (res.error) throw new Error("发布失败：" + res.error.message);
             return res.data;
           });
@@ -279,8 +281,9 @@ window.Campus = (function () {
     });
   }
 
-  // 前端只取「需要展示」的字段：故意不返回 author_id，
-  // 避免匿名帖的身份通过接口被直接读取（见 README「关于匿名的边界」）。
+  // 前端只取「需要展示」的字段：author_id 不在其中 —— 数据库那边已经把这列的
+  // 读权限撤掉了（见 docs/supabase-anon-privacy.sql），所以即使有人直接调接口，
+  // 也拿不到匿名帖的作者账号（README「关于匿名的边界」）。
   // status 用来显示「审核中 / 未通过」角标：只有本人看得见自己的待审核内容。
   var POST_COLUMNS = "id, is_anonymous, display_name, school, content, image_path, created_at, status";
 
@@ -328,12 +331,13 @@ window.Campus = (function () {
       });
   }
 
-  /** 取某个用户发过的帖子（author_id 仅用于服务端过滤，不返回给前端） */
-  function listMyPosts(userId, limit) {
+  /** 取「我发过的帖子」。
+   *  过滤在服务端完成：视图 public.my_posts 用 auth.uid() 推导，客户端不再
+   *  （也没有权限）用 author_id 过滤 —— 列级权限同样管住 WHERE 里的列。 */
+  function listMyPosts(limit) {
     if (!client) return Promise.reject(new Error(configError));
-    return client.from("posts")
+    return client.from("my_posts")
       .select(POST_COLUMNS)
-      .eq("author_id", userId)
       .order("created_at", { ascending: false })
       .limit(limit || 50)
       .then(function (res) {
