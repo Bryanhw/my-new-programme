@@ -1390,10 +1390,43 @@ window.Campus = (function () {
     return "";
   }
 
+  /**
+   * 匿名帖的「帖子编号」（S1 探针阶段）
+   *
+   * 由帖子自己的 id 哈希出来的 6 位十六进制，用来让读者能指代某一条匿名帖
+   * （「#3F9A21 说得对」），而不是三条匿名帖看起来都叫「匿名同学」。
+   *
+   * 三个刻意的限制：
+   *  - **每帖一个号**：同一个人的两条匿名帖号不同，跨帖不关联（这是「会话级
+   *    匿名」，不是「你的固定匿名号」）。所以文案里绝不能宣传成固定号。
+   *  - **不是 id 片段**：走哈希而不是 `post.id.slice(0, 6)`，避免界面上出现
+   *    看似可拼回原 id 的编号（虽然 id 本来就公开，但编号不该长得像它的一部分）。
+   *  - **不参与过滤与排序**：只用于展示，别拿它做 `eq` / `order`。
+   *
+   * id 缺失时返回空串，由调用方回退成原来的「匿名同学」——宁可回到旧文案，
+   * 也不要凭空编一个号出来。
+   */
+  function anonCodeOf(id) {
+    var s = String(id == null ? "" : id).replace(/-/g, "");
+    if (!s) return "";
+    var h = 2166136261;                       // FNV-1a 32 位
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;       // imul 避免大数相乘丢精度
+    }
+    return ("00000" + h.toString(16).toUpperCase()).slice(-6);
+  }
+
+  /** 匿名帖的显示名；拿不到编号就退回旧文案 */
+  function anonName(post) {
+    var code = anonCodeOf(post && post.id);
+    return code ? "匿名 #" + code : "匿名同学";
+  }
+
   /** 渲染单条帖子卡片 */
   function renderPostCard(post) {
     var url = imageUrl(post.image_path);
-    var name = post.is_anonymous ? "匿名同学" : (post.display_name || "一位同学");
+    var name = post.is_anonymous ? anonName(post) : (post.display_name || "一位同学");
 
     var meta = [];
     if (post.school) meta.push(escapeHtml(post.school));
@@ -1661,6 +1694,8 @@ window.Campus = (function () {
     greeting: greeting,
     initial: initial,
     renderPostCard: renderPostCard,
+    anonCodeOf: anonCodeOf,
+    anonName: anonName,
     statusTag: statusTag,
     showNotice: showNotice,
     hideNotice: hideNotice,
