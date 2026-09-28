@@ -290,30 +290,27 @@ window.Campus = (function () {
   // status 用来显示「审核中 / 未通过」角标：只有本人看得见自己的待审核内容。
   var POST_COLUMNS = "id, is_anonymous, display_name, school, content, image_path, created_at, status";
 
-  /** 给一批帖子补上点赞数与「我是否点过」 */
+  /** 给一批帖子补上点赞数与「我是否点过」。
+   *  读取走视图 post_likes：它只给「计数 + 我是否点过」，不含 user_id。
+   *  数据库那边已经把 likes 的读取收口了（见 docs/supabase-likes-privacy.sql），
+   *  所以这里不能再直接查 likes —— 那会 42501，而且会重新暴露「谁点了赞」。
+   *  视图里没有点赞记录的内容不会出现，所以查不到的按 0 / false 处理即可。 */
   function attachLikes(posts) {
     if (!posts.length) return Promise.resolve(posts);
 
     var ids = posts.map(function (p) { return p.id; });
 
-    return client.from("likes").select("post_id, user_id").in("post_id", ids)
+    return client.from("post_likes").select("post_id, like_count, liked_by_me").in("post_id", ids)
       .then(function (lres) {
-        var counts = {};
-        var mine = {};
-        var rows = (lres && lres.data) || [];
+        var map = {};
+        ((lres && lres.data) || []).forEach(function (r) { map[r.post_id] = r; });
 
-        return getIdentity().then(function (id) {
-          var uid = id.user ? id.user.id : null;
-          rows.forEach(function (r) {
-            counts[r.post_id] = (counts[r.post_id] || 0) + 1;
-            if (uid && r.user_id === uid) mine[r.post_id] = true;
-          });
-          posts.forEach(function (p) {
-            p.like_count = counts[p.id] || 0;
-            p.liked_by_me = !!mine[p.id];
-          });
-          return posts;
+        posts.forEach(function (p) {
+          var row = map[p.id];
+          p.like_count = row ? (row.like_count || 0) : 0;
+          p.liked_by_me = !!(row && row.liked_by_me);
         });
+        return posts;
       })
       .catch(function () {
         posts.forEach(function (p) { p.like_count = 0; p.liked_by_me = false; });
@@ -368,8 +365,12 @@ window.Campus = (function () {
     return getIdentity().then(function (id) {
       if (!id.user) throw new Error("登录后才能回应");
       if (currentlyLiked) {
+        // 过滤条件只能带 post_id：user_id 这一列前端已经没有读权限了
+        // （见 docs/supabase-likes-privacy.sql），WHERE 里带上它会 42501。
+        // 也不会误删别人的点赞 —— RLS 策略 likes_delete_self 只放行
+        // 「auth.uid() = user_id」的行。
         return client.from("likes").delete()
-          .eq("post_id", postId).eq("user_id", id.user.id)
+          .eq("post_id", postId)
           .then(function (res) {
             if (res.error) throw new Error(res.error.message);
             return false;

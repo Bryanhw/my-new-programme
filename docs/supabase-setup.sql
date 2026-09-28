@@ -289,6 +289,40 @@ comment on view public.my_posts is
 
 grant select on public.my_posts to anon, authenticated;
 
+-- ---------------------------------------------------------------------
+-- 13. 点赞记录的账号字段：接口层隔离
+--     上一节让 posts.author_id 读不到了，但 likes 表当时还是「所有人可读」，
+--     而每条点赞记录都带 user_id —— 拿到某个账号 uuid 就能反查它点过哪些赞，
+--     这等于给「uuid ↔ 人」留了一根放大器，任何将来由 author_id 派生的
+--     稳定代号（例如匿名「洞号」）都会因此被离线算出来。
+--     这里撤掉 likes 的 select，改由视图 post_likes 只给「计数 + 我是否点过」。
+--     详见 docs/supabase-likes-privacy.sql。
+--     注意：删自己的点赞要按 post_id 过滤（DELETE ... WHERE 需要读该列），
+--     所以补回 post_id 这一列；user_id / created_at 仍不可读。
+-- ---------------------------------------------------------------------
+revoke select on public.likes from public;
+revoke select on public.likes from anon, authenticated;
+
+grant select (post_id) on public.likes to anon, authenticated;
+grant insert, delete on public.likes to anon, authenticated;
+grant select on public.likes to service_role;
+
+drop view if exists public.post_likes;
+create view public.post_likes
+  with (security_invoker = false)
+as
+select
+  l.post_id,
+  count(*)::int                                    as like_count,
+  coalesce(bool_or(l.user_id = auth.uid()), false) as liked_by_me
+from public.likes l
+group by l.post_id;
+
+comment on view public.post_likes is
+  '点赞汇总：只返回计数 + 当前用户是否点过；不含 user_id（见 docs/supabase-likes-privacy.sql）';
+
+grant select on public.post_likes to anon, authenticated;
+
 -- 让 PostgREST 立刻刷新 schema 缓存（正常会自动触发，这里显式做一次更稳）。
 notify pgrst, 'reload schema';
 

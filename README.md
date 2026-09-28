@@ -77,6 +77,8 @@ my-new-programme/
     ├── supabase-moderation-flat.sql  上面那份的「一条语句一行、无注释」粘贴版
     ├── supabase-anon-privacy.sql     匿名加固：撤掉 `posts.author_id` 的读权限 + `my_posts` 视图
     ├── supabase-anon-privacy-flat.sql  上面那份的粘贴版
+    ├── supabase-likes-privacy.sql    匿名加固（二）：撤掉 `likes.user_id` 的读权限 + `post_likes` 视图
+    ├── supabase-likes-privacy-flat.sql  上面那份的粘贴版
     ├── supabase-comments.sql         评论 + 回复：建表 / 视图 / 评论举报 + 评论审核队列
     ├── supabase-comments-flat.sql    上面那份的粘贴版
     ├── supabase-nickname-sync.sql    昵称同步：改昵称后刷新历史分享 / 评论的署名
@@ -118,6 +120,13 @@ my-new-programme/
 > （它还在用 `author_id` 过滤）。请先 `git pull` 拿到配套的前端，再执行迁移；
 > 万一前端没跟上，用脚本末尾的注释行 `grant select on public.posts to anon, authenticated;`
 > 先把权限还原回去。
+>
+> 🔒 **点赞记录的账号字段（第二处匿名加固）**：同一批改动还包括
+> [`docs/supabase-likes-privacy.sql`](docs/supabase-likes-privacy.sql)。它撤掉 `likes` 的读取权限
+> （只留 `post_id` 一列给「取消点赞」过滤用），改由视图 `post_likes` 只输出
+> 「每帖点赞数 + 我是否点过」。这样即便有人拿到某个账号的 uuid，也无法反查它给哪些帖子点过赞
+> —— 这是「稳定匿名代号」将来能成立的前提。同样可重复执行，同样**要和前端一起上**
+> （旧版 `app.js` 直读 `likes`，迁移后会读不到点赞数）。
 >
 > 💬 **想要评论功能（新）**：按顺序再执行两份增量脚本（都可重复执行，整段粘贴）：
 > 1. [`docs/supabase-comments.sql`](docs/supabase-comments.sql) —— 建 `comments` 表、
@@ -270,6 +279,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 | `created_at` | timestamptz | 评论时间 |
 
 **`likes`** — 回应（`post_id` + `user_id` 联合主键，天然防重复点赞）
+`user_id` **不对 `anon` / `authenticated` 开放读取**（只保留 `post_id` 一列，供「取消点赞」按它过滤），
+点赞数一律走 `post_likes` 视图。
 
 **安全策略（RLS）一览**
 
@@ -282,7 +293,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 | `post_comments` / `post_comment_counts`（视图） | 公开评论列表（自带 `is_mine` 标记本人）与每帖评论数 | 只读视图，不承接写入 |
 | `comment_review_queue`（视图） | 只授给 `service_role`：有未处理举报的评论；普通角色一行也看不到 | 只读视图，不承接写入 |
 | `reports` | 仅举报人自己（被举报者看不到是谁举报的） | 仅本人可提交举报，提交后不可修改、不可删除 |
-| `likes` | 所有人 | 仅本人可增删自己的点赞 |
+| `likes` | 不再直接开放：`user_id` 属隐私，只留 `post_id` 一列给「取消点赞」过滤用 | 仅本人可增删自己的点赞；删除只按 `post_id` 过滤，由 `likes_delete_self` 策略保证删不到别人的 |
+| `post_likes`（视图） | 每帖点赞数 + 当前用户是否点过（不含 `user_id`） | 只读视图，不承接写入 |
 | `storage.objects` | `post-images` 桶公开读 | 登录身份可上传；文件所有者可删除 |
 
 ### 内容审核：一条分享怎么才会出现在广场
@@ -392,10 +404,20 @@ update public.reports set status = 'resolved' where comment_id = '评论 id';
 > 删除 / 更新一条帖就会因为 `author_id` 而 `42501`。前端没有这个烦恼：
 > `deletePost()` 不带 `.select()`（走 `return=minimal`），发帖插入时显式给了列名。
 
-**还没有一起处理的一条通道**：`likes` 仍是「所有人可读」，而点赞记录里带 `user_id`，
-所以如果你已经知道某个账号的 uuid，还是能反查它点过哪些赞。不过现在 `posts` 不再返回
-`author_id`，「uuid ↔ 匿名帖作者」这座桥已经断了。想更彻底可以把点赞的读取改成
-「只给计数 + 自己是否点过」（例如 `post_likes` 视图），前端 `attachLikes` 相应调整。
+**点赞记录的账号字段也已收口**：`likes` 原来对所有人可读，而每条记录都带 `user_id` ——
+只要知道某个账号的 uuid，就能反查它给哪些帖子点过赞，等于给「uuid ↔ 人」留了一根放大器。
+现在 `likes` 的读取同样撤掉了（只留 `post_id` 一列，供「取消点赞」按它过滤），
+点赞数改走视图 `post_likes`，只输出「计数 + 我是否点过」，前端 `attachLikes` 已相应调整。
+
+这一条不只是顺手补漏：任何**由 `author_id` 派生的稳定代号**（比如给匿名帖编一个固定「洞号」）
+一旦上线，攻击者只要能从别处拿到 uuid，就能离线算出代号、再回广场比对，匿名就白做了。
+先把 `likes` 这根放大器拆掉，稳定代号才有讨论的余地。
+
+> 一处实现细节：`DELETE ... WHERE post_id = ...` 需要 `post_id` 这一列的读权限（列级权限同样
+> 管住 `WHERE`），所以迁移里补的是 `grant select (post_id)` —— 而不是整表读权；同理，取消点赞
+> 的过滤条件里不能再带 `user_id`（那样会 `42501`），「不删到别人的赞」改由 RLS 策略
+> `likes_delete_self` 兜住。同一个套路已有先例：删自己的评论按 `id` 过滤，因此登录用户
+> 对 `comments.id` 有最小读权。
 
 ---
 
@@ -443,6 +465,8 @@ update public.reports set status = 'resolved' where comment_id = '评论 id';
 - 匿名发布不会在数据里留下可被前端读取的昵称/学校（署名是发布瞬间的快照）
 - 匿名帖的作者账号在**接口层**也读不到：`posts.author_id` 对前端角色已撤权，
   「我的发布」由服务端视图 `my_posts` 按登录身份返回（细节见「关于匿名的边界」）
+- 点赞记录里的账号同样不可读：`likes.user_id` 对前端角色已撤权，点赞数只经
+  `post_likes` 视图给出「计数 + 我是否点过」——所以没人能反查某个账号给哪些帖子点过赞
 - 匿名访客也可以给自己起一个昵称：发布前的小弹窗会问一次，写下的名字只作为署名显示，
   手机号和学校依然不会公开
 - 举报人的身份只有管理员能看到，被举报的同学不会收到「谁举报了你」这种信息
