@@ -1,7 +1,7 @@
 # PROJECT_SCOPE.md · 「校园拾光」项目范围说明
 
 > 文档状态：v1 · 2026-09-28
-> 配套阅读：`README.md`（功能与部署细节）、`PLAN_phase1.md`（阶段计划与验收）、优化建议记录 `outputs/fizz-padlet-optimization-suggestions.md`
+> 配套阅读：`README.md`（功能与部署细节）、`PLAN_phase1.md`（第一阶段计划与验收）、`PLAN_phase2.md`（第二阶段计划与验收）、优化建议记录 `outputs/fizz-padlet-optimization-suggestions.md`
 > 线上站点：https://bryanhw.github.io/my-new-programme/
 
 ## 1. 这个项目是做什么的
