@@ -1438,7 +1438,6 @@ window.Campus = (function () {
     html += avatarHtml(post);
     html += '<div class="post-meta">';
     html += '<div class="post-name">' + escapeHtml(name);
-    if (post.is_anonymous) html += '<span class="tag">匿名</span>';
     html += statusTag(post.status);
     html += "</div>";
     html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + "</div>";
