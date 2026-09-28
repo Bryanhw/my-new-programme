@@ -127,6 +127,7 @@ my-new-programme/
 > 「每帖点赞数 + 我是否点过」。这样即便有人拿到某个账号的 uuid，也无法反查它给哪些帖子点过赞
 > —— 这是「稳定匿名代号」将来能成立的前提。同样可重复执行，同样**要和前端一起上**
 > （旧版 `app.js` 直读 `likes`，迁移后会读不到点赞数）。
+> 跑完可以用 `tools/privacy_probe.py` 自检（见下文「隐私边界探针」）。
 >
 > 💬 **想要评论功能（新）**：按顺序再执行两份增量脚本（都可重复执行，整段粘贴）：
 > 1. [`docs/supabase-comments.sql`](docs/supabase-comments.sql) —— 建 `comments` 表、
@@ -220,6 +221,33 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 >
 > 如果以后换了域名（自定义域名 / 换平台），记得把六个 `<head>` 里的
 > `og:image` 和 `og:url` 一起改掉，否则卡片会指向旧地址或抓不到图。
+
+### 隐私边界探针（迁移后的验收动作）
+
+匿名加固不能只看「脚本执行成功」——真正要确认的是**接口层读不到**。
+`tools/privacy_probe.py` 干的就是这件事：它拿公开的 anon key 直接打 REST 接口，
+验证「未登录访客拿不到 `posts.author_id`、拿不到 `likes.user_id`、`my_posts`
+按调用者隔离、`post_likes` 只给计数与「我是否点过」」。
+
+默认**只读**，不写任何数据。测试账号的密码**不放在仓库里**（仓库是公开的），
+用环境变量传进去：
+
+```powershell
+$env:E2E_PASSWORD = "<测试账号密码>"
+python tools\privacy_probe.py             # 只读，34 项检查
+python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只有自己可见 → 删除」
+```
+
+正常结果最后一行是 `checks run: 34   failures: 0`，退出码 0。
+没设 `E2E_PASSWORD` 时它只跑访客部分（前 17 项）然后停下，退出码 2 ——
+所以**退出码 2 不是失败**，含义是「没给我密码，登录相关的检查没跑」。
+
+第 8 节（`likes` / `post_likes`）需要先执行过
+[`docs/supabase-likes-privacy.sql`](docs/supabase-likes-privacy.sql)。
+没执行的话那 12 项会**全红**——这是它应有的表现：迁移没跑，通道就是敞着的。
+
+可选环境变量：`E2E_PHONE_A` / `E2E_PHONE_B` 换测试账号，
+`APP_CONFIG_JS` 指定 `config.js` 的路径（默认自动取仓库里的那一份）。
 
 ---
 
