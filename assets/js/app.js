@@ -254,7 +254,9 @@ window.Campus = (function () {
 
       return profilePromise.then(function (profile) {
         var school = (profile && profile.school) || "";
-        // 勾了匿名 → 固定「匿名同学」；否则走统一署名算法（和评论一致）
+        // 勾了匿名 → 署名存成固定「匿名同学」（这只是兜底值，不是展示值）；
+        // 卡片上显示的「匿名 #编号」是渲染时按帖子 id 现算的（anonName），不入库。
+        // 非匿名 → 走统一署名算法（和评论一致）
         var displayName = isAnonymous ? "匿名同学" : buildDisplayName(profile, id);
 
         var upload = o.file
@@ -841,7 +843,7 @@ window.Campus = (function () {
    * ------------------------------------------------------------------ */
 
   var REPORT_COLUMNS = "id, reason, detail, status, created_at, comment_id, " +
-    "posts(content, display_name, is_anonymous, status, created_at, image_path)";
+    "posts(id, content, display_name, is_anonymous, status, created_at, image_path)";
 
   var REPORT_STATE = {
     open:     { label: "处理中", className: "tag-review", note: "我们已经收到，正在核查。" },
@@ -894,7 +896,9 @@ window.Campus = (function () {
     var text = String(post.content == null ? "" : post.content).trim();
     if (text.length > 40) text = text.slice(0, 40) + "…";
 
-    var who = post.is_anonymous ? "匿名同学" : (String(post.display_name || "").trim() || "同学");
+    // 匿名帖用和卡片同一个编号（anonName 按帖子 id 现算）；
+    // 接口没把帖子 id 嵌进来时（老数据）anonName 会回退成「匿名同学」。
+    var who = post.is_anonymous ? anonName(post) : (String(post.display_name || "").trim() || "同学");
     if (!text) return "「" + who + "」发的一张图片";
     return "「" + who + "」：" + text;
   }
