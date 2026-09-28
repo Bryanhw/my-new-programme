@@ -145,6 +145,37 @@ button, input, textarea, select {
 .header-user a { color: var(--ink-solid); text-decoration: underline; text-underline-offset: 2px; }
 .header-user a:hover { color: #A8451A; }
 
+/* 页头「登录 / 注册」入口：深色填充胶囊 + 人形图标，金底上一眼可见。
+   未登录 / 匿名时显示（文案由 app.js 按身份切换），已登录时自动收起；
+   窄屏只留 38×38 的图标按钮，避免把页头挤换行。 */
+.header-login {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #FFF6EC;
+  background: linear-gradient(135deg, #4A3423, #2A1B10);
+  box-shadow: 0 6px 16px rgba(43, 27, 15, 0.28);
+  white-space: nowrap;
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.header-login:hover { text-decoration: none; transform: translateY(-1px); box-shadow: 0 9px 20px rgba(43, 27, 15, 0.34); }
+.header-login:active { transform: translateY(0); }
+.header-login:focus-visible { outline: 2px solid var(--ink-solid); outline-offset: 2px; }
+.header-login[hidden] { display: none; }
+.header-login svg { flex: 0 0 auto; }
+
+@media (max-width: 520px) {
+  .header-login { width: 38px; padding: 0; }
+  .header-login .header-login-text { display: none; }
+}
+
 /* 页头右上角的「更多」入口：一级按钮 + 向下展开的二级菜单 */
 .nav-more {
   position: relative;

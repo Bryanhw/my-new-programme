@@ -1572,6 +1572,32 @@ window.Campus = (function () {
   }
 
   /* ------------------------------------------------------------------
+   * 页头「登录 / 注册」入口：未登录 / 匿名时保持醒目，已登录时收起。
+   * 各页面头部自带 <a class="header-login">，这里只按身份切换显示与文案。
+   * ------------------------------------------------------------------ */
+  (function initHeaderLogin() {
+    if (typeof document.querySelectorAll !== "function") return;
+    function sync() {
+      var nodes = document.querySelectorAll(".header-login");
+      if (!nodes.length || !client) return;
+      getIdentity().then(function (id) {
+        for (var i = 0; i < nodes.length; i++) {
+          var el = nodes[i];
+          var label = el.querySelector ? el.querySelector(".header-login-text") : null;
+          if (id.user && !id.isAnonymous) {
+            el.hidden = true;                      /* 已登录：身份在「我的」页里 */
+          } else {
+            el.hidden = false;
+            if (label) label.textContent = id.user ? "注册账号" : "登录 / 注册";
+          }
+        }
+      });
+    }
+    sync();
+    onAuthChange(sync);
+  })();
+
+  /* ------------------------------------------------------------------
    * 9. 导出
    * ------------------------------------------------------------------ */
   return {

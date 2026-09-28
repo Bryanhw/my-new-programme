@@ -35,11 +35,11 @@
     }
     C.getIdentity().then(function (id) {
       if (!id.user) {
-        identityEl.innerHTML = '还没登录 · <a href="login.html">登录 / 匿名进入</a>';
+        identityEl.innerHTML = '还没登录';
         return;
       }
       if (id.isAnonymous) {
-        identityEl.innerHTML = '当前身份：<strong>匿名访客</strong> · <a href="login.html">注册账号</a>';
+        identityEl.innerHTML = '当前身份：<strong>匿名访客</strong>';
         return;
       }
       C.getProfile().then(function (p) {
