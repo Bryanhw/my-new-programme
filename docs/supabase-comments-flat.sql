@@ -1,0 +1,52 @@
+-- 校园拾光 · 评论 + 回复迁移：粘贴专用版（一条语句一行，无注释）
+-- 由 docs/supabase-comments.sql 生成，内容一致，只是去掉了注释和换行。
+-- 用法：整段复制到 Supabase -> SQL Editor -> Run；每行末尾都自带分号。
+
+create table if not exists public.comments ( id uuid primary key default gen_random_uuid(), post_id uuid not null references public.posts(id) on delete cascade, author_id uuid references auth.users(id) on delete set null, parent_id uuid references public.comments(id) on delete cascade, is_anonymous boolean not null default false, display_name text not null default '一位同学', school text, content text not null, status text not null default 'approved', created_at timestamptz not null default now() );
+comment on table public.comments is '帖子下的评论与回复（两级）';
+alter table public.comments drop constraint if exists comments_status_check;
+alter table public.comments add constraint comments_status_check check (status in ('approved', 'hidden'));
+alter table public.comments drop constraint if exists comments_content_check;
+alter table public.comments add constraint comments_content_check check (char_length(content) between 1 and 300 and btrim(content) <> '');
+create index if not exists comments_post_created_idx on public.comments (post_id, created_at);
+create index if not exists comments_author_idx on public.comments (author_id);
+comment on column public.comments.status is '审核状态：approved 已公开（先发后审）/ hidden 已下架（所有人不可见）';
+alter table public.comments enable row level security;
+drop policy if exists "comments_select_public" on public.comments;
+create policy "comments_select_public" on public.comments for select using (status = 'approved');
+drop policy if exists "comments_insert_self" on public.comments;
+create policy "comments_insert_self" on public.comments for insert with check (auth.uid() = author_id and status = 'approved' and is_anonymous = false);
+drop policy if exists "comments_delete_self" on public.comments;
+create policy "comments_delete_self" on public.comments for delete using (auth.uid() = author_id);
+create or replace function public.validate_comment_parent() returns trigger language plpgsql security definer set search_path = public as $$ declare parent_post uuid; parent_parent uuid; begin if new.parent_id is null then return new; end if; select c.post_id, c.parent_id into parent_post, parent_parent from public.comments c where c.id = new.parent_id and c.status = 'approved'; if parent_post is null then raise exception '父评论不存在或已被下架'; end if; if parent_post <> new.post_id then raise exception '父评论不属于这个帖子'; end if; if parent_parent is not null then raise exception '只支持两级评论'; end if; return new; end; $$;
+drop trigger if exists validate_comment_parent on public.comments;
+create trigger validate_comment_parent before insert on public.comments for each row execute function public.validate_comment_parent();
+revoke select on public.comments from public;
+revoke select on public.comments from anon, authenticated;
+grant select (id) on public.comments to authenticated;
+grant select on public.comments to service_role;
+grant insert, delete on public.comments to anon, authenticated;
+drop view if exists public.post_comments;
+create view public.post_comments as select c.id, c.post_id, c.parent_id, c.is_anonymous, c.display_name, c.school, c.content, c.created_at, coalesce(c.author_id = auth.uid(), false) as is_mine from public.comments c where c.status = 'approved';
+comment on view public.post_comments is '公开评论：已过滤下架内容，is_mine 标记本人，隐藏 author_id';
+grant select on public.post_comments to anon, authenticated, service_role;
+drop view if exists public.post_comment_counts;
+create view public.post_comment_counts as select c.post_id, count(*)::int as comment_count from public.comments c where c.status = 'approved' group by c.post_id;
+comment on view public.post_comment_counts is '每帖的公开评论数';
+grant select on public.post_comment_counts to anon, authenticated, service_role;
+alter table public.reports add column if not exists comment_id uuid references public.comments(id) on delete set null;
+comment on column public.reports.comment_id is '被举报的评论 id；评论举报时 post_id 仍记录评论所在的帖子';
+create index if not exists reports_comment_idx on public.reports (comment_id);
+alter table public.reports drop constraint if exists reports_one_per_user;
+create unique index if not exists reports_one_per_post on public.reports (post_id, reporter_id) where comment_id is null;
+create unique index if not exists reports_one_per_comment on public.reports (comment_id, reporter_id) where comment_id is not null;
+drop view if exists public.comment_review_queue;
+create view public.comment_review_queue with (security_invoker = true) as select c.id, c.post_id, c.parent_id, c.status, c.created_at, c.is_anonymous, c.display_name, c.school, left(c.content, 120) as excerpt, left(coalesce(p.content, ''), 60) as post_excerpt, (select count(*) from public.reports r where r.comment_id = c.id) as report_count, (select count(*) from public.reports r where r.comment_id = c.id and r.status = 'open') as open_report_count from public.comments c left join public.posts p on p.id = c.post_id where exists ( select 1 from public.reports r where r.comment_id = c.id and r.status = 'open' ) order by open_report_count desc, c.created_at asc;
+comment on view public.comment_review_queue is '评论审核队列：有未处理举报的评论';
+revoke all on public.comment_review_queue from public;
+revoke all on public.comment_review_queue from anon, authenticated;
+grant select on public.comment_review_queue to service_role;
+drop view if exists public.review_queue;
+create view public.review_queue with (security_invoker = true) as select p.id, p.status, p.created_at, p.is_anonymous, p.display_name, p.school, left(coalesce(p.content, ''), 80) as excerpt, p.image_path, (select count(*) from public.reports r where r.post_id = p.id and r.comment_id is null) as report_count, (select count(*) from public.reports r where r.post_id = p.id and r.comment_id is null and r.status = 'open') as open_report_count from public.posts p where p.status = 'pending' or exists (select 1 from public.reports r where r.post_id = p.id and r.comment_id is null and r.status = 'open') order by open_report_count desc, p.created_at asc;
+comment on view public.review_queue is '审核队列：待审核的帖子 + 被举报的帖子';
+notify pgrst, 'reload schema';

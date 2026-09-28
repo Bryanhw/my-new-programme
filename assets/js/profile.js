@@ -203,10 +203,17 @@
 
     C.saveNickname(value)
       .then(function (saved) {
+        var name = (saved && saved.name) ? saved.name : "";
         currentProfile = currentProfile || {};
-        currentProfile.nickname = saved || null;
-        C.showNotice(noticeEl, "ok", saved ? "昵称已更新为「" + saved + "」" : "已清空昵称");
+        currentProfile.nickname = name || null;
+
+        var msg = name ? "昵称已更新为「" + name + "」" : "已清空昵称";
+        if (saved && typeof saved.synced === "number" && saved.synced > 0) {
+          msg += "，历史署名也同步了 " + saved.synced + " 条";
+        }
+        C.showNotice(noticeEl, "ok", msg);
         renderHero({ isAnonymous: currentIsAnon }, currentProfile);
+        loadMyPosts();   // 历史帖子换上了新署名，刷新「我的发布」
       })
       .catch(function (err) {
         C.showNotice(noticeEl, "error", "保存失败：" + err.message);

@@ -221,6 +221,19 @@ window.Campus = (function () {
    * ------------------------------------------------------------------ */
 
   /**
+   * 统一署名算法：昵称优先；没昵称时匿名访客显示「路过的同学」，
+   * 注册用户显示「同学 xxxx」。发帖、评论共用；
+   * 数据库的 sync_my_display_name() 保持同样规则（两边要一致）。
+   */
+  function buildDisplayName(profile, identity) {
+    var nickname = String((profile && profile.nickname) || "").trim();
+    if (nickname) return nickname;
+    if (identity && identity.isAnonymous) return "路过的同学";
+    if (identity && identity.user) return "同学" + String(identity.user.id).slice(0, 4);
+    return "一位同学";
+  }
+
+  /**
    * 发布一条帖子
    * @param {Object} o { content, file, isAnonymous }
    */
@@ -241,18 +254,8 @@ window.Campus = (function () {
 
       return profilePromise.then(function (profile) {
         var school = (profile && profile.school) || "";
-        var nickname = (profile && profile.nickname) || "";
-
-        var displayName;
-        if (isAnonymous) {
-          displayName = "匿名同学";
-        } else if (nickname) {
-          displayName = nickname;
-        } else if (id.isAnonymous) {
-          displayName = "路过的同学";
-        } else {
-          displayName = "同学" + String(id.user.id).slice(0, 4);
-        }
+        // 勾了匿名 → 固定「匿名同学」；否则走统一署名算法（和评论一致）
+        var displayName = isAnonymous ? "匿名同学" : buildDisplayName(profile, id);
 
         var upload = o.file
           ? uploadImage(o.file, id.user.id)
@@ -327,7 +330,7 @@ window.Campus = (function () {
       .limit(limit || 30)
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
-        return attachLikes(res.data || []);
+        return attachLikes(res.data || []).then(attachComments);
       });
   }
 
@@ -342,7 +345,7 @@ window.Campus = (function () {
       .limit(limit || 50)
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
-        return attachLikes(res.data || []);
+        return attachLikes(res.data || []).then(attachComments);
       });
   }
 
@@ -572,12 +575,13 @@ window.Campus = (function () {
   }
 
   /**
-   * 提交一条举报
-   * @param {string} postId 被举报的帖子 id
+   * 提交一条举报（帖子或评论）
+   * @param {string} postId 被举报的帖子 id（举报评论时是评论所在的帖子）
    * @param {string} reason 原因 key（见 REPORT_REASONS）
    * @param {string} [detail] 补充说明，最多 200 字
+   * @param {string} [commentId] 被举报的评论 id；不填就是举报帖子
    */
-  function reportPost(postId, reason, detail) {
+  function reportPost(postId, reason, detail, commentId) {
     if (!client) return Promise.reject(new Error(configError));
     if (!postId) return Promise.reject(new Error("没找到要举报的内容，刷新一下再试"));
 
@@ -594,13 +598,18 @@ window.Campus = (function () {
     return getIdentity().then(function (id) {
       if (!id.user) throw new Error("请先登录或匿名进入，再举报");
 
-      return client.from("reports").insert({
+      var row = {
         post_id: postId,
         reporter_id: id.user.id,
         reason: key,
         detail: text || null,
         status: "open"
-      }).then(function (res) {
+      };
+      // 只有举报评论时才带 comment_id 这一列：老库里还没跑评论迁移时，
+      // 帖子举报照常可用（带上不存在的列会让整个请求失败）。
+      if (commentId) row.comment_id = commentId;
+
+      return client.from("reports").insert(row).then(function (res) {
         if (!res.error) return { reason: key, detail: text };
 
         var msg = String(res.error.message || "");
@@ -614,6 +623,7 @@ window.Campus = (function () {
   /* ---------------- 举报弹窗（由 app.js 动态生成，六个页面通用） ---------------- */
 
   var reportPostId = null;
+  var reportCommentId = null;
   var reportWrap = null;
 
   function reportModalHtml() {
@@ -669,6 +679,7 @@ window.Campus = (function () {
   function closeReportDialog() {
     if (reportWrap) reportWrap.hidden = true;
     reportPostId = null;
+    reportCommentId = null;
     if (document.body) document.body.classList.remove("modal-open");
   }
 
@@ -712,7 +723,7 @@ window.Campus = (function () {
         cur.submit.disabled = true;
         cur.submit.innerHTML = '<span class="spinner"></span><span>正在提交…</span>';
 
-        reportPost(reportPostId, reason, cur.detail ? cur.detail.value : "")
+        reportPost(reportPostId, reason, cur.detail ? cur.detail.value : "", reportCommentId)
           .then(function (r) {
             showNotice(cur.hint, "ok",
               "已收到你的举报（" + reportReasonLabel(r.reason) + "），我们会尽快核查。");
@@ -739,17 +750,23 @@ window.Campus = (function () {
   }
 
   /**
-   * 打开举报弹窗
-   * @param {string} postId 被举报的帖子 id
+   * 打开举报弹窗（帖子 / 评论共用）
+   * @param {string} postId 被举报的帖子 id（举报评论时是评论所在的帖子）
+   * @param {string} [commentId] 被举报的评论 id；不填就是举报帖子
    * @returns {boolean} 是否成功打开
    */
-  function openReportDialog(postId) {
+  function openReportDialog(postId, commentId) {
     if (blockIfNotReady(document.getElementById("notice"))) return false;
 
     var wrap = ensureReportDialog();
     if (!wrap) return false;
 
     reportPostId = postId;
+    reportCommentId = commentId || null;
+
+    // 弹窗是共用的一个，标题随举报对象切换
+    var title = document.getElementById("report-modal-title");
+    if (title) title.textContent = reportCommentId ? "举报这条评论" : "举报这条分享";
 
     // 每次打开都清掉上一次的选择
     var els = reportEls(wrap);
@@ -763,12 +780,57 @@ window.Campus = (function () {
     return true;
   }
 
-  /* 卡片上的「举报」按钮统一在这里接管，各页面不用再写一遍 */
+  /* 卡片上的「评论 / 回复 / 删除 / 举报」按钮统一在这里接管，各页面不用再写一遍 */
   document.addEventListener("click", function (e) {
     var el = e.target;
-    var btn = el && el.closest ? el.closest("[data-report]") : null;
-    if (!btn) return;
-    openReportDialog(btn.getAttribute("data-report"));
+    if (!el || !el.closest) return;
+
+    var reportBtn = el.closest("[data-report]");
+    if (reportBtn) {
+      openReportDialog(reportBtn.getAttribute("data-report"));
+      return;
+    }
+
+    var reportCommentBtn = el.closest("[data-comment-report]");
+    if (reportCommentBtn) {
+      var rp = reportCommentBtn.closest("[data-post-id]");
+      openReportDialog(rp ? rp.getAttribute("data-post-id") : null,
+        reportCommentBtn.getAttribute("data-comment-report"));
+      return;
+    }
+
+    var commentsBtn = el.closest("[data-comments]");
+    if (commentsBtn) {
+      toggleCommentZone(commentsBtn.getAttribute("data-comments"));
+      return;
+    }
+
+    var sendBtn = el.closest("[data-comment-send]");
+    if (sendBtn) {
+      sendComment(sendBtn.getAttribute("data-comment-send"));
+      return;
+    }
+
+    var replyBtn = el.closest("[data-comment-reply]");
+    if (replyBtn) {
+      var rZone = replyBtn.closest("[data-comment-zone]");
+      if (rZone) startCommentReply(rZone.getAttribute("data-comment-zone"), replyBtn.getAttribute("data-comment-reply"));
+      return;
+    }
+
+    var cancelBtn = el.closest("[data-comment-cancel]");
+    if (cancelBtn) {
+      var cZone = cancelBtn.closest("[data-comment-zone]");
+      if (cZone) cancelCommentReply(cZone.getAttribute("data-comment-zone"));
+      return;
+    }
+
+    var delBtn = el.closest("[data-comment-del]");
+    if (delBtn) {
+      var dZone = delBtn.closest("[data-comment-zone]");
+      if (dZone) removeComment(dZone.getAttribute("data-comment-zone"), delBtn.getAttribute("data-comment-del"));
+      return;
+    }
   });
 
   /* ------------------------------------------------------------------
@@ -777,7 +839,7 @@ window.Campus = (function () {
    *     · 被举报的内容若已删除或不再公开，关联结果就是 null，这里照样显示状态
    * ------------------------------------------------------------------ */
 
-  var REPORT_COLUMNS = "id, reason, detail, status, created_at, " +
+  var REPORT_COLUMNS = "id, reason, detail, status, created_at, comment_id, " +
     "posts(content, display_name, is_anonymous, status, created_at, image_path)";
 
   var REPORT_STATE = {
@@ -842,6 +904,15 @@ window.Campus = (function () {
    */
   function renderReportReceipt(report) {
     var r = report || {};
+    var isComment = !!r.comment_id;
+
+    var quote = isComment
+      ? "你举报的评论（属于：" + escapeHtml(reportedExcerpt(r.posts)) + "）"
+      : escapeHtml(reportedExcerpt(r.posts));
+
+    var meta = (isComment ? "举报对象：评论 · " : "") +
+      "举报原因：" + escapeHtml(reportReasonLabel(r.reason)) +
+      (r.detail ? " · 你写的说明：" + escapeHtml(r.detail) : "");
 
     return '<div class="receipt">' +
         '<div class="receipt-top">' +
@@ -849,13 +920,411 @@ window.Campus = (function () {
             escapeHtml(reportStatusLabel(r.status)) + "</span>" +
           '<span class="receipt-time">' + escapeHtml(timeAgo(r.created_at)) + "</span>" +
         "</div>" +
-        '<div class="receipt-quote">' + escapeHtml(reportedExcerpt(r.posts)) + "</div>" +
-        '<div class="receipt-meta">举报原因：' + escapeHtml(reportReasonLabel(r.reason)) +
-          (r.detail ? " · 你写的说明：" + escapeHtml(r.detail) : "") +
-        "</div>" +
+        '<div class="receipt-quote">' + quote + "</div>" +
+        '<div class="receipt-meta">' + meta + "</div>" +
         '<div class="receipt-note">' + escapeHtml(reportStatusNote(r.status)) + "</div>" +
       "</div>";
   }
+
+  /* ------------------------------------------------------------------
+   * 6.7 评论与回复（只支持两级：顶层评论 + 回复）
+   *     · 先发后审：发出即刻公开显示，被举报后由站点主人下架；
+   *     · 回复只会挂在顶层评论下（数据库触发器同样只接受两级）；
+   *     · 读的是视图 post_comments：读不到 author_id，is_mine 标记本人；
+   *     · 评论区懒加载：点卡片上的「💬 N」才拉取。
+   * ------------------------------------------------------------------ */
+
+  var COMMENT_MAX = 300;
+  var COMMENT_COLUMNS = "id, post_id, parent_id, is_anonymous, display_name, school, content, created_at, is_mine";
+
+  /** 取某条帖子下的公开评论（时间正序：顶层与回复都在同一个列表里） */
+  function listComments(postId, limit) {
+    if (!client) return Promise.reject(new Error(configError));
+    return client.from("post_comments")
+      .select(COMMENT_COLUMNS)
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true })
+      .limit(limit || 200)
+      .then(function (res) {
+        if (res.error) throw new Error("评论加载失败：" + res.error.message);
+        return res.data || [];
+      });
+  }
+
+  /** 给一批帖子补上评论数（读不到就按 0，不影响列表本身） */
+  function attachComments(posts) {
+    if (!posts.length) return Promise.resolve(posts);
+
+    var ids = posts.map(function (p) { return p.id; });
+
+    return client.from("post_comment_counts").select("post_id, comment_count").in("post_id", ids)
+      .then(function (res) {
+        var counts = {};
+        var rows = (res && res.data) || [];
+        rows.forEach(function (r) { counts[r.post_id] = r.comment_count || 0; });
+        posts.forEach(function (p) { p.comment_count = counts[p.id] || 0; });
+        return posts;
+      })
+      .catch(function () {
+        posts.forEach(function (p) { p.comment_count = 0; });
+        return posts;
+      });
+  }
+
+  /**
+   * 发布评论 / 回复
+   * @param {string} postId   帖子 id
+   * @param {string} content  评论内容（最多 300 字）
+   * @param {string} [parentId] 回复的顶层评论 id；不填就是顶层评论
+   */
+  function addComment(postId, content, parentId) {
+    if (!client) return Promise.reject(new Error(configError));
+    if (!postId) return Promise.reject(new Error("没找到要评论的帖子，刷新一下再试"));
+
+    var text = String(content == null ? "" : content).trim();
+    if (!text) return Promise.reject(new Error("先写点什么再发吧"));
+    if (text.length > COMMENT_MAX) return Promise.reject(new Error("评论最多 " + COMMENT_MAX + " 个字"));
+
+    return getIdentity().then(function (id) {
+      if (!id.user) throw new Error("请先登录或匿名进入，再评论");
+
+      return getProfile().then(function (profile) {
+        return client.from("comments").insert({
+          post_id: postId,
+          author_id: id.user.id,
+          parent_id: parentId || null,
+          is_anonymous: false,
+          display_name: buildDisplayName(profile, id),
+          school: (profile && profile.school) || null,
+          content: text,
+          status: "approved"
+        }).then(function (res) {
+          if (!res.error) return { parentId: parentId || null };
+
+          var msg = String(res.error.message || "");
+          if (/父评论/.test(msg)) throw new Error("这条评论刚刚被下架了，换一条回复吧");
+          throw new Error("评论没发上：" + (msg || "请稍后重试"));
+        });
+      });
+    });
+  }
+
+  /** 删除自己的一条评论（数据库只放行本人的删除） */
+  function deleteComment(commentId) {
+    if (!client) return Promise.reject(new Error(configError));
+    return client.from("comments").delete().eq("id", commentId).then(function (res) {
+      if (res.error) throw new Error("删除失败：" + res.error.message);
+    });
+  }
+
+  /* ---- 评论区 UI：懒加载，点「💬 N」才拉取 ---- */
+
+  var commentZoneState = {};   // postId -> { open, loaded, loading, sending, comments, replyTo, draft }
+
+  function commentState(postId) {
+    var st = commentZoneState[postId];
+    if (!st) {
+      st = { open: false, loaded: false, loading: false, sending: false, comments: [], replyTo: null, draft: "" };
+      commentZoneState[postId] = st;
+    }
+    return st;
+  }
+
+  function commentZoneEl(postId) {
+    var zones = document.querySelectorAll("[data-comment-zone]");
+    for (var i = 0; i < zones.length; i++) {
+      if (zones[i].getAttribute("data-comment-zone") === postId) return zones[i];
+    }
+    return null;
+  }
+
+  /** 列表里同一帖可能有多个「💬 N」按钮（广场 / 我的），一起更新 */
+  function updateCommentCount(postId, count) {
+    var btns = document.querySelectorAll("[data-comments]");
+    for (var i = 0; i < btns.length; i++) {
+      if (btns[i].getAttribute("data-comments") !== postId) continue;
+      var num = btns[i].querySelector(".comment-count");
+      if (num) num.textContent = count;
+    }
+  }
+
+  /** 回复对象显示用的名字 */
+  function replyTargetName(postId) {
+    var st = commentState(postId);
+    for (var i = 0; i < st.comments.length; i++) {
+      if (st.comments[i].id === st.replyTo) {
+        return st.comments[i].is_anonymous ? "匿名同学" :
+          (String(st.comments[i].display_name || "").trim() || "一位同学");
+      }
+    }
+    return "ta";
+  }
+
+  /** 一条评论（isReply = 缩进的回复） */
+  function renderCommentItem(c, isReply) {
+    var name = c.is_anonymous ? "匿名同学" : (String(c.display_name || "").trim() || "一位同学");
+
+    var html = '<div class="comment' + (isReply ? " is-reply" : "") + '" data-comment-id="' + escapeHtml(c.id) + '">';
+
+    html += '<div class="comment-head">';
+    html += '<span class="comment-name">' + escapeHtml(name) + "</span>";
+    if (c.school) html += '<span class="comment-school">' + escapeHtml(c.school) + "</span>";
+    html += '<span class="comment-time">' + escapeHtml(timeAgo(c.created_at)) + "</span>";
+    html += "</div>";
+
+    html += '<div class="comment-body">' + escapeHtml(c.content) + "</div>";
+
+    html += '<div class="comment-actions">';
+    html += '<button class="link-plain" type="button" data-comment-reply="' + escapeHtml(c.id) + '">回复</button>';
+    if (c.is_mine) {
+      html += '<button class="link-plain" type="button" data-comment-del="' + escapeHtml(c.id) + '">删除</button>';
+    }
+    html += '<button class="link-plain" type="button" data-comment-report="' + escapeHtml(c.id) + '">举报</button>';
+    html += "</div></div>";
+    return html;
+  }
+
+  /** 评论输入框 + 发送按钮（draft 存在状态里，重渲染不丢已输入的字） */
+  function renderCommentFormHtml(postId, st) {
+    var html = '<div class="comment-form">';
+
+    if (st.replyTo) {
+      html += '<div class="comment-reply-chip">回复 <strong>' + escapeHtml(replyTargetName(postId)) + "</strong>" +
+        '<button class="link-plain" type="button" data-comment-cancel="' + escapeHtml(postId) + '">取消</button></div>';
+    }
+
+    html += '<textarea class="comment-input" rows="2" maxlength="' + COMMENT_MAX + '"' +
+      ' data-comment-input="' + escapeHtml(postId) + '"' +
+      ' placeholder="' + (st.replyTo ? "回复 ta…（最多 " + COMMENT_MAX + " 字）" : "友善地说点什么…（最多 " + COMMENT_MAX + " 字）") + '">' +
+      escapeHtml(st.draft || "") + "</textarea>";
+
+    html += '<div class="comment-form-foot">';
+    html += '<span class="comment-hint" data-comment-hint="' + escapeHtml(postId) + '" hidden></span>';
+    html += '<button class="btn btn-primary btn-sm" type="button" data-comment-send="' + escapeHtml(postId) + '">' +
+      (st.replyTo ? "回复" : "发布") + "</button>";
+    html += "</div></div>";
+    return html;
+  }
+
+  /** 整个评论区（懒加载完成后调用；回复的父评论查不到时按顶层显示） */
+  function renderCommentZone(postId) {
+    var zone = commentZoneEl(postId);
+    if (!zone) return;
+    var st = commentState(postId);
+
+    if (st.loading) {
+      zone.innerHTML = '<div class="comment-empty">正在加载评论…</div>';
+      return;
+    }
+
+    var list = st.comments || [];
+    var top = [];
+    var byId = {};
+    var childrenOf = {};
+
+    list.forEach(function (c) { byId[c.id] = c; });
+    list.forEach(function (c) {
+      if (c.parent_id && byId[c.parent_id]) {
+        (childrenOf[c.parent_id] = childrenOf[c.parent_id] || []).push(c);
+      } else {
+        top.push(c);
+      }
+    });
+
+    var html = '<div class="comment-list">';
+    if (!list.length) {
+      html += '<div class="comment-empty">还没有评论，来坐第一个沙发。</div>';
+    } else {
+      top.forEach(function (c) {
+        html += renderCommentItem(c, false);
+        (childrenOf[c.id] || []).forEach(function (k) { html += renderCommentItem(k, true); });
+      });
+    }
+    html += "</div>";
+
+    html += renderCommentFormHtml(postId, st);
+    zone.innerHTML = html;
+  }
+
+  /** 只重渲染表单区域（点「回复 / 取消」用，不动下面的评论列表） */
+  function renderCommentFormOnly(postId) {
+    var zone = commentZoneEl(postId);
+    if (!zone) return;
+    var form = zone.querySelector(".comment-form");
+    if (!form) {
+      renderCommentZone(postId);
+      return;
+    }
+    form.outerHTML = renderCommentFormHtml(postId, commentState(postId));
+  }
+
+  function focusCommentInput(postId) {
+    var zone = commentZoneEl(postId);
+    if (!zone) return;
+    var input = zone.querySelector(".comment-input");
+    if (input && input.focus) input.focus();
+  }
+
+  function showCommentHint(postId, text, type) {
+    var zone = commentZoneEl(postId);
+    if (!zone) return;
+    var hint = zone.querySelector("[data-comment-hint]");
+    if (!hint) return;
+    hint.hidden = false;
+    hint.className = "comment-hint" + (type ? " " + type : "");
+    hint.textContent = text;
+  }
+
+  function setCommentSending(postId, on) {
+    var zone = commentZoneEl(postId);
+    if (!zone) return;
+    var btn = zone.querySelector("[data-comment-send]");
+    if (!btn) return;
+    btn.disabled = on;
+    btn.textContent = on ? "发送中…" : (commentState(postId).replyTo ? "回复" : "发布");
+  }
+
+  /* ---- 交互：展开 / 收起、发送、删除、回复 ---- */
+
+  function toggleCommentZone(postId) {
+    var st = commentState(postId);
+    var zone = commentZoneEl(postId);
+    if (!zone) return;
+
+    if (st.open) {
+      st.open = false;
+      zone.hidden = true;
+      return;
+    }
+
+    st.open = true;
+    zone.hidden = false;
+    if (st.loaded || st.loading) {
+      renderCommentZone(postId);
+    } else {
+      refreshCommentZone(postId);
+    }
+  }
+
+  /** 拉取评论并渲染（loading → 列表；失败就给一句提示） */
+  function refreshCommentZone(postId) {
+    var st = commentState(postId);
+    if (st.loading) return Promise.resolve();
+    st.loading = true;
+    renderCommentZone(postId);
+
+    return listComments(postId).then(function (comments) {
+      st.loading = false;
+      st.loaded = true;
+      st.comments = comments;
+      updateCommentCount(postId, comments.length);
+      renderCommentZone(postId);
+    }).catch(function (err) {
+      st.loading = false;
+      var zone = commentZoneEl(postId);
+      if (zone) {
+        zone.innerHTML = '<div class="comment-empty">' +
+          escapeHtml(err.message || "评论暂时加载不出来，稍后再试") + "</div>";
+      }
+    });
+  }
+
+  function sendComment(postId) {
+    var st = commentState(postId);
+    if (st.sending) return;
+
+    var text = String(st.draft || "").trim();
+    if (!text) {
+      showCommentHint(postId, "先写点什么再发吧", "warn");
+      return;
+    }
+
+    st.sending = true;
+    setCommentSending(postId, true);
+
+    addComment(postId, text, st.replyTo).then(function () {
+      st.sending = false;
+      st.draft = "";
+      st.replyTo = null;
+      return refreshCommentZone(postId).then(function () {
+        focusCommentInput(postId);
+      });
+    }).catch(function (err) {
+      st.sending = false;
+      setCommentSending(postId, false);
+      showCommentHint(postId, err.message, "error");
+    });
+  }
+
+  function removeComment(postId, commentId) {
+    if (!confirm("确定要删除这条评论吗？删掉就不能恢复了。")) return;
+
+    deleteComment(commentId).then(function () {
+      var st = commentState(postId);
+      st.replyTo = null;
+      return refreshCommentZone(postId);
+    }).catch(function (err) {
+      showCommentHint(postId, err.message, "error");
+    });
+  }
+
+  /**
+   * 点「回复」：数据库只接受两级，所以回复的回复要挂回它的顶层评论，
+   * 和 FAQ 里「回复的回复会挂在同一条评论下面」的说法保持一致；
+   * 若上一层已经被下架（孤儿回复），直接给提示，不进回复态。
+   */
+  function startCommentReply(postId, commentId) {
+    var st = commentState(postId);
+    var target = null;
+    for (var i = 0; i < st.comments.length; i++) {
+      if (st.comments[i].id === commentId) { target = st.comments[i]; break; }
+    }
+
+    var anchor = commentId;
+    if (target && target.parent_id) {
+      var parentVisible = false;
+      for (var j = 0; j < st.comments.length; j++) {
+        if (st.comments[j].id === target.parent_id) { parentVisible = true; break; }
+      }
+      if (!parentVisible) {
+        showCommentHint(postId, "上一层评论已被下架，这条评论暂时回复不了", "warn");
+        return;
+      }
+      anchor = target.parent_id;
+    }
+
+    st.replyTo = anchor;
+    renderCommentFormOnly(postId);
+    focusCommentInput(postId);
+  }
+
+  function cancelCommentReply(postId) {
+    var st = commentState(postId);
+    st.replyTo = null;
+    renderCommentFormOnly(postId);
+    focusCommentInput(postId);
+  }
+
+  /* 评论输入：内容存进状态（重渲染不丢）；Enter 发送、Shift+Enter 换行 */
+  document.addEventListener("input", function (e) {
+    var el = e.target;
+    if (!el || el.getAttribute === undefined) return;
+    var postId = el.getAttribute("data-comment-input");
+    if (!postId) return;
+    var st = commentZoneState[postId];
+    if (st) st.draft = el.value;
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var el = e.target;
+    if (!el || el.getAttribute === undefined) return;
+    var postId = el.getAttribute("data-comment-input");
+    if (!postId) return;
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (e.isComposing || e.keyCode === 229) return;   // 中文输入法组词中的回车上屏，不算发送
+    e.preventDefault();
+    sendComment(postId);
+  });
 
   /* ------------------------------------------------------------------
    * 7. UI 工具
@@ -953,10 +1422,17 @@ window.Campus = (function () {
     html += "<span>" + (post.liked_by_me ? "🧡" : "🤍") + "</span>";
     html += "<span>" + (post.like_count || 0) + "</span>";
     html += "</button>";
+    html += '<button class="like-btn comment-btn" type="button" data-comments="' + escapeHtml(post.id) + '">';
+    html += "<span>💬</span>";
+    html += '<span class="comment-count">' + (post.comment_count || 0) + "</span>";
+    html += "</button>";
     html += '<span class="post-time">' + escapeHtml(timeAgo(post.created_at)) + "</span>";
     html += '<button class="link-plain report-btn" type="button" data-report="' + escapeHtml(post.id) +
       '">举报</button>';
-    html += "</div></article>";
+    html += "</div>";
+    // 评论区：懒加载，点上面的「💬 N」才拉取
+    html += '<div class="comments" data-comment-zone="' + escapeHtml(post.id) + '" hidden></div>';
+    html += "</article>";
 
     return html;
   }
@@ -1057,7 +1533,10 @@ window.Campus = (function () {
 
   /**
    * 保存昵称（注册用户和匿名访客都能用：RLS 的 profiles_update_self 只允许改自己那一行）
+   * 保存成功后顺带调用数据库函数 sync_my_display_name，把本人历史帖子 / 评论的
+   * 署名刷成新昵称（只改自己、不动匿名内容；函数还没部署时忽略失败，不影响改名本身）。
    * @param {string} nickname 最多 20 个字，空字符串表示清空
+   * @returns {Promise<{name: string, synced: number|null}>}
    */
   function saveNickname(nickname) {
     if (!client) return Promise.reject(new Error(configError));
@@ -1072,7 +1551,12 @@ window.Campus = (function () {
         .eq("id", id.user.id)
         .then(function (res) {
           if (res.error) throw new Error("昵称没保存上：" + res.error.message);
-          return name;
+          return client.rpc("sync_my_display_name").then(function (rres) {
+            var n = (rres && !rres.error && typeof rres.data === "number") ? rres.data : null;
+            return { name: name, synced: n };
+          }).catch(function () {
+            return { name: name, synced: null };   // 同步失败不影响「昵称已保存」
+          });
         });
     });
   }
@@ -1121,6 +1605,13 @@ window.Campus = (function () {
     toggleLike: toggleLike,
     imageUrl: imageUrl,
     saveNickname: saveNickname,
+
+    // 评论
+    listComments: listComments,
+    addComment: addComment,
+    deleteComment: deleteComment,
+    COMMENT_MAX: COMMENT_MAX,
+    buildDisplayName: buildDisplayName,
 
     // 图片：compressImage 是「上传前压缩」的入口，
     // uploadImage 平时由 createPost 调用，导出出来是为了能单独自测。

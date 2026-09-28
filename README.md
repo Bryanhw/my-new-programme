@@ -25,13 +25,14 @@
 | 🌙 匿名发布 | 每一条都可以单独选择是否匿名，匿名帖不显示昵称和学校 |
 | ✍️ 署名小弹窗 | 匿名访客发布前会问一次「要不要署个名字」，写一个名字就只显示这个名字 |
 | 📱 手机号注册 | 填手机号 + 学校 + 密码即可注册，**不发真实短信**，手机号只作登录账号 |
-| 🙂 昵称 | 随时设置/修改昵称（最多 20 字），会显示在自己发布的分享上 |
-| 🌿 内容广场 | 浏览所有同学的分享，可以点 🤍 回应，右上角一键刷新 |
+| 🙂 昵称 | 随时设置/修改昵称（最多 20 字），会显示在自己发布的分享和评论上；改完会把历史署名一起刷新 |
+| 🌿 内容广场 | 浏览所有同学的分享，可以点 🤍 回应、💬 评论回复，右上角一键刷新 |
+| 💬 评论与回复 | 每条分享可以评论、回复（只支持一级回复）；先发后审，被举报核实后会下架；可以删自己的评论 |
 | 🕵️ 发布先审核 | 新发布的分享先进入「审核中」，站点主人在后台点通过之后，其他同学才看得到 |
-| 🚩 举报不当内容 | 每条分享右下角都有「举报」，选一个原因提交；举报只有站点管理员看得到 |
-| 🛡️ 我举报的（回执） | 「我的」页能看到自己举报过的内容现在处理到哪一步：处理中 / 已处理 / 未违规，并附上被举报内容的摘要 |
+| 🚩 举报不当内容 | 每条分享右下角、每条评论下方都有「举报」，选一个原因提交；举报只有站点管理员看得到 |
+| 🛡️ 我举报的（回执） | 「我的」页能看到自己举报过的分享和评论处理到哪一步：处理中 / 已处理 / 未违规，并附上被举报内容的摘要 |
 | 📮 我的 | 查看自己发过的内容（含还在审核中的）、删除、改昵称、退出登录 |
-| ❓ 常见问题 | 匿名到什么程度、昵称与手机号、图片格式、删掉的内容、审核要等多久、怎么举报、找回分享，一次说清楚 |
+| ❓ 常见问题 | 匿名到什么程度、昵称与手机号、图片格式、评论与回复、删掉的内容、审核要等多久、怎么举报、找回分享，一次说清楚 |
 | 👀 无需登录浏览 | 未登录也能看广场内容，想发布时再登录/匿名进入 |
 
 ---
@@ -55,14 +56,14 @@ my-new-programme/
 ├── post.html               发布页（文字 + 图片 + 匿名开关 + 署名弹窗）
 ├── login.html              登录 / 注册 / 匿名进入
 ├── profile.html            我的（昵称、我的发布、退出）
-├── faq.html                常见问题（10 个折叠问答）
+├── faq.html                常见问题（11 个折叠问答）
 ├── assets/
 │   ├── css/style.css       全部样式（#CB9243 金底 + 奶油卡片 + 页头二级菜单）
 │   ├── img/campus-space.jpg 主页照片（og-cover.png 是分享卡片）
 │   ├── img/school-gate.png 主页校门插画（AI 生成 + 抠成透明背景，可随时替换）
 │   ├── js/
 │   │   ├── config.js       ← 唯一需要你修改的文件
-│   │   ├── app.js          共享模块：Supabase 客户端、会话、发帖、点赞、上传、举报
+│   │   ├── app.js          共享模块：Supabase 客户端、会话、发帖、点赞、评论、上传、举报
 │   │   ├── home.js         主页逻辑
 │   │   ├── feed.js         广场逻辑
 │   │   ├── post.js         发布逻辑
@@ -75,7 +76,11 @@ my-new-programme/
     ├── supabase-moderation.sql   内容审核 + 举报的增量迁移（给已经在用的项目补上）
     ├── supabase-moderation-flat.sql  上面那份的「一条语句一行、无注释」粘贴版
     ├── supabase-anon-privacy.sql     匿名加固：撤掉 `posts.author_id` 的读权限 + `my_posts` 视图
-    └── supabase-anon-privacy-flat.sql  上面那份的粘贴版
+    ├── supabase-anon-privacy-flat.sql  上面那份的粘贴版
+    ├── supabase-comments.sql         评论 + 回复：建表 / 视图 / 评论举报 + 评论审核队列
+    ├── supabase-comments-flat.sql    上面那份的粘贴版
+    ├── supabase-nickname-sync.sql    昵称同步：改昵称后刷新历史分享 / 评论的署名
+    └── supabase-nickname-sync-flat.sql  上面那份的粘贴版
 ```
 
 ---
@@ -113,6 +118,17 @@ my-new-programme/
 > （它还在用 `author_id` 过滤）。请先 `git pull` 拿到配套的前端，再执行迁移；
 > 万一前端没跟上，用脚本末尾的注释行 `grant select on public.posts to anon, authenticated;`
 > 先把权限还原回去。
+>
+> 💬 **想要评论功能（新）**：按顺序再执行两份增量脚本（都可重复执行，整段粘贴）：
+> 1. [`docs/supabase-comments.sql`](docs/supabase-comments.sql) —— 建 `comments` 表、
+>    `post_comments` / `post_comment_counts` / `comment_review_queue` 三个视图，
+>    给 `reports` 加上 `comment_id`（支持举报评论）
+> 2. [`docs/supabase-nickname-sync.sql`](docs/supabase-nickname-sync.sql) —— 建
+>    `sync_my_display_name()` 函数：改昵称时把历史分享 / 评论的署名一起刷新
+>
+> 粘不进去就换对应的 `-flat.sql`（一条语句一行、无注释）。没执行这两个脚本时，
+> 页面上评论区会提示加载失败、「我举报的」会暂时读不到（都有兜底提示），
+> 其他功能不受影响 —— 但配套前端已经带上了评论按钮，建议尽快补上迁移。
 
 ### 第 2 步：开启两项认证设置
 
@@ -223,20 +239,35 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 | `status` | text | 审核状态：`pending`（待审核，默认）/ `approved`（已通过）/ `rejected`（未通过） |
 | `created_at` | timestamptz | 发布时间 |
 
-**`reports`** — 举报
+**`reports`** — 举报（帖子 / 评论共用一张表）
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | uuid | 主键 |
-| `post_id` | uuid | 被举报的分享（分享被删除时一起删掉） |
+| `post_id` | uuid | 被举报的分享（举报评论时是评论所在的分享；分享被删除时一起删掉） |
+| `comment_id` | uuid | 被举报的评论；`null` 表示举报的是分享本身（评论被删除时置空） |
 | `reporter_id` | uuid | 举报人 |
 | `reason` | text | 原因：`illegal` / `porn` / `ad` / `abuse` / `privacy` / `other` |
 | `detail` | text | 补充说明（选填，最多 200 字） |
 | `status` | text | 处理状态：`open`（待处理，默认）/ `resolved` / `ignored` |
 | `created_at` | timestamptz | 举报时间 |
 
-> `reports` 上有 `unique (post_id, reporter_id)`：同一个人对同一条内容只能举报一次，
-> 重复提交会给出友好提示，而不是报数据库错误。
+> `reports` 上现在是两条**部分唯一索引**：举报分享（`comment_id is null`）每人一次，
+> 举报评论（`comment_id` 非空）每人一次；重复提交会给出友好提示，而不是报数据库错误。
+
+**`comments`** — 评论与回复（两级）
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | uuid | 主键 |
+| `post_id` | uuid | 所属分享（分享被删除时一起删掉） |
+| `author_id` | uuid | 评论者（**不对 `anon` / `authenticated` 开放读取**，读评论一律走 `post_comments` 视图） |
+| `parent_id` | uuid | 回复的顶层评论；`null` 表示顶层评论（回复的回复会被触发器直接拒绝） |
+| `is_anonymous` | boolean | 预留字段，当前恒为 `false`（评论跟随昵称署名） |
+| `display_name` / `school` | text | 发布时的署名快照（改昵称时由同步函数刷新，匿名分享不受影响） |
+| `content` | text | 内容（1–300 字） |
+| `status` | text | `approved`（默认，先发后审）/ `hidden`（已下架，所有人不可见） |
+| `created_at` | timestamptz | 评论时间 |
 
 **`likes`** — 回应（`post_id` + `user_id` 联合主键，天然防重复点赞）
 
@@ -247,6 +278,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 | `profiles` | 仅本人（手机号属于隐私，不对外开放） | 仅本人可写自己的资料 |
 | `posts` | 所有人可见**已通过**的帖；作者自己还能看到自己的待审/未通过帖（列级只开放展示字段，`author_id` 不可读） | 登录/匿名身份可插入自己名下的帖，且插入时**只能是 `pending`**；仅本人可删除（**没有任何更新策略**，所以学生改不动审核状态） |
 | `my_posts`（视图） | 只返回 `author_id = auth.uid()` 的行，即「我的发布」（含待审/未通过）；未登录调用得到空集 | 只读视图，不承接写入 |
+| `comments` | 所有人可见 `approved` 的评论（经 `post_comments` 视图，`author_id` 不可读；删除自己的评论按 `id` 过滤，因此登录用户对 `id` 列有最小读权） | 登录/匿名身份可评论（写入时必须 `approved` 且非匿名），仅本人可删除；**没有更新策略**，学生改不动下架状态 |
+| `post_comments` / `post_comment_counts`（视图） | 公开评论列表（自带 `is_mine` 标记本人）与每帖评论数 | 只读视图，不承接写入 |
+| `comment_review_queue`（视图） | 只授给 `service_role`：有未处理举报的评论；普通角色一行也看不到 | 只读视图，不承接写入 |
 | `reports` | 仅举报人自己（被举报者看不到是谁举报的） | 仅本人可提交举报，提交后不可修改、不可删除 |
 | `likes` | 所有人 | 仅本人可增删自己的点赞 |
 | `storage.objects` | `post-images` 桶公开读 | 登录身份可上传；文件所有者可删除 |
@@ -268,6 +302,10 @@ update public.posts set status = 'approved' where id = '帖子 id';
 
 -- 不通过（作者自己仍能看到，角标会变成「未通过」）
 update public.posts set status = 'rejected' where id = '帖子 id';
+
+-- 评论举报单独排一个队列（评论举报不会计入上面帖子的举报数）
+select id, post_id, display_name, excerpt, post_excerpt, report_count
+from public.comment_review_queue;
 ```
 
 几个要点：
@@ -279,20 +317,24 @@ update public.posts set status = 'rejected' where id = '帖子 id';
 
 ### 举报：收到之后怎么办
 
-每条分享右下角都有「举报」，六个原因（违法违规 / 色情低俗 / 广告营销 /
+每条分享右下角、每条评论下方都有「举报」，六个原因（违法违规 / 色情低俗 / 广告营销 /
 人身攻击 / 隐私泄露 / 其他），可以补一句说明。举报是**私密**的：只有管理员和举报人自己看得到。
 
 ```sql
--- 待处理的举报（按被举报的分享聚合）
+-- 待处理的分享举报（按被举报的分享聚合；评论举报走 comment_review_queue）
 select p.id as post_id, count(*) as open_reports,
        string_agg(r.reason, ', ') as reasons, p.excerpt
 from public.reports r join public.review_queue p on p.id = r.post_id
-where r.status = 'open'
+where r.status = 'open' and r.comment_id is null
 group by p.id, p.excerpt
 order by open_reports desc;
 
 -- 处理完标记一下，免得重复看
-update public.reports set status = 'resolved' where post_id = '帖子 id';
+update public.reports set status = 'resolved' where post_id = '帖子 id' and comment_id is null;
+
+-- 评论举报：核实后下架评论 + 标记处理
+update public.comments set status = 'hidden' where id = '评论 id';
+update public.reports set status = 'resolved' where comment_id = '评论 id';
 ```
 
 同一个人对同一条内容只能举报一次（唯一约束），举报提交后本人也不能改、不能删，
@@ -315,6 +357,9 @@ update public.reports set status = 'resolved' where post_id = '帖子 id';
 （`reports?select=...,posts(...)`）而不是视图：因为 `posts` 的读策略还在生效，
 **当那条帖子已经删除、或还没通过审核时，嵌入结果是 `null`**，页面就会如实写一句
 「这条内容现在看不到了（可能已被删除或下架）」，而不是瞎猜。没有举报时整块卡片直接隐藏。
+
+评论举报也走同一张表和同一个回执区（`comment_id` 非空即评论举报），页面把摘要句换成
+「你举报的评论（属于：…）」；评论正文本身不放进回执（`comments` 对普通角色已撤读权）。
 
 ### 关于匿名的边界
 
@@ -371,8 +416,12 @@ update public.reports set status = 'resolved' where post_id = '帖子 id';
 详见上面的「内容审核」。
 
 **怎么举报一条不当内容？**
-打开广场，每条分享右下角都有「举报」，选一个原因提交即可。举报只有管理员看得到，
+打开广场，每条分享右下角、每条评论下方都有「举报」，选一个原因提交即可。举报只有管理员看得到，
 同一条内容每人只能举报一次，提交后自己不能修改或撤回。
+
+**评论区在哪里？**
+在广场或「我的」里点开任意一条分享底部的「💬」按钮，就能看到评论、参与回复。
+评论支持和分享同样的删除、举报操作；改昵称后历史评论也会一起换成新署名。
 
 **想给某条被举报的内容加个「先隐藏」的自动规则？**
 `docs/supabase-moderation.sql` 末尾有一段默认注释掉的触发器，
@@ -397,6 +446,7 @@ update public.reports set status = 'resolved' where post_id = '帖子 id';
 - 匿名访客也可以给自己起一个昵称：发布前的小弹窗会问一次，写下的名字只作为署名显示，
   手机号和学校依然不会公开
 - 举报人的身份只有管理员能看到，被举报的同学不会收到「谁举报了你」这种信息
+- 评论与分享同一条规则：先发后审、被举报核实后下架；署名跟随当前昵称（改昵称会连历史一起刷新）
 - 新内容默认先审核：这样在公开的校园场景里，出问题的内容不会先被所有人看到
 - 请在站点内提醒同学：不发布他人隐私信息，友善发言
 
