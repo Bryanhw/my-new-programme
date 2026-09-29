@@ -29,9 +29,34 @@
   var signOutBtn = document.getElementById("signout");
   var anonTip    = document.getElementById("anon-tip");
 
+  var secCard    = document.getElementById("security-card");
+  var secStatus  = document.getElementById("sec-status");
+  var secForm    = document.getElementById("sec-form");
+  var secQuestion = document.getElementById("sec-question");
+  var secAnswer  = document.getElementById("sec-answer");
+  var secSave    = document.getElementById("sec-save");
+  var secEdit    = document.getElementById("sec-edit");
+
   var currentUser = null;
   var currentProfile = null;
   var currentIsAnon = false;
+  var currentSecurityQuestion = null;
+
+  /* 密保问题下拉：选项来自 app.js 的单一来源（id 与数据库 CHECK 对齐） */
+  if (secQuestion && C.securityQuestions) {
+    var secPh = document.createElement("option");
+    secPh.value = "";
+    secPh.textContent = "选一个问题";
+    secQuestion.appendChild(secPh);
+
+    var secQs = C.securityQuestions();
+    for (var sq = 0; sq < secQs.length; sq++) {
+      var secOpt = document.createElement("option");
+      secOpt.value = secQs[sq].id;
+      secOpt.textContent = secQs[sq].text;
+      secQuestion.appendChild(secOpt);
+    }
+  }
 
   document.title = "我的 · " + C.SITE_NAME;
   C.markTabbar("profile");
@@ -47,6 +72,7 @@
       mineCard.classList.add("hidden");
       reportsCard.classList.add("hidden");
       signOutBtn.classList.add("hidden");
+      if (secCard) secCard.classList.add("hidden");
       return;
     }
 
@@ -63,6 +89,7 @@
         mineCard.classList.add("hidden");
         reportsCard.classList.add("hidden");
         signOutBtn.classList.add("hidden");
+        if (secCard) secCard.classList.add("hidden");
         return;
       }
 
@@ -82,6 +109,7 @@
 
       loadMyPosts();
       loadMyReports();
+      loadSecurity();
     });
   }
 
@@ -157,6 +185,42 @@
     });
   }
 
+  /* ---------------------------------------------------------------
+   * 密保问题：忘密码后唯一能自助找回的东西，所以在这里给个显眼的入口
+   * --------------------------------------------------------------- */
+  function loadSecurity() {
+    if (!secCard) return;
+    secCard.classList.remove("hidden");
+
+    if (currentIsAnon) {
+      // 匿名访客没有密码，也就没有「忘记密码」这回事
+      secStatus.textContent =
+        "你是匿名访客，没有密码 —— 所以换个设备就找不回这些内容了。" +
+        "注册一个账号（注册时会让你选一个密保问题），以后忘了密码还能自己重设。";
+      secForm.classList.add("hidden");
+      secEdit.classList.add("hidden");
+      return;
+    }
+
+    secForm.classList.add("hidden");
+    secEdit.classList.add("hidden");
+    secStatus.textContent = "正在读取…";
+
+    C.getSecurityQuestion().then(function (row) {
+      currentSecurityQuestion = (row && row.question_id) || null;
+      if (currentSecurityQuestion) {
+        secStatus.textContent = "已经设置的密保问题：" +
+          (C.securityQuestionText(currentSecurityQuestion) || currentSecurityQuestion);
+        secEdit.textContent = "换一个问题 / 改答案";
+      } else {
+        secStatus.textContent =
+          "还没有设置密保问题 —— 现在忘了密码就真的找不回来了，建议花 10 秒设一个。";
+        secEdit.textContent = "设置密保";
+      }
+      secEdit.classList.remove("hidden");
+    });
+  }
+
   /* 删除自己的帖子 */
   mineEl.addEventListener("click", function (e) {
     var btn = e.target.closest ? e.target.closest("[data-del]") : null;
@@ -223,6 +287,60 @@
         nickBtn.textContent = "保存昵称";
       });
   });
+
+  /* ---------------------------------------------------------------
+   * 密保：打开表单 / 保存
+   * --------------------------------------------------------------- */
+  if (secEdit) {
+    secEdit.addEventListener("click", function () {
+      C.hideNotice(noticeEl);
+      secForm.classList.remove("hidden");
+      secEdit.classList.add("hidden");
+      // 已经设过的就把问题选上，用户只需要重新填答案（答案读不回来）
+      if (secQuestion && !secQuestion.value && currentSecurityQuestion) {
+        secQuestion.value = currentSecurityQuestion;
+      }
+      secAnswer.value = "";
+      (secQuestion && secQuestion.value ? secAnswer : secQuestion || secAnswer).focus();
+    });
+  }
+
+  if (secSave) {
+    secSave.addEventListener("click", function () {
+      C.hideNotice(noticeEl);
+
+      var q = secQuestion ? secQuestion.value : "";
+      var a = secAnswer ? secAnswer.value : "";
+
+      if (!q) {
+        C.showNotice(noticeEl, "warn", "先选一个密保问题");
+        if (secQuestion) secQuestion.focus();
+        return;
+      }
+      if (!a.replace(/\s/g, "")) {
+        C.showNotice(noticeEl, "warn", "填一下密保答案");
+        secAnswer.focus();
+        return;
+      }
+
+      secSave.disabled = true;
+      secSave.innerHTML = '<span class="spinner"></span>';
+
+      C.saveSecurityAnswer(q, a).then(function () {
+        secAnswer.value = "";
+        C.showNotice(noticeEl, "ok", "密保已保存。以后忘了密码，就用这个答案重设一个新密码。");
+        loadSecurity();
+      }).catch(function (err) {
+        C.showNotice(noticeEl, "error",
+          "密保没存上：" + ((err && err.message) || "请稍后重试"));
+        secForm.classList.remove("hidden");
+        secEdit.classList.add("hidden");
+      }).then(function () {
+        secSave.disabled = false;
+        secSave.textContent = "保存密保";
+      });
+    });
+  }
 
   /* ---------------------------------------------------------------
    * 退出登录

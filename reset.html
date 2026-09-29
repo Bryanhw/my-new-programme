@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#CB9243">
+<meta name="description" content="忘了密码？用注册时填的密保问题重设一个新密码。本站不发短信，也不需要邮箱。">
+<!-- 分享卡片：og:image / og:url 用完整网址，社交平台才能抓到（已上线 GitHub Pages）-->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="校园拾光">
+<meta property="og:url" content="https://bryanhw.github.io/my-new-programme/reset.html">
+<meta property="og:title" content="重设密码 · 校园拾光">
+<meta property="og:description" content="忘了密码？用注册时填的密保问题重设一个新密码。本站不发短信，也不需要邮箱。">
+<meta property="og:image" content="https://bryanhw.github.io/my-new-programme/assets/img/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<title>重设密码 · 校园拾光</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">🌤</span>
+      <span>校园拾光</span>
+    </a>
+    <a class="link-plain" href="feed.html">先逛逛</a>
+    <details class="nav-more" id="tab-more">
+      <summary class="nav-btn" aria-label="更多入口">
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </summary>
+      <div class="menu-sheet">
+        <a class="menu-item" data-tab="feed" href="feed.html">
+          <span class="menu-icon">🌿</span>
+          <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
+        </a>
+        <a class="menu-item" data-tab="login" href="login.html">
+          <span class="menu-icon">🔑</span>
+          <span class="menu-text"><b>登录 / 注册</b><small>回到你的账号</small></span>
+        </a>
+        <a class="menu-item" data-tab="faq" href="faq.html">
+          <span class="menu-icon">❓</span>
+          <span class="menu-text"><b>常见问题</b><small>匿名、图片、找回内容</small></span>
+        </a>
+        <a class="menu-item" data-tab="feedback" href="feedback.html">
+          <span class="menu-icon">📮</span>
+          <span class="menu-text"><b>意见反馈</b><small>告诉站主可以改哪里</small></span>
+        </a>
+        <div class="menu-sep"></div>
+        <a class="menu-item" data-tab="home" href="index.html">
+          <span class="menu-icon">🏠</span>
+          <span class="menu-text"><b>回到首页</b><small>今天的问候和最新分享</small></span>
+        </a>
+        <a class="menu-item" data-tab="about" href="index.html#about">
+          <span class="menu-icon">🌤</span>
+          <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
+        </a>
+      </div>
+    </details>
+  </div>
+</header>
+
+<main class="wrap" style="max-width:520px">
+
+  <div class="notice notice-info mt-24" id="notice" hidden></div>
+
+  <div class="auth-card mt-16">
+    <div class="auth-head">
+      <h1 class="auth-title">用密保问题重设密码</h1>
+      <p class="auth-sub">
+        本站不发短信，账号邮箱（<code>&lt;手机号&gt;@students.local</code>）也收不到信，<br>
+        所以注册时填的那个密保问题，是唯一能自助找回的通道。
+      </p>
+    </div>
+
+    <div id="panel-reset">
+      <form id="reset-form" novalidate>
+        <div class="field">
+          <label class="label" for="reset-phone">手机号</label>
+          <input class="input" id="reset-phone" name="phone" type="tel"
+            inputmode="numeric" maxlength="11" autocomplete="tel"
+            placeholder="注册时用的 11 位手机号">
+        </div>
+
+        <div class="field">
+          <label class="label" for="reset-answer">密保答案</label>
+          <input class="input" id="reset-answer" name="answer" type="text"
+            maxlength="60" autocomplete="off" placeholder="填答案，忽略空格和大小写">
+          <p class="hint" style="margin-top:10px">
+            当初登记的是下面三个问题之一 —— <b>不用管是哪一个，直接写答案就行</b>：
+          </p>
+          <ul class="hint" id="q-list" style="margin:6px 0 0;padding-left:20px"></ul>
+        </div>
+
+        <div class="field">
+          <label class="label" for="reset-password">新密码</label>
+          <input class="input" id="reset-password" name="new_password" type="password"
+            autocomplete="new-password" placeholder="至少 6 位">
+        </div>
+
+        <div class="field">
+          <label class="label" for="reset-password2">再输一遍新密码</label>
+          <input class="input" id="reset-password2" name="new_password2" type="password"
+            autocomplete="new-password" placeholder="两遍要一样">
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" id="reset-submit">重 设 密 码</button>
+
+        <p class="hint">
+          答对了会立刻生效（老密码作废，用新密码登录）。答错了不会告诉你是手机号错还是答案错，
+          免得有人拿手机号来这里一个个猜。
+        </p>
+      </form>
+
+      <p class="hint text-center mt-16">
+        想起来了？<a href="login.html">回登录页</a>。还没有账号就<a href="login.html#register">先去注册</a>。
+      </p>
+    </div>
+  </div>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-brand">校园拾光</div>
+  <p class="footer-line">把今天的心事和光，留在这里</p>
+  <p class="footer-note">登录，只是为了让你下次还能找回自己的分享</p>
+  <p class="footer-legal">
+    本网页含有 AI 生成的产物，未侵犯版权；用户发言不代表网站所有者的观点；
+    网站所有者将对不合规的帖子进行下架处理；烦请用户谨慎发言。
+  </p>
+</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/reset.js"></script>
+</body>
+</html>

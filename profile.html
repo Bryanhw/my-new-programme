@@ -118,6 +118,31 @@
     </p>
   </section>
 
+  <section class="card" id="security-card">
+    <h3 class="section-title mb-16">🔑 密保问题</h3>
+    <p class="hint" id="sec-status" style="margin-bottom:12px">正在读取…</p>
+
+    <div id="sec-form" class="hidden">
+      <div class="field">
+        <label class="label" for="sec-question">选一个问题</label>
+        <select class="input" id="sec-question"></select>
+      </div>
+      <div class="field">
+        <label class="label" for="sec-answer">答案</label>
+        <input class="input" id="sec-answer" type="text" maxlength="60"
+          placeholder="答案（忽略空格和大小写）" autocomplete="off">
+      </div>
+      <button class="btn btn-primary btn-block" type="button" id="sec-save">保存密保</button>
+    </div>
+
+    <button class="btn btn-ghost btn-block" type="button" id="sec-edit">设置 / 修改密保</button>
+
+    <p class="hint mt-16">
+      本站不发短信、账号邮箱也收不到信，所以这道题是忘了密码之后唯一能自助找回的通道。
+      系统里不存答案明文，只存加盐后的指纹（比对在服务端做），所以这里只显示你选的问题，读不回答案。
+    </p>
+  </section>
+
   <section id="mine-card">
     <div class="section-head mt-24">
       <h2 class="section-title">📮 我发布的</h2>

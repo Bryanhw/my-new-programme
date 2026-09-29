@@ -1970,7 +1970,184 @@ window.Campus = (function () {
   })();
 
   /* ------------------------------------------------------------------
-   * 10. 导出
+   * 10. 密保问题与找回密码（站主 2026-09-29 拍板新增）
+   * ------------------------------------------------------------------
+   * 为什么必须这么绕：
+   *   · 账号邮箱是伪邮箱 `<手机号>@students.local`（见 phoneToEmail），
+   *     这个域名收不到信 —— Supabase 自带的「邮件找回」在本站是死的；
+   *   · 未登录时用 anon key 没有任何改密码的接口，改别人的密码必须
+   *     service_role，而它绝不能进浏览器。
+   * 所以自助找回只能走「密保问题 + 一个持 service_role 的服务端函数」。
+   *
+   * 三件事各自的分工（都不新增「前端能读别人数据」的通道）：
+   *   1) 登记 / 改密保：rpc("set_security_answer")，答案的归一化与哈希
+   *      都在数据库里做一份实现（前端不碰哈希，也不往外存答案明文）；
+   *   2) 看自己有没有登记：只读视图 my_security_answer（只有问题与时间，
+   *      连答案指纹都不给前端）；
+   *   3) 找回密码：POST 到 Edge Function functions/v1/reset-password，
+   *      由它在服务端核对答案并调 Auth Admin API 改密码。
+   * ------------------------------------------------------------------ */
+
+  /** 三选一密保问题：id 必须与 docs/supabase-security-question.sql 的 CHECK 一致 */
+  var SECURITY_QUESTIONS = [
+    { id: "primary_school",  text: "你的小学叫什么名字？" },
+    { id: "teacher_surname", text: "你最喜欢的一位老师姓什么？" },
+    { id: "home_city",       text: "你家乡所在的城市叫什么？" }
+  ];
+  var SECURITY_ANSWER_MAX = 60;
+  var RESET_FUNCTION_NAME = "reset-password";
+  var RESET_TIMEOUT_MS = 20000;
+
+  function securityQuestions() { return SECURITY_QUESTIONS.slice(); }
+
+  /** 问题文案；id 不认识时返回空串（调用方据此判断合法性） */
+  function securityQuestionText(id) {
+    for (var i = 0; i < SECURITY_QUESTIONS.length; i++) {
+      if (SECURITY_QUESTIONS[i].id === id) return SECURITY_QUESTIONS[i].text;
+    }
+    return "";
+  }
+
+  /** 答案的比对口径（去空白 + 转小写）在数据库里；这里只做同样的长度校验 */
+  function normalizeAnswer(raw) {
+    return String(raw == null ? "" : raw).replace(/\s/g, "");
+  }
+
+  /**
+   * 登记 / 修改密保（登录用户）。
+   * @param {string} questionId 三个 id 之一
+   * @param {string} answer 答案原文（归一化与哈希由数据库完成）
+   */
+  function saveSecurityAnswer(questionId, answer) {
+    if (!client) return Promise.reject(new Error(configError));
+
+    var q = String(questionId == null ? "" : questionId).trim();
+    if (!securityQuestionText(q)) return Promise.reject(new Error("先选一个问题"));
+
+    var norm = normalizeAnswer(answer);
+    if (!norm) return Promise.reject(new Error("答案是空的"));
+    if (norm.length > SECURITY_ANSWER_MAX) {
+      return Promise.reject(new Error("答案最多 " + SECURITY_ANSWER_MAX + " 个字，现在有 " + norm.length + " 字"));
+    }
+
+    return client.rpc("set_security_answer", {
+      p_question_id: q,
+      p_answer: String(answer == null ? "" : answer)
+    }).then(function (res) {
+      if (!res.error) return { questionId: q };
+      throw new Error(securityDbError(res.error));
+    });
+  }
+
+  /** 当前账号登记过的密保问题；没登记（或还没跑迁移）返回 null */
+  function getSecurityQuestion() {
+    if (!client) return Promise.resolve(null);
+    return client.from("my_security_answer").select("question_id, updated_at").maybeSingle()
+      .then(function (res) {
+        if (res.error) return null;
+        return res.data || null;
+      })
+      .catch(function () { return null; });
+  }
+
+  /** 把密保相关的数据库报错翻译成「照着做就行」的中文 */
+  function securityDbError(err) {
+    var msg = String((err && err.message) || "");
+    var code = String((err && err.code) || "");
+    // 迁移没跑：表 / 视图 / 函数不存在，或 PostgREST 还没刷新 schema 缓存
+    // （42501 只在报错里点名 set_security_answer 时才算「没部署」，否则是别的权限问题）
+    if (code === "42P01" || code === "42883" ||
+        (code === "42501" && /set_security_answer/i.test(msg)) ||
+        code === "PGRST202" || code === "PGRST205" ||
+        /does not exist|schema cache|could not find the function/i.test(msg)) {
+      return "密保功能还没部署：请在 Supabase 的 SQL Editor 执行 " +
+             "docs/supabase-security-question.sql（详见 README）";
+    }
+    // RPC 里 raise exception 抛出的中文（「答案是空的」这类）原样展示
+    if (/[\u4e00-\u9fa5]/.test(msg)) return msg;
+    return msg || "密保没存上，请稍后重试";
+  }
+
+  /**
+   * 忘记密码：手机号 + 密保答案 + 新密码 -> 交给服务端函数改密。
+   * 这里只用 anon key 调 Edge Function，service_role 只在函数里出现。
+   * 用 fetch 而不是 client.functions.invoke：要自己控制超时，并把
+   * 「函数没部署（404）」「忘了关 JWT 校验（401）」翻译成人话。
+   */
+  function resetPasswordWithAnswer(phone, answer, newPassword) {
+    if (!client || !cfg.SUPABASE_URL) return Promise.reject(new Error(configError));
+
+    var p = normalizePhone(phone);
+    if (!isValidPhone(p)) return Promise.reject(new Error("请输入 11 位手机号"));
+
+    var norm = normalizeAnswer(answer);
+    if (!norm) return Promise.reject(new Error("请填写密保答案"));
+    if (norm.length > SECURITY_ANSWER_MAX) {
+      return Promise.reject(new Error("答案最多 " + SECURITY_ANSWER_MAX + " 个字"));
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return Promise.reject(new Error("新密码至少 6 位"));
+    }
+
+    var url = String(cfg.SUPABASE_URL).replace(/\/+$/, "") + "/functions/v1/" + RESET_FUNCTION_NAME;
+    var ctl = (typeof AbortController === "function") ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, RESET_TIMEOUT_MS);
+
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: "Bearer " + cfg.SUPABASE_ANON_KEY
+      },
+      // 答案按原文发过去：归一化只在数据库那一处做，避免两份实现走偏
+      body: JSON.stringify({
+        phone: p,
+        answer: String(answer == null ? "" : answer),
+        new_password: newPassword
+      }),
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (res) {
+      clearTimeout(timer);
+      return res.text().then(function (text) {
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+        if (res.ok && data && data.ok) {
+          return { message: data.message || "密码已重置，请用新密码登录" };
+        }
+        throw new Error(resetFunctionError(res.status, data));
+      });
+    }).catch(function (err) {
+      clearTimeout(timer);
+      if (err && (err.name === "AbortError" || /aborted/i.test(String(err.message || "")))) {
+        throw new Error("请求没有响应（可能网络被拦了），稍后再试，或者联系站主");
+      }
+      throw err;
+    });
+  }
+
+  /** 把 Edge Function 的响应翻译成给同学看的中文 */
+  function resetFunctionError(status, data) {
+    var code = String((data && data.code) || "");
+    var msg = String((data && data.message) || "");
+
+    if (code === "mismatch") return "手机号或密保答案不对。也可以换一个问题对应的答案再试一次。";
+    if (code === "locked") return "试得有点多，请 15 分钟后再试。";
+    if (code === "invalid_input") return msg || "填写的内容不合法";
+    if (code === "not_configured") return "服务端还没配置好，请联系站主";
+    if (status === 404) {
+      return "找回密码功能还没部署：请在 Supabase 后台部署 reset-password 函数" +
+             "（见 docs/edge-functions/reset-password/README.md）";
+    }
+    if (status === 401 || status === 403) {
+      return "找回密码功能还没配置好：那个函数需要关闭「Enforce JWT Verification」（见部署说明）";
+    }
+    if (status >= 500) return "服务端出了点问题，稍后再试，或者联系站主";
+    return msg || "改密码没成功，请稍后重试";
+  }
+
+  /* ------------------------------------------------------------------
+   * 11. 导出
    * ------------------------------------------------------------------ */
   return {
     // 环境
@@ -2070,6 +2247,14 @@ window.Campus = (function () {
     sendFeedback: sendFeedback,
     guessDevice: guessDevice,
     FEEDBACK_MAX: FEEDBACK_MAX,
-    FEEDBACK_DEVICES: FEEDBACK_DEVICES
+    FEEDBACK_DEVICES: FEEDBACK_DEVICES,
+
+    // 密保问题与找回密码：答案的归一化/哈希都在数据库，前端只收发结果
+    securityQuestions: securityQuestions,
+    securityQuestionText: securityQuestionText,
+    saveSecurityAnswer: saveSecurityAnswer,
+    getSecurityQuestion: getSecurityQuestion,
+    resetPasswordWithAnswer: resetPasswordWithAnswer,
+    SECURITY_ANSWER_MAX: SECURITY_ANSWER_MAX
   };
 })();

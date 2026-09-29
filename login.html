@@ -97,6 +97,11 @@
         </div>
 
         <button class="btn btn-primary btn-block" type="submit" id="login-submit">登 录</button>
+
+        <p class="hint text-center" id="login-help">
+          登不进去？没有账号就<a href="#register" id="login-to-register">先去注册</a>；<br>
+          忘了密码就<a href="reset.html">用密保问题重设一个</a>。
+        </p>
       </form>
     </div>
 
@@ -124,6 +129,18 @@
           <label class="label" for="reg-nickname">昵称（可稍后再设置）</label>
           <input class="input" id="reg-nickname" name="nickname" type="text"
             maxlength="20" placeholder="想让同学们怎么称呼你？">
+        </div>
+
+        <div class="field">
+          <label class="label" for="reg-security-q">密保问题</label>
+          <select class="input" id="reg-security-q" name="security_question"></select>
+          <input class="input" id="reg-security-a" name="security_answer" type="text"
+            maxlength="60" placeholder="答案（忽略空格和大小写）" autocomplete="off"
+            style="margin-top:8px">
+          <p class="hint">
+            忘密码时只能靠它：本站不发短信，账号邮箱也收不到信，所以这道题是唯一的自助找回通道。
+            答案是给系统比对用的，不会公开。
+          </p>
         </div>
 
         <div class="field">
