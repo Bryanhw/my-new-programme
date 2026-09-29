@@ -588,6 +588,55 @@ button, input, textarea, select {
 }
 .counter.warn { color: var(--brand-strong); font-weight: 700; }
 
+/* 单选胶囊（反馈页的「你用什么设备浏览」）：原生 radio 藏起来，
+   点整块都能选中，键盘 Tab 也能用（:focus-visible 有描边） */
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.choice {
+  position: relative;
+  display: inline-flex;
+}
+
+.choice-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.choice-face {
+  display: inline-block;
+  padding: 9px 18px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease),
+              color 0.18s var(--ease);
+}
+
+.choice:hover .choice-face { border-color: var(--brand-soft); }
+
+.choice-input:checked + .choice-face {
+  border-color: var(--brand);
+  background: var(--brand-ghost);
+  color: var(--ink-solid);
+}
+
+.choice-input:focus-visible + .choice-face {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 /* 开关 */
 .switch-row {
   display: flex;

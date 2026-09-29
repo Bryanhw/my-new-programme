@@ -4,18 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#CB9243">
-<meta name="description" content="设置昵称、看看自己发过的分享和收到的心动。">
+<meta name="description" content="给校园拾光提意见：你用什么设备浏览、希望站主改进哪里、要不要留个联系方式。不用登录就能提交，只有站主看得到。">
 <!-- 分享卡片：og:image / og:url 用完整网址，社交平台才能抓到（已上线 GitHub Pages）-->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="校园拾光">
-<meta property="og:url" content="https://bryanhw.github.io/my-new-programme/profile.html">
-<meta property="og:title" content="我的 · 校园拾光">
-<meta property="og:description" content="设置昵称、看看自己发过的分享和收到的心动。">
+<meta property="og:url" content="https://bryanhw.github.io/my-new-programme/feedback.html">
+<meta property="og:title" content="意见反馈 · 校园拾光">
+<meta property="og:description" content="不用登录就能提交：你用什么设备浏览、希望站主改进哪里、要不要留个联系方式。">
 <meta property="og:image" content="https://bryanhw.github.io/my-new-programme/assets/img/og-cover.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<title>我的 · 校园拾光</title>
+<title>意见反馈 · 校园拾光</title>
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
@@ -23,10 +23,10 @@
 <header class="site-header">
   <div class="wrap">
     <a class="brand" href="index.html">
-      <span class="brand-mark">🙂</span>
-      <span>我的</span>
+      <span class="brand-mark">📮</span>
+      <span>意见反馈</span>
     </a>
-    <button class="link-plain" type="button" id="signout">退出登录</button>
+    <a class="link-plain" href="feed.html">先逛逛</a>
     <a class="header-login" href="login.html" aria-label="登录或注册">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none"
            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -77,67 +77,58 @@
 
   <div class="notice notice-info mt-16" id="notice" hidden></div>
 
-  <div class="notice notice-warn mt-16 hidden" id="anon-tip">
-    你现在是<strong>匿名访客</strong>，换个设备就找不回这些内容了。
-    <a href="login.html">注册一个账号</a>可以把内容留下来。
-  </div>
+  <p class="text-sm on-gold" style="padding:16px 0 4px">
+    不用登录，也不用先匿名进入 —— 直接写就行。<br>
+    哪里别扭、哪里不好用、想加什么，都欢迎说；说重一点也没关系。
+  </p>
 
-  <section class="card profile-hero" id="profile-hero">
-    <div class="profile-avatar" id="profile-avatar">…</div>
-    <div class="profile-name" id="profile-name">加载中…</div>
-    <div class="profile-sub" id="profile-sub"></div>
+  <form class="card" id="feedback-form" novalidate>
 
-    <div class="stat-row">
-      <div class="stat">
-        <div class="stat-num" id="stat-posts">0</div>
-        <div class="stat-label">我的分享</div>
+    <div class="field">
+      <span class="label">你用什么设备浏览的？</span>
+
+      <div class="choice-row" id="device-row">
+        <label class="choice">
+          <input class="choice-input" type="radio" name="device" id="dev-desktop" value="desktop">
+          <span class="choice-face">电脑</span>
+        </label>
+        <label class="choice">
+          <input class="choice-input" type="radio" name="device" id="dev-tablet" value="tablet">
+          <span class="choice-face">平板</span>
+        </label>
+        <label class="choice">
+          <input class="choice-input" type="radio" name="device" id="dev-phone" value="phone">
+          <span class="choice-face">手机</span>
+        </label>
+        <label class="choice">
+          <input class="choice-input" type="radio" name="device" id="dev-other" value="other">
+          <span class="choice-face">其他</span>
+        </label>
       </div>
-      <div class="stat">
-        <div class="stat-num" id="stat-likes">0</div>
-        <div class="stat-label">匿名发布</div>
-      </div>
-      <div class="stat">
-        <div class="stat-num" id="stat-days">1</div>
-        <div class="stat-label">在这里的天数</div>
-      </div>
+
+      <div class="hint">已经按你的浏览器猜了一个，选错了直接点一下就好。</div>
     </div>
-  </section>
 
-  <section class="card" id="nickname-card">
-    <h3 class="section-title mb-16">设置昵称</h3>
-    <form id="nickname-form" novalidate>
-      <div class="field">
-        <input class="input" id="nickname-input" type="text" maxlength="20"
-          placeholder="例如：爱睡午觉的小林">
-        <p class="hint">昵称会显示在你发布的每条分享上（勾选了匿名的那条除外），随时可以改。</p>
-      </div>
-      <button class="btn btn-primary btn-block" type="submit" id="nickname-submit">保存昵称</button>
-    </form>
-    <p class="hint mt-16" id="anon-nick-tip">
-      匿名访客也能设置昵称：设置后，没有勾选匿名的分享就会用这个名字署名。
-    </p>
-  </section>
-
-  <section id="mine-card">
-    <div class="section-head mt-24">
-      <h2 class="section-title">📮 我发布的</h2>
+    <div class="field">
+      <label class="label" for="content">想让站主改进的地方</label>
+      <textarea class="textarea" id="content" name="content" maxlength="500"
+        placeholder="比如：手机上图片有点大、广场想按学校筛选、希望加个夜间模式……&#10;如果遇到问题，写清楚你当时在哪个页面、点了什么，站主更好排查。"></textarea>
+      <div class="counter" id="counter">0 / 500</div>
     </div>
-    <p class="text-sm on-gold mb-16">
-      每条分享都会先经过一次人工审核。标着「审核中」的只有你自己能看到（在广场里也带着这个标记），
-      通过之后才会出现在别人的广场里。
-    </p>
-    <div id="mine-list"></div>
-  </section>
 
-  <section id="reports-card" class="hidden">
-    <div class="section-head mt-24">
-      <h2 class="section-title">🛡️ 我举报的</h2>
+    <div class="field">
+      <label class="label" for="contact">联系方式（选填）</label>
+      <input class="input" id="contact" name="contact" type="text" maxlength="100"
+             placeholder="想收到回复就留一个（微信 / 手机号 / 邮箱都行）" autocomplete="off">
     </div>
-    <p class="text-sm on-gold mb-16">
-      这里只显示你自己提交过的举报和处理进度，别人看不到。显示「处理中」表示还没核查完。
+
+    <button class="btn btn-primary btn-block" type="submit" id="submit">提交反馈</button>
+
+    <p class="hint text-center mt-16">
+      提交的反馈只有站主可以看到
     </p>
-    <div id="reports-list"></div>
-  </section>
+
+  </form>
 
 </main>
 
@@ -155,7 +146,7 @@
 <footer class="site-footer">
   <div class="footer-brand">校园拾光</div>
   <p class="footer-line">把今天的心事和光，留在这里</p>
-  <p class="footer-note">你在这里留下的，都是你自己的</p>
+  <p class="footer-note">发出去之前，记得别写到别人的隐私</p>
   <p class="footer-legal">
     本网页含有 AI 生成的产物，未侵犯版权；用户发言不代表网站所有者的观点；
     网站所有者将对不合规的帖子进行下架处理；烦请用户谨慎发言。
@@ -165,6 +156,6 @@
 <script src="assets/js/config.js"></script>
 <script src="assets/vendor/supabase.js"></script>
 <script src="assets/js/app.js"></script>
-<script src="assets/js/profile.js"></script>
+<script src="assets/js/feedback.js"></script>
 </body>
 </html>

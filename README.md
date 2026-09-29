@@ -33,6 +33,7 @@
 | 🛡️ 我举报的（回执） | 「我的」页能看到自己举报过的分享和评论处理到哪一步：处理中 / 已处理 / 未违规，并附上被举报内容的摘要 |
 | 📮 我的 | 查看自己发过的内容（含还在审核中的）、删除、改昵称、退出登录 |
 | ❓ 常见问题 | 匿名到什么程度、昵称与手机号、图片格式、评论与回复、删掉的内容、审核要等多久、怎么举报、找回分享，一次说清楚 |
+| 📮 意见反馈 | 三句话的问卷：你用什么设备浏览（电脑 / 平板 / 手机 / 其他，按 UA 预选、可改）、想让站主改进的地方（最多 500 字）、联系方式（选填）。**不需要登录，只有站主可以看到**，也不会记录提交者的账号、IP 或浏览器指纹 |
 | 👀 无需登录浏览 | 未登录也能看广场内容，想发布时再登录/匿名进入 |
 
 ---
@@ -56,19 +57,21 @@ my-new-programme/
 ├── post.html               发布页（文字 + 图片 + 匿名开关 + 署名弹窗）
 ├── login.html              登录 / 注册 / 匿名进入
 ├── profile.html            我的（昵称、我的发布、退出）
-├── faq.html                常见问题（11 个折叠问答）
+├── faq.html                常见问题（12 个折叠问答）
+├── feedback.html           意见反馈（设备 + 想改的地方 + 联系方式，不需要登录）
 ├── assets/
 │   ├── css/style.css       全部样式（#CB9243 金底 + 奶油卡片 + 页头二级菜单）
 │   ├── img/campus-space.jpg 主页照片（og-cover.png 是分享卡片）
 │   ├── img/school-gate.png 主页校门插画（AI 生成 + 抠成透明背景，可随时替换）
 │   ├── js/
 │   │   ├── config.js       ← 唯一需要你修改的文件
-│   │   ├── app.js          共享模块：Supabase 客户端、会话、发帖、点赞、评论、上传、举报
+│   │   ├── app.js          共享模块：Supabase 客户端、会话、发帖、点赞、评论、上传、举报、反馈
 │   │   ├── home.js         主页逻辑
 │   │   ├── feed.js         广场逻辑
 │   │   ├── post.js         发布逻辑
 │   │   ├── auth.js         登录注册逻辑
 │   │   ├── profile.js      个人页逻辑
+│   │   ├── feedback.js     意见反馈页逻辑
 │   │   └── faq.js          常见问题页逻辑（只负责点亮菜单）
 │   └── vendor/supabase.js  supabase-js v2（已本地化，不依赖境外 CDN）
 └── docs/
@@ -82,7 +85,9 @@ my-new-programme/
     ├── supabase-comments.sql         评论 + 回复：建表 / 视图 / 评论举报 + 评论审核队列
     ├── supabase-comments-flat.sql    上面那份的粘贴版
     ├── supabase-nickname-sync.sql    昵称同步：改昵称后刷新历史分享 / 评论的署名
-    └── supabase-nickname-sync-flat.sql  上面那份的粘贴版
+    ├── supabase-nickname-sync-flat.sql  上面那份的粘贴版
+    ├── supabase-feedback.sql         意见反馈：只进不出的表（谁能写、只有站主怎么读）
+    └── supabase-feedback-flat.sql    上面那份的粘贴版
 ```
 
 ---
@@ -310,6 +315,23 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 `user_id` **不对 `anon` / `authenticated` 开放读取**（只保留 `post_id` 一列，供「取消点赞」按它过滤），
 点赞数一律走 `post_likes` 视图。
 
+**`feedback`** — 意见反馈（**只进不出**的一张表）
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | uuid | 主键 |
+| `device` | text | 浏览设备：`desktop` / `tablet` / `phone` / `other`（闭集约束，前端按 UA 预选、用户可改） |
+| `content` | text | 想改的地方（1–500 字，去掉首尾空白后不能为空） |
+| `contact` | text | 联系方式（选填，最多 100 字；留空存 `null`） |
+| `created_at` | timestamptz | 提交时间 |
+
+> **这张表刻意没有 `user_id`**：页面上写着「提交的反馈只有站主可以看到」，
+> 那就没有理由顺手记下提交者是谁 —— 不存账号、不存 IP、也不存浏览器指纹。
+> 想回联只能靠作者自己留的 `contact`。读取权限也没给任何普通角色：
+> 迁移里连一条 `select` 策略都不建，普通角色只有 `insert (device, content, contact)`
+> 这一项按列授权，`id` / `created_at` 由数据库填，`service_role`（SQL Editor / 后台）照旧全权。
+> 因此前端提交时不带 `.select()` 回显 —— 那会撞上 `42501`。
+
 **安全策略（RLS）一览**
 
 | 表 | 读 | 写 |
@@ -323,6 +345,7 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 | `reports` | 仅举报人自己（被举报者看不到是谁举报的） | 仅本人可提交举报，提交后不可修改、不可删除 |
 | `likes` | 不再直接开放：`user_id` 属隐私，只留 `post_id` 一列给「取消点赞」过滤用 | 仅本人可增删自己的点赞；删除只按 `post_id` 过滤，由 `likes_delete_self` 策略保证删不到别人的 |
 | `post_likes`（视图） | 每帖点赞数 + 当前用户是否点过（不含 `user_id`） | 只读视图，不承接写入 |
+| `feedback` | **谁也不给读**：只有 `insert` 策略，没有 `select` 策略（站主用 `service_role` 读） | 任何人（登录 / 未登录）都能提交一条，按列授权只能写 `device, content, contact`；没有更新和删除策略 |
 | `storage.objects` | `post-images` 桶公开读 | 登录身份可上传；文件所有者可删除 |
 
 ### 内容审核：一条分享怎么才会出现在广场
@@ -400,6 +423,32 @@ update public.reports set status = 'resolved' where comment_id = '评论 id';
 
 评论举报也走同一张表和同一个回执区（`comment_id` 非空即评论举报），页面把摘要句换成
 「你举报的评论（属于：…）」；评论正文本身不放进回执（`comments` 对普通角色已撤读权）。
+
+### 意见反馈：只有站主能看到，怎么看
+
+页头「☰ 更多」菜单里的「📮 意见反馈」是一个不需要登录的问卷：你用什么设备浏览、
+最想让站主改什么（最多 500 字）、联系方式（选填）。页面上写着「提交的反馈只有站主可以看到」，
+这句话在数据库层面也是真的 —— 表上只有 `insert` 策略，没有任何普通角色能 `select`，
+所以连提交者自己也读不回自己刚写的那条。
+
+```sql
+-- 在 SQL Editor 里读反馈（service_role，绕开 RLS）
+select created_at, device, content, contact
+from public.feedback
+order by created_at desc;
+
+-- 只想看某一类设备说了什么
+select created_at, content, contact
+from public.feedback
+where device = 'phone'
+order by created_at desc;
+
+-- 看完一条删一条（没有别的用途就顺手清掉，减少一份数据）
+delete from public.feedback where id = '反馈 id';
+```
+
+没执行迁移就去点提交，页面会直接告诉你「反馈功能还没部署」并给出要跑的文件名
+（`docs/supabase-feedback.sql`），不会假装成功。
 
 ### 关于匿名的边界
 

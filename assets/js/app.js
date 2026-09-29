@@ -1598,6 +1598,72 @@ window.Campus = (function () {
     });
   }
 
+  /* ------------------------------------------------------------------
+   * 9. 意见反馈
+   *    任何访客都能提交 —— 不要求登录，也不要求先「匿名进入」。
+   *    数据库那边（docs/supabase-feedback.sql）只给 feedback 表开了
+   *    insert 策略，没有 select 策略：提交完连提交者自己都读不回来，
+   *    只有站主用 service_role 在后台看得到。
+   *    所以这里刻意不取 getIdentity()：反馈和「你是谁」无关。
+   * ------------------------------------------------------------------ */
+
+  var FEEDBACK_MAX = 500;
+  var FEEDBACK_DEVICES = ["desktop", "tablet", "phone", "other"];
+
+  /** 按 UA 猜一个设备选项（页面上会预选好，用户可以改） */
+  function guessDevice(ua) {
+    var s = String(
+      ua == null
+        ? (typeof navigator !== "undefined" && navigator && navigator.userAgent) || ""
+        : ua
+    ).toLowerCase();
+
+    if (/ipad|tablet|kindle|silk|playbook/.test(s)) return "tablet";
+    if (/mobi|android|iphone|ipod|phone/.test(s)) return "phone";
+    if (/windows|macintosh|mac os x|linux|cros|desktop/.test(s)) return "desktop";
+    return "other";
+  }
+
+  /**
+   * 提交一条意见反馈。
+   * @param {{device?: string, content: string, contact?: string}} o
+   * @returns {Promise<{device: string}>}
+   */
+  function sendFeedback(o) {
+    if (!client) return Promise.reject(new Error(configError));
+    o = o || {};
+
+    var device = String(o.device == null ? "" : o.device).trim();
+    if (FEEDBACK_DEVICES.indexOf(device) < 0) device = "other";
+
+    var content = String(o.content == null ? "" : o.content).trim();
+    if (!content) return Promise.reject(new Error("写点什么再提交吧"));
+    if (content.length > FEEDBACK_MAX) {
+      return Promise.reject(new Error("最多 " + FEEDBACK_MAX + " 字，现在有 " + content.length + " 字"));
+    }
+
+    var contact = String(o.contact == null ? "" : o.contact).trim();
+    if (contact.length > 100) contact = contact.slice(0, 100);
+
+    // 只提交这三列：数据库只授予了这三列的 insert 权限（id 与 created_at
+    // 由数据库默认值生成，提交者改不了）。
+    // 这里绝不能接 .select()：feedback 没有 select 策略也没有 select 权限，
+    // 接上必然 42501（和发帖那条 POST_COLUMNS 的坑是同一类）。
+    var row = { device: device, content: content, contact: contact || null };
+
+    return client.from("feedback").insert(row).then(function (res) {
+      if (!res.error) return { device: device };
+
+      var msg = String(res.error.message || "");
+      var code = String(res.error.code || "");
+      // 还没跑迁移时的兜底：给一句能照着做的提示，而不是甩一个关系名错误
+      if (code === "42P01" || code === "PGRST205" || /does not exist|schema cache/i.test(msg)) {
+        throw new Error("反馈功能还没部署：请在 Supabase 的 SQL Editor 执行 docs/supabase-feedback.sql（详见 README）");
+      }
+      throw new Error("反馈没提交上：" + (msg || "请稍后重试"));
+    });
+  }
+
   /** 防抖 */
   function debounce(fn, wait) {
     var timer = null;
@@ -1635,7 +1701,7 @@ window.Campus = (function () {
   })();
 
   /* ------------------------------------------------------------------
-   * 9. 导出
+   * 10. 导出
    * ------------------------------------------------------------------ */
   return {
     // 环境
@@ -1706,6 +1772,12 @@ window.Campus = (function () {
     blockIfNotReady: blockIfNotReady,
     setupCard: setupCard,
     setupHint: setupHint,
-    debounce: debounce
+    debounce: debounce,
+
+    // 意见反馈
+    sendFeedback: sendFeedback,
+    guessDevice: guessDevice,
+    FEEDBACK_MAX: FEEDBACK_MAX,
+    FEEDBACK_DEVICES: FEEDBACK_DEVICES
   };
 })();
