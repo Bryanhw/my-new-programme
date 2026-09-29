@@ -135,6 +135,26 @@ window.Campus = (function () {
    * 3. 注册 / 登录 / 匿名 / 退出
    * ------------------------------------------------------------------ */
 
+  /* 学校固定列表（assets/js/campuses.js，任务 D2）。
+   * 页面没加载它时这里整体降级：校名只做去空白，城市为空，不报错。 */
+  var campusList = window.CampusList || null;
+
+  /** 把用户输入的学校归一成规范校名；不在列表里就原样收下 */
+  function canonicalSchool(raw) {
+    if (campusList) return campusList.schoolOf(raw);
+    return String(raw == null ? "" : raw).replace(/\s+/g, " ").trim();
+  }
+
+  /** 学校对应的城市（「只看同城」要用）；认不出来返回空串 */
+  function cityOfSchool(raw) {
+    return campusList ? campusList.cityOf(raw) : "";
+  }
+
+  /** 注册页补全用的学校清单；没有列表时返回空数组 */
+  function schoolOptions() {
+    return campusList ? campusList.schoolOptions() : [];
+  }
+
   /**
    * 注册（手机号 + 密码 + 学校）
    * 说明：不需要真实短信，手机号只用于登录标识与身份展示。
@@ -152,7 +172,7 @@ window.Campus = (function () {
       options: {
         data: {
           phone: phone,
-          school: school.trim(),
+          school: canonicalSchool(school),
           nickname: nickname && nickname.trim() ? nickname.trim() : null
         }
       }
@@ -1725,6 +1745,11 @@ window.Campus = (function () {
     signIn: signIn,
     signInAnonymously: signInAnonymously,
     signOut: signOut,
+
+    // 学校（任务 D2：固定列表 + 别名归一，cityOf 供「只看同城」用）
+    schoolOf: canonicalSchool,
+    cityOf: cityOfSchool,
+    schoolOptions: schoolOptions,
 
     // 数据
     createPost: createPost,

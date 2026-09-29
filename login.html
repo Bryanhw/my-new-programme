@@ -114,7 +114,10 @@
         <div class="field">
           <label class="label" for="reg-school">学校</label>
           <input class="input" id="reg-school" name="school" type="text"
-            maxlength="40" placeholder="例如：××大学 / ××学院" autocomplete="organization">
+            list="school-list" maxlength="40" placeholder="输入几个字，比如「电子科大」"
+            autocomplete="organization">
+          <datalist id="school-list"></datalist>
+          <p class="hint">列表里选一个会带上城市，方便以后「只看同城」；找不到自己的学校就照原样写，一样能注册。</p>
         </div>
 
         <div class="field">
@@ -158,6 +161,7 @@
 
 <script src="assets/js/config.js"></script>
 <script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/campuses.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/auth.js"></script>
 </body>

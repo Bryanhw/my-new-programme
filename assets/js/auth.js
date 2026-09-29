@@ -28,6 +28,20 @@
   document.title = "登录 / 注册 · " + C.SITE_NAME;
   C.markTabbar("");
 
+  /* ---------------------------------------------------------------
+   * 学校补全（任务 D2）
+   * 固定列表来自 assets/js/campuses.js，找不到的学校照原样手输，
+   * 所以这里只填 <datalist>，不做任何限制。
+   * --------------------------------------------------------------- */
+  var schoolList = document.getElementById("school-list");
+  var campusOptions = schoolList && C.schoolOptions ? C.schoolOptions() : [];
+  for (var si = 0; si < campusOptions.length; si++) {
+    var opt = document.createElement("option");
+    opt.value = campusOptions[si].name;
+    opt.label = campusOptions[si].province + " " + campusOptions[si].city;
+    schoolList.appendChild(opt);
+  }
+
   /* 后端还没配置时，直接说明原因，避免点了按钮才报错 */
   if (!C.isReady()) {
     C.blockIfNotReady(noticeEl);
