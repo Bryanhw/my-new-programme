@@ -576,8 +576,9 @@ D1 把编号换成了**数据库的生成列** `posts.anon_code`：
 > 迁移脚本 [`docs/supabase-anon-code.sql`](docs/supabase-anon-code.sql)（配套
 > [`-flat`](docs/supabase-anon-code-flat.sql) 粘贴版）由站主在 Supabase SQL Editor 执行一次；
 > 第 0 段用临时表干跑验证生成列表达式，不碰真实数据。它同时把 `anon_code` 补进列授权、
-> 重建 `my_posts` 视图（视图必须成对重建：`create or replace` 只能追加列，删列要 `drop` 再建）、
-> 末尾附验证查询与回滚步骤。
+> 同步 `my_posts` 视图（这里是原定义 + 末尾追加 `p.anon_code`，所以 `create or replace` 合法；
+> 哪天真要**删列或改列**，那才必须 `drop` 再 `create`——`create or replace` 只允许末尾追加）、
+> 末尾附验证查询与回滚步骤（回滚语句在文件里是**注释掉的**，整段复制粘贴不会误删列）。
 
 > 同一条匿名分享在**首页、广场、「我的」三个列表和举报回执**里显示的是同一个编号
 > （四处都走 `anonName()`）。广场页顶部还加了一句提示（`feed.html` 的 `#anon-code-tip`）
