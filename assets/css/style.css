@@ -438,6 +438,28 @@ button, input, textarea, select {
   font-size: 17px;
 }
 
+/* 匿名洞号的颜色：同一个号 → 同一个色带，让「又是这位同学」一眼看得出。
+   12 个色带（每 30° 一个），由 app.js 按 anon_code 的前两位算出来写进
+   data-hue-band。刻意用属性选择器而不是行内 style —— 将来加 CSP 时不用
+   为这点头像颜色放开 inline-style。 */
+.avatar.anon[data-hue-band="0"]  { --anon-a: #F08A8A; --anon-b: #C95A5A; }
+.avatar.anon[data-hue-band="1"]  { --anon-a: #F0A97E; --anon-b: #C97A48; }
+.avatar.anon[data-hue-band="2"]  { --anon-a: #E8C36A; --anon-b: #BF9A33; }
+.avatar.anon[data-hue-band="3"]  { --anon-a: #B9CD74; --anon-b: #8CA53D; }
+.avatar.anon[data-hue-band="4"]  { --anon-a: #8FCF94; --anon-b: #57A461; }
+.avatar.anon[data-hue-band="5"]  { --anon-a: #7FCBC0; --anon-b: #459E92; }
+.avatar.anon[data-hue-band="6"]  { --anon-a: #7FB6DE; --anon-b: #4689BC; }
+.avatar.anon[data-hue-band="7"]  { --anon-a: #93A3E0; --anon-b: #5B6DC0; }
+.avatar.anon[data-hue-band="8"]  { --anon-a: #B096E0; --anon-b: #7E5FBF; }
+.avatar.anon[data-hue-band="9"]  { --anon-a: #D292D4; --anon-b: #A75AA9; }
+.avatar.anon[data-hue-band="10"] { --anon-a: #E293B6; --anon-b: #BB5B85; }
+.avatar.anon[data-hue-band="11"] { --anon-a: #B49A86; --anon-b: #8A6E58; }
+.avatar.anon[data-hue-band] {
+  background: linear-gradient(135deg, var(--anon-a), var(--anon-b));
+  box-shadow: 0 4px 12px rgba(59, 42, 27, 0.18);
+  color: #fff;
+}
+
 .post-meta { flex: 1; min-width: 0; }
 
 .post-name {

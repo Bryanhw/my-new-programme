@@ -297,7 +297,9 @@ window.Campus = (function () {
           };
           // 这里必须列出列名：数据库已撤销 posts.author_id 的读权限，
           // select=* 会整条失败（42501），列出来才只回显需要的展示字段。
-          return client.from("posts").insert(row).select(POST_COLUMNS).single().then(function (res) {
+          return withAnonCodeFallback(function () {
+            return client.from("posts").insert(row).select(postColumns()).single();
+          }).then(function (res) {
             if (res.error) throw new Error("发布失败：" + res.error.message);
             return res.data;
           });
@@ -311,6 +313,42 @@ window.Campus = (function () {
   // 也拿不到匿名帖的作者账号（README「关于匿名的边界」）。
   // status 用来显示「审核中 / 未通过」角标：只有本人看得见自己的待审核内容。
   var POST_COLUMNS = "id, is_anonymous, display_name, school, content, image_path, created_at, status";
+
+  /**
+   * 稳定洞号（D1）：posts.anon_code 是数据库的生成列，同一个人的匿名帖共用一个号。
+   *
+   * 为什么要有下面这套「能力探测」：
+   *   数据库迁移和页面发布是两条独立的线，谁先谁后都可能发生 ——
+   *   在库里还没有这一列时，请求里带上它会让**整条查询**失败（42703），
+   *   广场直接白屏。所以先带列请求，一旦接口说「没这列」，就在本次会话里
+   *   记住并改回不带列的老查询（页面退回 S1 的每帖编号，功能不受影响）。
+   *   探测失败最多一次，之后不再多花一次请求。
+   */
+  var ANON_CODE_COLUMN = "anon_code";
+  var anonCodeColumnOk = true;
+
+  function postColumns() {
+    return POST_COLUMNS + (anonCodeColumnOk ? ", " + ANON_CODE_COLUMN : "");
+  }
+
+  /** 接口是不是在说「这个列不存在」（Postgres 42703 / PostgREST PGRST204） */
+  function isMissingColumn(err) {
+    if (!err) return false;
+    return String(err.code || "") === "42703" ||
+           String(err.code || "") === "PGRST204" ||
+           String(err.message || "").indexOf(ANON_CODE_COLUMN) >= 0;
+  }
+
+  /** 统一封一层：带上 anon_code 的请求若因「列不存在」失败，就降级重试一次 */
+  function withAnonCodeFallback(run) {
+    return run().then(function (res) {
+      if (res && res.error && anonCodeColumnOk && isMissingColumn(res.error)) {
+        anonCodeColumnOk = false;
+        return run();
+      }
+      return res;
+    });
+  }
 
   /** 给一批帖子补上点赞数与「我是否点过」。
    *  读取走视图 post_likes：它只给「计数 + 我是否点过」，不含 user_id。
@@ -343,10 +381,12 @@ window.Campus = (function () {
   /** 取内容流（最新在前） */
   function listPosts(limit) {
     if (!client) return Promise.reject(new Error(configError));
-    return client.from("posts")
-      .select(POST_COLUMNS)
-      .order("created_at", { ascending: false })
-      .limit(limit || 30)
+    return withAnonCodeFallback(function () {
+      return client.from("posts")
+        .select(postColumns())
+        .order("created_at", { ascending: false })
+        .limit(limit || 30);
+    })
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
         return attachLikes(res.data || []).then(attachComments);
@@ -358,10 +398,12 @@ window.Campus = (function () {
    *  （也没有权限）用 author_id 过滤 —— 列级权限同样管住 WHERE 里的列。 */
   function listMyPosts(limit) {
     if (!client) return Promise.reject(new Error(configError));
-    return client.from("my_posts")
-      .select(POST_COLUMNS)
-      .order("created_at", { ascending: false })
-      .limit(limit || 50)
+    return withAnonCodeFallback(function () {
+      return client.from("my_posts")
+        .select(postColumns())
+        .order("created_at", { ascending: false })
+        .limit(limit || 50);
+    })
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
         return attachLikes(res.data || []).then(attachComments);
@@ -1398,7 +1440,14 @@ window.Campus = (function () {
 
   function avatarHtml(post) {
     if (post.is_anonymous) {
-      return '<div class="avatar anon" aria-hidden="true">🌙</div>';
+      var code = anonCode(post) || anonCodeOf(post && post.id);
+      // 拿不到号（老数据、或 id 缺失）时保持原来的月亮头像
+      if (!code) return '<div class="avatar anon" aria-hidden="true">🌙</div>';
+      // 同一个号 → 同一个色带 + 同一个字形，让「又是这位同学」一眼看得出。
+      // 用 data-hue-band 交给 CSS 配色，不用行内 style（将来加 CSP 也不用放开）。
+      var band = parseInt(code.slice(0, 2), 16) % 12;
+      return '<div class="avatar anon" data-hue-band="' + band + '" aria-hidden="true">' +
+             escapeHtml(code.slice(0, 1)) + "</div>";
     }
     return '<div class="avatar" aria-hidden="true">' + escapeHtml(initial(post.display_name)) + "</div>";
   }
@@ -1415,10 +1464,15 @@ window.Campus = (function () {
   }
 
   /**
-   * 匿名帖的「帖子编号」（S1 探针阶段）
+   * 匿名帖的「帖子编号」（S1 探针阶段留下的每帖编号，现在是稳定洞号的兜底）
    *
    * 由帖子自己的 id 哈希出来的 6 位十六进制，用来让读者能指代某一条匿名帖
    * （「#3F9A21 说得对」），而不是三条匿名帖看起来都叫「匿名同学」。
+   *
+   * D1 之后：能读到数据库那一列（`anon_code`，跨帖稳定）时优先用它，这个函数
+   * 只在「库还没迁移」或老数据缺值时兜底 —— 两种号的形状一样（六位大写十六进制），
+   * 但**含义不同**：这里算出来的是每帖一个号，不跨帖关联。所以文案里始终只
+   * 说「编号」，不说「你的固定号」（固定号由数据库那列负责）。
    *
    * 三个刻意的限制：
    *  - **每帖一个号**：同一个人的两条匿名帖号不同，跨帖不关联（这是「会话级
@@ -1443,8 +1497,20 @@ window.Campus = (function () {
 
   /** 匿名帖的显示名；拿不到编号就退回旧文案 */
   function anonName(post) {
-    var code = anonCodeOf(post && post.id);
+    var code = anonCode(post) || anonCodeOf(post && post.id);
     return code ? "匿名 #" + code : "匿名同学";
+  }
+
+  /**
+   * 取数据库给的稳定洞号（D1 之后每个匿名帖都带这一列）
+   *
+   * 只接受「六位十六进制」这种形状：号是给人看的标识，不是数据通道 ——
+   * 接口万一返回别的形状（空串、带空格的脏值、将来的新格式），宁可退回
+   * 前端自己算的每帖编号，也不要把它原样印到界面上。
+   */
+  function anonCode(post) {
+    var raw = String((post && post.anon_code) || "").trim().toUpperCase();
+    return /^[0-9A-F]{6}$/.test(raw) ? raw : "";
   }
 
   /** 渲染单条帖子卡片 */
@@ -1790,6 +1856,10 @@ window.Campus = (function () {
     renderPostCard: renderPostCard,
     anonCodeOf: anonCodeOf,
     anonName: anonName,
+    // D1：服务端稳定洞号（形状不对时返回空串）+ 「这个库有没有迁移过」的探测结果
+    anonCode: anonCode,
+    anonCodeSupported: function () { return anonCodeColumnOk; },
+    avatarHtml: avatarHtml,
     statusTag: statusTag,
     showNotice: showNotice,
     hideNotice: hideNotice,

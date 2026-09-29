@@ -298,4 +298,27 @@ check("counts are non-negative integers",
                          for r in rows),
       [r.get("like_count") for r in rows[:3]])
 
+# ------------------------------------------------------------- hole code (D1)
+print("9) the stable hole code is a display column, never a lookup key")
+# Two legitimate states, and the probe must accept both: before the anon-code
+# migration the column does not exist (42703 / PGRST204) and the frontend
+# degrades to the per-post code; after it, the column is readable.
+st, body = req("GET", "/rest/v1/posts?select=anon_code&limit=20")
+code = code_of(body)
+migrated = st == 200
+rows = body if isinstance(body, list) else []
+check("anon_code is either absent (not migrated yet) or readable as a display column",
+      migrated or code in ("42703", "42501", "PGRST204"),
+      (st, code, msg_of(body)))
+check("every code we can see is 6 hex characters or null (never a uuid, never a phone)",
+      (not migrated) or all(
+          r.get("anon_code") is None or re.fullmatch(r"[0-9A-F]{6}", str(r.get("anon_code")))
+          for r in rows),
+      ([r.get("anon_code") for r in rows[:3]], len(rows)))
+# The value is derived from author_id, so it must never travel together with it:
+# a request that names both columns has to be refused in either state.
+st, body = req("GET", "/rest/v1/posts?select=anon_code,author_id&limit=1")
+check("asking for the code together with the author id is still refused",
+      code_of(body) in ("42703", "42501", "PGRST204"), (st, code_of(body), msg_of(body)))
+
 finish()
