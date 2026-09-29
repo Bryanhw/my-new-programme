@@ -22,6 +22,16 @@ Cost: it leaves ONE test row behind on purpose.
 
 Skips the write with --no-write (then it only proves the denials).
 
+Prunes its own leftovers with --clean. That is the only mode that needs the
+service_role key, and it only ever takes it from the environment:
+
+    $env:SUPABASE_SERVICE_ROLE_KEY = "<service_role key>"
+    python tools/feedback_probe.py --clean
+
+A visitor cannot delete a feedback row (section 6 below proves the database
+refuses it), so --clean refuses to run without the service key instead of
+pretending the anon key could.
+
 The test accounts' password is deliberately NOT stored in this file (this repo
 is public). Pass it through the environment to also prove that a *signed-in*
 user cannot read the table back either:
@@ -65,6 +75,15 @@ PASSWORD = os.environ.get("E2E_PASSWORD", "")
 # the docstring can never touch a real visitor's feedback.
 MARKER = "FEEDBACK probe (safe to delete)"
 WRITE = "--no-write" not in sys.argv
+CLEAN = "--clean" in sys.argv
+# The service_role key is the one thing that can read and prune this table, so
+# it is read from the environment only: a command line ends up in the shell
+# history and in the process list of every account on the machine.
+SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+# 'FEEDBACK probe (safe to delete)' -> 'FEEDBACK probe', the LIKE prefix that
+# both the readme statement and --clean use, so neither can ever touch a row a
+# real visitor wrote.
+PREFIX = MARKER.split(" (")[0]
 fails = []
 n = [0]
 
@@ -84,8 +103,9 @@ def finish(code=0):
     sys.exit(1 if fails else code)
 
 
-def req(method, path, body=None, token=None, prefer=None):
-    h = {"apikey": KEY, "Authorization": "Bearer " + (token or KEY),
+def req(method, path, body=None, token=None, prefer=None, key=None):
+    k = key or KEY
+    h = {"apikey": k, "Authorization": "Bearer " + (token or k),
          "Accept": "application/json"}
     data = None
     if body is not None:
@@ -130,6 +150,76 @@ def sign_in(phone):
         sys.exit(2)
     return body["access_token"], body["user"]["id"]
 
+
+def marked_rows():
+    """List the rows this tool left behind. service_role only: section 5 shows
+    the anon key is refused, so this is deliberately not the anon path."""
+    path = ("/rest/v1/feedback?select=id,content,created_at&content=like."
+            + urllib.parse.quote(PREFIX + "*") + "&order=created_at.asc")
+    return req("GET", path, key=SERVICE_KEY)
+
+
+def clean():
+    """Delete only the rows that carry the marker, then report what is left."""
+    print("--clean: pruning the rows this tool leaves behind")
+    if not SERVICE_KEY:
+        print("  SUPABASE_SERVICE_ROLE_KEY is not set, so nothing is deleted.")
+        print("  The anon key cannot delete these rows - that is the point of the")
+        print("  table (see section 6). Either set the key for this shell only:")
+        print('    $env:SUPABASE_SERVICE_ROLE_KEY = "<service_role key>"')
+        print("  or run this single statement in the Supabase SQL Editor:")
+        print("    delete from public.feedback where content like '%s%%';" % PREFIX)
+        sys.exit(2)
+    if SERVICE_KEY == KEY or SERVICE_KEY.startswith("sb_publishable_"):
+        print("  that is the publishable (anon) key, not service_role - refusing")
+        print("  to try a delete that the database is going to reject anyway.")
+        sys.exit(2)
+    st, body = marked_rows()
+    if st != 200 or not isinstance(body, list):
+        print("  cannot list the marked rows :: %s %s" % (st, msg_of(body)))
+        print("  (wrong key, or docs/supabase-feedback.sql was never run)")
+        sys.exit(2)
+    rows = body
+    if not rows:
+        print("  no row matches '%s%%' - the table is already clean." % PREFIX)
+        sys.exit(0)
+    stray = [r for r in rows if not str(r.get("content") or "").startswith(PREFIX)]
+    if stray:
+        print("  refusing to delete: %d listed row(s) do not open with the marker"
+              % len(stray))
+        sys.exit(2)
+    print("  %d row(s) carry the marker:" % len(rows))
+    for r in rows:
+        print("    %s  %s" % (r.get("created_at"), r.get("id")))
+    gone = 0
+    for i in range(0, len(rows), 50):                 # keep the URL bounded
+        chunk = [r["id"] for r in rows[i:i + 50]]
+        st, body = req("DELETE", "/rest/v1/feedback?id=in.(" + ",".join(chunk) + ")",
+                       prefer="return=representation", key=SERVICE_KEY)
+        if st not in (200, 204):
+            print("  delete refused after %d row(s) :: %s %s"
+                  % (gone, st, msg_of(body)))
+            sys.exit(2)
+        gone += len(body) if isinstance(body, list) else 0
+    st, body = marked_rows()
+    left = len(body) if isinstance(body, list) else -1
+    print("  deleted %d row(s); %s marked row(s) left"
+          % (gone, "unknown" if left < 0 else left))
+    if left != 0:
+        print("  '%s%%' still matches something - run this again." % PREFIX)
+        sys.exit(2)
+    st, body = req("GET", "/rest/v1/feedback?select=created_at,device&limit=5"
+                          "&order=created_at.desc", key=SERVICE_KEY)
+    if st == 200 and isinstance(body, list):
+        print("  newest rows still in the table (up to 5): %d" % len(body))
+        for r in body:
+            print("    %s  %s" % (r.get("created_at"), r.get("device")))
+    print("  done - real feedback is untouched, only the test rows are gone.")
+    sys.exit(0)
+
+
+if CLEAN:
+    clean()
 
 print("key prefix:", KEY[:22] + "...", "len:", len(KEY))
 print()
@@ -255,4 +345,6 @@ if WRITE:
     print("then check what is left with:")
     print("  select created_at, device, content, contact from public.feedback"
           " order by created_at desc;")
+    print("--clean does the same from this side, without the SQL Editor:")
+    print("  python tools/feedback_probe.py --clean")
 finish()

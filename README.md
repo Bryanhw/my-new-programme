@@ -455,6 +455,7 @@ delete from public.feedback where id = '反馈 id';
 ```powershell
 python tools\feedback_probe.py              # 25 项检查，会故意留下 1 行测试反馈
 python tools\feedback_probe.py --no-write   # 只看拒绝行为，不写任何东西
+python tools\feedback_probe.py --clean      # 跑完自己清：删掉它留下的那些测试行
 ```
 
 它证明的是页面文案背后那几件事：匿名的、登录的用户**都能提交**；提交后**谁都要不回那条记录**
@@ -468,6 +469,19 @@ python tools\feedback_probe.py --no-write   # 只看拒绝行为，不写任何�
 ```sql
 delete from public.feedback where content like 'FEEDBACK probe%';
 ```
+
+懒得开 SQL Editor 就用探针自己的清理模式 —— 它是唯一需要 `service_role` key 的模式，
+而且**只从环境变量拿 key**（命令行参数会留在 shell 历史和进程列表里）：
+
+```powershell
+$env:SUPABASE_SERVICE_ROLE_KEY = "<service_role key>"   # 只对这个窗口生效
+python tools\feedback_probe.py --clean
+```
+
+它会先逐行列出 `created_at` / `id`、确认每行都以 `FEEDBACK probe` 开头，再按 id 删，
+删完重新查一遍确认归零，最后列出表里最新的几行真实反馈。没给 key、或者误把
+`sb_publishable_` 的公开 key 传进来，它都直接退出码 2、一个字节都不删 —— 访客本来也删不掉
+自己的反馈（探针第 6 节就是证明这件事），所以这里不假装 anon key 也能删。
 
 站主日常读反馈还有一个更省事的入口：仓库之外的本地审核台
 （`D:\myprogramcstai\tools\review-console\review_console.py`，持 `service_role`）
