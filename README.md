@@ -87,7 +87,9 @@ my-new-programme/
     ├── supabase-nickname-sync.sql    昵称同步：改昵称后刷新历史分享 / 评论的署名
     ├── supabase-nickname-sync-flat.sql  上面那份的粘贴版
     ├── supabase-feedback.sql         意见反馈：只进不出的表（谁能写、只有站主怎么读）
-    └── supabase-feedback-flat.sql    上面那份的粘贴版
+    ├── supabase-feedback-flat.sql    上面那份的粘贴版
+    ├── supabase-anon-code.sql        稳定洞号：`posts.anon_code` 生成列 + 列授权 + `my_posts` 重建
+    └── supabase-anon-code-flat.sql   上面那份的粘贴版
 ```
 
 ---
@@ -144,6 +146,14 @@ my-new-programme/
 > 粘不进去就换对应的 `-flat.sql`（一条语句一行、无注释）。没执行这两个脚本时，
 > 页面上评论区会提示加载失败、「我举报的」会暂时读不到（都有兜底提示），
 > 其他功能不受影响 —— 但配套前端已经带上了评论按钮，建议尽快补上迁移。
+>
+> 🕳 **稳定洞号（D1，需站主执行一次）**：再执行
+> [`docs/supabase-anon-code.sql`](docs/supabase-anon-code.sql)。它给 `posts` 加一列
+> `anon_code`（由 `author_id` + 盐派生的六位编号），同一个人的匿名帖从此共用一个号；
+> 并把这一列补进列授权、同步 `my_posts` 视图。**文件里的盐是占位符**，执行前先换成自己的随机串
+> （`python -c "import secrets; print(secrets.token_urlsafe(32))"`），**盐只留在数据库里，别提交**。
+> 可重复执行；不执行也不会坏 —— 前端会自己探测到这列不存在，退回每帖一个编号。
+> 详见下文「匿名洞号为什么跨帖稳定」。
 
 ### 第 2 步：开启两项认证设置
 
@@ -240,10 +250,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 ```powershell
 $env:E2E_PASSWORD = "<测试账号密码>"
 python tools\privacy_probe.py             # 只读，37 项检查
-python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只有自己可见 → 删除」
+python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只有自己可见 → 删除」，46 项
 ```
 
-正常结果最后一行是 `checks run: 37   failures: 0`，退出码 0。
+正常结果最后一行是 `checks run: 37   failures: 0`（加 `--write` 是 `46`），退出码 0。
 没设 `E2E_PASSWORD` 时它只跑访客部分（前 17 项）然后停下，退出码 2 ——
 所以**退出码 2 不是失败**，含义是「没给我密码，登录相关的检查没跑」。
 
@@ -254,6 +264,9 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 「未迁移」（前端会自动降级，不是失败），建出来之后它只要求「看到的每个号都是 6 位十六进制或
 `null`」以及「同时要 `anon_code` 和 `author_id` 的请求照旧被拒」。
 没执行的话那 12 项会**全红**——这是它应有的表现：迁移没跑，通道就是敞着的。
+
+本站 2026-09-29 已执行 D1 迁移，所以第 9 节现在走的是「已迁移」那一支；`37/0`（只读）与
+`46/0`（`--write`）都全绿。
 
 可选环境变量：`E2E_PHONE_A` / `E2E_PHONE_B` 换测试账号，
 `APP_CONFIG_JS` 指定 `config.js` 的路径（默认自动取仓库里的那一份）。
@@ -579,6 +592,12 @@ D1 把编号换成了**数据库的生成列** `posts.anon_code`：
 > 同步 `my_posts` 视图（这里是原定义 + 末尾追加 `p.anon_code`，所以 `create or replace` 合法；
 > 哪天真要**删列或改列**，那才必须 `drop` 再 `create`——`create or replace` 只允许末尾追加）、
 > 末尾附验证查询与回滚步骤（回滚语句在文件里是**注释掉的**，整段复制粘贴不会误删列）。
+>
+> **状态：2026-09-29 已在这个站点执行完并通过线上验收。** 执行前先确认了线上 `my_posts`
+> 仍是那九列、顺序与脚本一致（`create or replace` 才敢用）；执行后实测：广场里两条匿名帖
+> 拿到同一个号、署名帖 `anon_code` 为 `null`、`my_posts` 变成十列（`anon_code` 在末尾）、
+> 另一个测试账号的号与它不同、`anon_code,author_id` 一起请求仍被拒——也就是「同一个人稳定、
+> 不同人不同、且还是连不回账号」。前端不用重新发版：刷新页面就会用上数据库那个号。
 
 > 同一条匿名分享在**首页、广场、「我的」三个列表和举报回执**里显示的是同一个编号
 > （四处都走 `anonName()`）。广场页顶部还加了一句提示（`feed.html` 的 `#anon-code-tip`）
