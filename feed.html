@@ -94,6 +94,20 @@
     想指代某一条时，直接写这个编号就行。
   </p>
 
+  <section class="circle-bar" id="circle-bar" hidden>
+    <div class="circle-bar-row">
+      <label class="circle-bar-label" for="circle-select">城市圈</label>
+      <select id="circle-select" aria-label="选择城市圈"></select>
+      <label class="circle-only">
+        <input type="checkbox" id="circle-only"> 只看本圈
+      </label>
+    </div>
+    <p class="circle-bar-note" id="circle-note" hidden></p>
+    <div class="chips" id="circle-hot"></div>
+  </section>
+
+  <div id="feed-filter" hidden></div>
+
   <div id="feed"></div>
 
 </main>
@@ -121,6 +135,9 @@
 
 <script src="assets/js/config.js"></script>
 <script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/campuses.js"></script>
+<script src="assets/js/circles.js"></script>
+<script src="assets/js/hotwords.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/feed.js"></script>
 </body>

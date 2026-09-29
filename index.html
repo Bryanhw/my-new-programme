@@ -105,6 +105,24 @@
 
   <div class="notice notice-info" id="notice" hidden></div>
 
+  <section class="section" id="circle-section" hidden>
+    <div class="section-head">
+      <h2 class="section-title">🏙 我的城市圈</h2>
+      <a class="section-more" href="feed.html" id="circle-more">去广场看</a>
+    </div>
+    <div class="card">
+      <p class="text-sm text-muted" style="line-height:1.8">
+        选一个片区，广场会把你这一片的分享排在前面 —— 内容还是全站的，
+        只是先看身边的。圈子只存在这台设备上，不绑定账号。
+      </p>
+      <div class="circle-pick">
+        <select id="circle-select" aria-label="选择城市圈"></select>
+      </div>
+      <p class="text-sm text-muted" id="circle-suggest" hidden></p>
+      <div id="circle-hot"></div>
+    </div>
+  </section>
+
   <section class="section">
     <div class="section-head">
       <h2 class="section-title">🍂 最新分享</h2>
@@ -117,10 +135,12 @@
     <div class="card">
       <h3 class="section-title mb-8">这里是一个什么样的地方？</h3>
       <p class="text-sm text-muted" style="line-height:1.9">
-        这里没有热搜，没有排名，也没有「必须精彩」的压力。<br>
+        这里没有全站热搜，也没有排名，更没有「必须精彩」的压力。<br>
         你可以分享今天食堂哪道菜好吃、图书馆窗外的晚霞、一道卡了很久的题、
         或者只是想说一句"今天有点累"。<br>
         想匿名就匿名，想留名字就留名字。<br>
+        每个城市圈里会挑几个最近被同学提到的词（至少要有两个人提到才算），
+        它不排名、不计数，点一下就是去找提到这个词的分享。<br>
         每条分享会先经过一次人工审核再出现在广场上；看到不合适的内容，右下角可以举报。
       </p>
     </div>
@@ -144,7 +164,7 @@
   <p class="footer-line" id="site-slogan">把今天的心事和光，留在这里</p>
   <p class="footer-note">
     请友善发言，也请照顾好自己<br>
-    这里没有热搜，也没有排名
+    这里没有全站热搜，也没有排名
   </p>
   <p class="footer-legal">
     本网页含有 AI 生成的产物，未侵犯版权；用户发言不代表网站所有者的观点；
@@ -154,6 +174,9 @@
 
 <script src="assets/js/config.js"></script>
 <script src="assets/vendor/supabase.js"></script>
+<script src="assets/js/campuses.js"></script>
+<script src="assets/js/circles.js"></script>
+<script src="assets/js/hotwords.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/home.js"></script>
 </body>

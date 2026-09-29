@@ -10,8 +10,10 @@
  *    - 提交前用 `CampusList.schoolOf()` 把用户输入归一到一个规范校名，
  *      因此「电子科大」「UESTC」「电子科技大学（清水河校区）」都会存成「电子科技大学」；
  *    - 找不到的学校**照原样收下**（降级），只是暂时没有城市，不参与同城筛选；
- *    - `cityOf()` 供后续「只看同城」用，所以**每条的城市必须填准**，
+ *    - `cityOf()` 供「只看同城」用，所以**每条的城市必须填准**，
  *      拿不准就先不加 —— 城市填错比暂时没有更糟。
+ *    - `provinceOf()` 是「城市圈」分圈的唯一依据（见 `assets/js/circles.js`：
+ *      12 个圈按省划分，所以**省份填错 = 分错圈**）。
  *
  *  维护方式：往下面 LIST 里加一行（省 / 市 / 校名三者都写全），
  *  常见简称补进 ALIAS。列表大小不影响加载（只有几十 KB 量级的字符串）。
@@ -137,6 +139,16 @@ window.CampusList = (function () {
     ["深圳大学", "广东省", "深圳市"],
     ["南方科技大学", "广东省", "深圳市"],
     ["汕头大学", "广东省", "汕头市"],
+    // 香港 / 澳门（2026-09-29 补：港五 + 澳二，让「大湾区」名副其实；
+    // 省 / 市按特别行政区填。香港中文大学（深圳）不在这里 —— 它在广东深圳，
+    // 是另一所学校，要加得单独加一行。）
+    ["香港大学", "香港特别行政区", "香港"],
+    ["香港中文大学", "香港特别行政区", "香港"],
+    ["香港科技大学", "香港特别行政区", "香港"],
+    ["香港理工大学", "香港特别行政区", "香港"],
+    ["香港城市大学", "香港特别行政区", "香港"],
+    ["澳门大学", "澳门特别行政区", "澳门"],
+    ["澳门科技大学", "澳门特别行政区", "澳门"],
     // 广西 / 海南
     ["广西大学", "广西壮族自治区", "南宁市"],
     ["海南大学", "海南省", "海口市"],
@@ -213,6 +225,13 @@ window.CampusList = (function () {
     "暨大": "暨南大学",
     "深大": "深圳大学",
     "南科大": "南方科技大学",
+    "港大": "香港大学",
+    "港中文": "香港中文大学",
+    "港科大": "香港科技大学",
+    "港理工": "香港理工大学",
+    "港城大": "香港城市大学",
+    "澳大": "澳门大学",
+    "澳科大": "澳门科技大学",
     "哈工大": "哈尔滨工业大学",
     "吉大": "吉林大学",
     "兰大": "兰州大学",
@@ -230,6 +249,17 @@ window.CampusList = (function () {
   };
 
   var MAX_LEN = 40;   // 与注册表单的 maxlength 一致
+
+  /* ------------------------------------------------------------------
+   * 2.5 「同名但不同校」护栏（2026-09-29 随港校一起加）
+   *   归一化会把括号里的内容丢掉，于是「香港中文大学（深圳）」会命中
+   *   「香港中文大学」—— 可它是**另一所学校**，校址在深圳。少并一所，
+   *   好过把一所学校的学生算成另一所。命中护栏 → 落回「降级」路径：
+   *   原样收下、暂时没有城市、没有圈（用户仍可手选圈子）。
+   * ------------------------------------------------------------------ */
+  var DIFFERENT_CAMPUS = [
+    { school: "香港中文大学", marker: "深圳" }
+  ];
 
   /* ------------------------------------------------------------------
    * 3. 归一化
@@ -261,14 +291,35 @@ window.CampusList = (function () {
     }
   }
 
+  /* 括号里的补充说明（「（深圳）」「（清水河校区）」），只给护栏用 */
+  function notes(text) {
+    var s = String(text == null ? "" : text);
+    var out = "", m, re = /[（(]([^）)]*)[）)]/g;
+    while ((m = re.exec(s))) out += m[1];
+    return key(out);
+  }
+
+  /* 这条输入是不是「挂在校名后面、其实是另一所学校」（见 DIFFERENT_CAMPUS） */
+  function isDifferentCampus(raw, hit) {
+    var note = notes(raw);
+    if (!note) return false;
+    for (var i = 0; i < DIFFERENT_CAMPUS.length; i++) {
+      var g = DIFFERENT_CAMPUS[i];
+      if (key(g.school) === key(hit.name) && note.indexOf(key(g.marker)) >= 0) return true;
+    }
+    return false;
+  }
+
   /* 把用户输入解析成列表里的那条学校记录；解析不出来返回 null */
   function entryOf(text) {
     if (text == null) return null;
     var k = key(text);
     if (!k) return null;
-    if (INDEX[k]) return INDEX[k];
+    if (INDEX[k]) return isDifferentCampus(text, INDEX[k]) ? null : INDEX[k];
     var canonical = ALIAS_KEY[k];
-    if (canonical && INDEX[key(canonical)]) return INDEX[key(canonical)];
+    if (canonical && INDEX[key(canonical)]) {
+      return isDifferentCampus(text, INDEX[key(canonical)]) ? null : INDEX[key(canonical)];
+    }
     return null;
   }
 

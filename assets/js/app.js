@@ -410,6 +410,185 @@ window.Campus = (function () {
       });
   }
 
+  /* ------------------------------------------------------------------
+   * 4.5 城市圈（B5：城市圈优先推荐 + 圈内热词）
+   *
+   *  圈子只改「看的顺序」，不新开分区：选了圈就把本圈帖子排到前面、卡片上标一个
+   *  圈名，「只看本圈」才是过滤。没加载 circles.js 的页面（如注册页）整体降级：
+   *  没有圈，行为与以前完全一致，不报错。
+   *
+   *  为什么本圈和全量分两次请求、在前端合并：
+   *    「本圈排在前面、但后面的内容一个都不能少」在 PostgREST 里没有干净的写法
+   *    （要么服务端加视图/函数——那是迁移，要么用 or() 拼一大堆条件）。
+   *    两次请求都是原本就公开的读通道，没有新增任何可读字段。
+   * ------------------------------------------------------------------ */
+  var circleList = window.CircleList || null;
+  var hotWords = window.HotWords || null;
+
+  /** 选的圈存在本机（同 circles.js 的 STORAGE_KEY）；不做账号级同步：
+   *  匿名访客也有 localStorage，存账号里反而要写 profiles（那是迁移）。 */
+  var CIRCLE_KEY = (circleList && circleList.STORAGE_KEY) || "campus.circle";
+
+  /** 本机存的圈子（没选、被禁用、值不合法都返回空串） */
+  function getCircle() {
+    if (!circleList) return "";
+    var id = "";
+    try { id = window.localStorage.getItem(CIRCLE_KEY) || ""; } catch (e) { id = ""; }
+    return circleList.exists(id) ? id : "";
+  }
+
+  /** 选圈；传空串 = 取消选择。存不下（隐私模式）也不影响本次浏览 */
+  function setCircle(id) {
+    if (!circleList) return "";
+    var next = circleList.exists(id) ? id : "";
+    try {
+      if (next) window.localStorage.setItem(CIRCLE_KEY, next);
+      else window.localStorage.removeItem(CIRCLE_KEY);
+    } catch (e) { /* 忽略：只是下次打开要重选 */ }
+    return next;
+  }
+
+  function listCircles() { return circleList ? circleList.list() : []; }
+
+  /** 圈名（拿不到返回空串，调用方据此不显示圈子） */
+  function circleName(id) { return circleList ? circleList.nameOf(id) : ""; }
+
+  /** 学校 → 圈 id（认不出来是空串） */
+  function circleOfSchool(school) { return circleList ? circleList.circleOf(school) : ""; }
+
+  /** 我（当前登录身份）学校所属的圈；没登录/认不出是空串 */
+  function myCircle() {
+    if (!circleList) return Promise.resolve("");
+    return getProfile().then(function (profile) {
+      return circleOfSchool((profile && profile.school) || "");
+    }).catch(function () { return ""; });
+  }
+
+  /**
+   * 本圈帖子（只走 school 集合筛选）。
+   * 不额外加 status 条件：和广场一样交给 RLS —— 加了就会把「自己的待审核帖」
+   * 从本圈列表里挤掉，同一条内容在两个列表里表现不一致更让人困惑。
+   */
+  function listCirclePosts(circleId, limit) {
+    if (!client) return Promise.reject(new Error(configError));
+    var schools = circleList ? circleList.schoolsIn(circleId) : [];
+    if (!schools.length) return Promise.resolve([]);
+    return withAnonCodeFallback(function () {
+      return client.from("posts")
+        .select(postColumns())
+        .in("school", schools)
+        .order("created_at", { ascending: false })
+        .limit(limit || 30);
+    })
+      .then(function (res) {
+        if (res.error) throw new Error("加载失败：" + res.error.message);
+        return res.data || [];
+      });
+  }
+
+  /**
+   * 广场数据流（本圈优先）。
+   *   opts.circleId  已选圈子（空 = 没选，走原来的单请求）
+   *   opts.onlyCircle 只看本圈（不再拉全量）
+   * 返回的帖子会带上 circle_id / circle_name（本圈批次在前），卡片据此标圈名。
+   */
+  function listFeedPosts(opts) {
+    opts = opts || {};
+    var limit = opts.limit || 30;
+    var circleId = circleList && circleList.exists(opts.circleId) ? opts.circleId : "";
+
+    if (!circleId) {
+      return listPosts(limit);
+    }
+    if (opts.onlyCircle) {
+      return listCirclePosts(circleId, limit).then(function (posts) {
+        return attachLikes(posts).then(attachComments);
+      });
+    }
+    return listCirclePosts(circleId, limit).then(function (mine) {
+      return listPosts(limit).then(function (all) {
+        // 合并之后补一次点赞/评论数：本圈那批是单独取的，不补的话
+        // 卡片上的 🤍 会全变成 0 —— 换了排序方式不该让计数消失。
+        return attachLikes(mergeFeedPosts(mine, all)).then(attachComments);
+      });
+    });
+  }
+
+  /**
+   * 合并「本圈 + 全量」：本圈在前，同一帖只留一份（留本圈那批的对象）。
+   * 每帖尽可能标上它自己的圈名 —— 是本机按校名算的，不额外读数据库。
+   */
+  function mergeFeedPosts(mine, all) {
+    var seen = {}, out = [], i, p, cid;
+    for (i = 0; i < (mine || []).length; i++) {
+      p = mine[i];
+      if (!p || seen[p.id]) continue;
+      seen[p.id] = 1;
+      tagCircle(p, true);
+      out.push(p);
+    }
+    for (i = 0; i < (all || []).length; i++) {
+      p = all[i];
+      if (!p || seen[p.id]) continue;
+      seen[p.id] = 1;
+      tagCircle(p, false);
+      out.push(p);
+    }
+    return out;
+  }
+
+  function tagCircle(post, inCircle) {
+    var cid = circleOfSchool(post.school);
+    post.circle_id = cid;
+    post.circle_name = cid ? circleName(cid) : "";
+    post.in_circle = !!inCircle;
+  }
+
+  /**
+   * 圈内热词：本圈近 WINDOW_DAYS 天、最新的一批帖子，纯前端统计。
+   *  - 取样用公开读通道，不新增接口、不新增字段；
+   *  - 作者标识只在 HotWords 内部当「至少两个人提到」的闸门，绝不外传；
+   *  - 取不到（网络/没圈）就返回空数组：界面上宁可不显示热词，也不显示错的。
+   */
+  function listCircleHotwords(circleId) {
+    if (!hotWords || !circleList || !circleList.exists(circleId)) return Promise.resolve([]);
+    var cap = hotWords.MAX_POSTS || 300;
+    return listCirclePosts(circleId, cap).then(function (posts) {
+      var pool = [], i;
+      for (i = 0; i < (posts || []).length; i++) {
+        // 热词只统计已通过的帖子：待审核/未通过的内容不该被「加热」
+        if (posts[i] && posts[i].status === "approved") pool.push(posts[i]);
+      }
+      var banned = [circleName(circleId)];
+      var schools = circleList.schoolsIn(circleId);
+      for (i = 0; i < schools.length; i++) banned.push(schools[i]);
+      return hotWords.top(pool, { banned: banned });
+    }).catch(function () { return []; });
+  }
+
+  /**
+   * 一词筛帖：把「像词的东西」拿去和帖子的正文比对。
+   * 这是**纯前端筛选**，只在调用方给的那批（已加载的）帖子里找 ——
+   * 界面上必须如实说明「只筛已加载的这几条」，不能让人以为搜了全站。
+   * 比对前两边都过一遍 HotWords 的归一化并清掉标点空白，所以全角、空格、
+   * 大小写、正文里的链接洞号都不会影响命中。
+   */
+  function termKey(text) {
+    var n = hotWords ? hotWords.normalize(text) : String(text == null ? "" : text).toLowerCase();
+    return n.replace(/[^0-9a-z\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/g, "");
+  }
+
+  function filterPostsByTerm(posts, term) {
+    var key = termKey(term);
+    var all = posts || [];
+    if (!key) return all.slice();
+    var out = [], i;
+    for (i = 0; i < all.length; i++) {
+      if (termKey(all[i] && all[i].content).indexOf(key) >= 0) out.push(all[i]);
+    }
+    return out;
+  }
+
   function deletePost(post) {
     if (!client) return Promise.reject(new Error(configError));
     return client.from("posts").delete().eq("id", post.id).then(function (res) {
@@ -1520,6 +1699,10 @@ window.Campus = (function () {
 
     var meta = [];
     if (post.school) meta.push(escapeHtml(post.school));
+    // 城市圈（B5）：圈名是按校名在本机算出来的，比校名更粗，不额外暴露什么
+    if (post.circle_name) {
+      meta.push('<span class="post-circle">🏙 ' + escapeHtml(post.circle_name) + "</span>");
+    }
     meta.push(timeAgo(post.created_at));
 
     var html = '<article class="card post" data-post-id="' + escapeHtml(post.id) + '">';
@@ -1817,9 +2000,23 @@ window.Campus = (function () {
     cityOf: cityOfSchool,
     schoolOptions: schoolOptions,
 
+    // 城市圈（B5）：选圈只存本机，只影响广场的排序与「只看本圈」
+    listCircles: listCircles,
+    getCircle: getCircle,
+    setCircle: setCircle,
+    circleName: circleName,
+    circleOfSchool: circleOfSchool,
+    myCircle: myCircle,
+    CIRCLE_KEY: CIRCLE_KEY,
+
     // 数据
     createPost: createPost,
     listPosts: listPosts,
+    listCirclePosts: listCirclePosts,
+    listFeedPosts: listFeedPosts,
+    mergeFeedPosts: mergeFeedPosts,
+    listCircleHotwords: listCircleHotwords,
+    filterPostsByTerm: filterPostsByTerm,
     listMyPosts: listMyPosts,
     deletePost: deletePost,
     toggleLike: toggleLike,

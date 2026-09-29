@@ -1524,6 +1524,129 @@ body.modal-open { overflow: hidden; }
 .comment-hint.warn { color: #A8451A; font-weight: 600; }
 .comment-hint.error { color: #C0392B; font-weight: 600; }
 
+/* ===================================================================
+ *  城市圈（B5）：首页的圈子卡、广场的圈子条、热词 chips
+ *  —— 都只用既有的颜色变量，和站里其他控件是一套皮
+ * =================================================================== */
+
+.circle-pick { margin: 10px 0 4px; }
+.circle-pick select,
+.circle-bar select {
+  width: 100%;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text);
+  outline: none;
+}
+.circle-pick select:focus,
+.circle-bar select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 4px rgba(255, 140, 105, 0.14);
+}
+
+.circle-hot-title { margin: 14px 0 8px; }
+
+/* 热词 chips：点一下是「筛」（只筛已加载的那批），不是全站搜索 */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.chip {
+  display: inline-block;
+  border: 1.5px solid var(--brand-soft);
+  background: var(--brand-ghost);
+  color: var(--ink-soft);
+  border-radius: var(--radius-pill);
+  padding: 6px 13px;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease), color 0.18s var(--ease);
+}
+.chip:hover {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+.chip-on {
+  background: var(--brand);
+  border-color: var(--brand-strong);
+  color: #FFFFFF;
+}
+
+/* 广场顶部的圈子条 */
+.circle-bar {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+  margin: 14px 0;
+}
+.circle-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.circle-bar-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.circle-bar-row select { flex: 1; }
+.circle-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.circle-only input { accent-color: var(--brand); }
+.circle-bar-note {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* 筛词条：把「只筛已加载的几条」写在脸上 */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  background: var(--surface-soft);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 10px 0;
+}
+.filter-bar .link-plain {
+  margin-left: auto;
+  font-size: 12.5px;
+  padding: 0;
+}
+
+/* 卡片元信息里的圈名 */
+.post-circle {
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+
 @media (max-width: 520px) {
   .hero-title { font-size: 23px; }
   .card { padding: 17px; border-radius: var(--radius-md); }
@@ -1539,6 +1662,10 @@ body.modal-open { overflow: hidden; }
   /* 窄屏/竖屏：恢复照片原始 4:3，整张都在画面里，不再把中间一条放大 */
   .home-photo img { aspect-ratio: 1706 / 1279; object-position: center; }
   .comment.is-reply { margin-left: 14px; padding-left: 10px; }
+  /* 城市圈条：窄屏把「只看本圈」放到第二行，别把选择框挤成一条缝 */
+  .circle-bar-row { flex-wrap: wrap; }
+  .circle-bar-row select { flex: 1 1 100%; }
+  .circle-only { margin-left: auto; }
 }
 
 /* 减少动效偏好 */
