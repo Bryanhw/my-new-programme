@@ -469,6 +469,12 @@ python tools\feedback_probe.py --no-write   # 只看拒绝行为，不写任何�
 delete from public.feedback where content like 'FEEDBACK probe%';
 ```
 
+站主日常读反馈还有一个更省事的入口：仓库之外的本地审核台
+（`D:\myprogramcstai\tools\review-console\review_console.py`，持 `service_role`）
+第三个页签「反馈」会按时间倒序列出 设备类型 / 正文 / 联系方式，并能在本机标「已处理」。
+这个标记只写本机的 `feedback_marks.json`，**不回写数据库** —— 所以 `public.feedback`
+依然是「只进不出」，不需要为了「已处理」再加一列，也不会因为误点按钮改坏线上数据。
+
 ### 关于匿名的边界
 
 匿名帖在数据库里仍然记录 `author_id`（「我的发布」和「仅本人可删除」都要靠它），
