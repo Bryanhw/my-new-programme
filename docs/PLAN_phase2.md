@@ -234,6 +234,17 @@ A4 申诉 ────────► A3 拒稿原因（同一套「当事人可
   `select=*`、`anon_code,author_id` 三种请求照旧被拒；部署版 `app.js` 在「已迁移」mock 下**不再降级**、
   一次请求就带 `anon_code`、显示数据库的号而非每帖号。探针 `privacy_probe.py` 37/0（`--write` 46/0）。
   临时帖子全部删除、未留垃圾；前端无需重新发版。
+- 第 14 轮的线上验收（2026-09-29，提交 `a88004e`）：Pages 逐字节一致（`poll_pages.py` 第 3 次尝试
+  把 10 个文件全部拉齐，含新增的 `circles.js` / `hotwords.js`）；`live_smoke.py` **42/0**
+  （新增 B5 一节：两页都引用两个新模块、两页都有圈选择器、首页的圈块默认 `hidden`、
+  FAQ 13 问且解释了圈词、部署版 `circles.js` 里确实是 12 个圈、`hotwords.js` 的
+  `MIN_POSTS = 8` / `MIN_AUTHORS = 2` 没被改动）；`privacy_probe.py` **37/0**；
+  新增线上探针 `_circle_live.py`（未入库）把**部署版**的 `circles.js` + `campuses.js`
+  放进真实 JS 引擎里跑，再用匿名公钥对**真实库**逐圈发同名请求：**22/0** ——
+  12 个圈合计 **129 所学校**，与 `CampusList.schoolOptions()` 的数量**完全相等**
+  （即「没有学校被漏掉、也没有学校落进两个圈」），每圈一个请求全部 HTTP 200，
+  返回里没有 `author_id` / `anon_code`；`select=id,author_id` 照旧被拒；
+  热词用的「近 14 天 + 最新 ≤300 条」窗口作为游客可读。
 
 ## 6. 当前状态与下一步
 
