@@ -123,9 +123,9 @@
 ## 9. 当前状态（2026-09-29）
 
 - 功能：Phase 1 的四块（主页 / 登录注册 / 审核与举报 / 广场）连同发布、评论回复均已上线。
-- **第 10 轮（2026-09-29，反馈通道）**：新增第 7 页 `feedback.html` + `assets/js/feedback.js` + `docs/supabase-feedback.sql`；菜单七页统一为 6 条二级入口；FAQ 增补「我提的意见反馈，别人看得到吗？」（12 问）；README 增补反馈功能、迁移与「只有站主怎么看」的 SQL。**迁移待站主在 Supabase SQL Editor 执行**（未执行时页面会明确提示「反馈功能还没部署」，不会假装成功）。
+- **第 10 轮（2026-09-29，反馈通道）**：新增第 7 页 `feedback.html` + `assets/js/feedback.js` + `docs/supabase-feedback.sql`；菜单七页统一为 6 条二级入口；FAQ 增补「我提的意见反馈，别人看得到吗？」（12 问）；README 增补反馈功能、迁移与「只有站主怎么看」的 SQL，并补上接口层验收脚本 `tools/feedback_probe.py`。站主已在 Supabase SQL Editor 执行迁移；线上验收：Pages 逐字节发布确认、线上冒烟 30/0、`feedback_probe.py` **25/0**（匿名与登录都能提交；所有读法（含 `count=exact`）与 `update`/`delete` 一律 42501；表内无 `user_id`/`ip`/`user_agent`/`email` 列；设备闭集与 1–500 字限制由数据库执行）。自检留存的测试行以 `delete from public.feedback where content like 'FEEDBACK probe%';` 清除。
 - 证据：线上站点可访问；端到端与真实浏览器验收全部通过（数字见第 8 节）。
 - **隐私实测（2026-09-29，只读跑真实库）**：`tools/privacy_probe.py` **34 项全通过 / 0 失败**——未登录访客用 8 种写法（单列、并列已授权列、别名、filter、order、匿名子集、`select *`、不写列名）**都读不到 `author_id`**；`profiles` 对访客不可读；`likes` 已收口（`post_likes` 视图只含 `post_id / like_count / liked_by_me`，视图内无 `user_id` 列）。
-- 待办：站主本人的人工实测**已完成**（2026-09-29 确认，清单见 `PLAN_phase1.md` 第 4A 节）；仅剩「邀请真实同学各以匿名、账号形式发布」一项（第 4B 节）。
+- **Phase 1 状态（2026-09-29）**：**已正式收官**——4A（站主电脑端 + 手机端实测）与 4B（其他同学分别以匿名、账号形式成功发表）均已由站主确认完成，4C 无回归，判定见 `PLAN_phase1.md` 第 4D 节。
 - 第二阶段：目标、任务与验收阈值见 `PLAN_phase2.md`（v1.2，验收阈值已生效）。
 

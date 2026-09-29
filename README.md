@@ -450,6 +450,25 @@ delete from public.feedback where id = '反馈 id';
 没执行迁移就去点提交，页面会直接告诉你「反馈功能还没部署」并给出要跑的文件名
 （`docs/supabase-feedback.sql`），不会假装成功。
 
+跑完迁移可以用 `tools/feedback_probe.py` 从接口层验收（跟隐私边界探针同一套路数）：
+
+```powershell
+python tools\feedback_probe.py              # 25 项检查，会故意留下 1 行测试反馈
+python tools\feedback_probe.py --no-write   # 只看拒绝行为，不写任何东西
+```
+
+它证明的是页面文案背后那几件事：匿名的、登录的用户**都能提交**；提交后**谁都要不回那条记录**
+（连「提交时顺手 `select`」都会被 42501 挡掉）；设备只能取 `desktop/tablet/phone/other`；
+正文 1–500 字、联系方式 ≤100 字由**数据库**而不是页面守着；表里**没有** `user_id` / `ip` /
+`user_agent` / `email` 这些列；所有读法（含 `count=exact`）都是 42501；`update` / `delete` 同样拒绝。
+
+正常结果最后一行是 `checks run: 25   failures: 0`，退出码 0（退出码 2 = 没给 `E2E_PASSWORD`，
+只跑了匿名部分）。它留下的测试行用一句 SQL 清掉：
+
+```sql
+delete from public.feedback where content like 'FEEDBACK probe%';
+```
+
 ### 关于匿名的边界
 
 匿名帖在数据库里仍然记录 `author_id`（「我的发布」和「仅本人可删除」都要靠它），
