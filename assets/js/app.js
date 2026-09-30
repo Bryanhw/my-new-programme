@@ -2122,6 +2122,12 @@ window.Campus = (function () {
       if (err && (err.name === "AbortError" || /aborted/i.test(String(err.message || "")))) {
         throw new Error("请求没有响应（可能网络被拦了），稍后再试，或者联系站主");
       }
+      // fetch 自己抛的 TypeError：压根没拿到响应（离线、网络被拦，
+      // 或函数不存在时预检被网关挡下）。别把英文原文丢给同学看。
+      if (err && (err.name === "TypeError" ||
+                  /failed to fetch|networkerror|load failed|网络/i.test(String(err.message || "")))) {
+        throw new Error("连不上服务器：先看看网络，或者问一下站主「找回密码」功能部署了没有");
+      }
       throw err;
     });
   }
