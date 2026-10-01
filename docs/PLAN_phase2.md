@@ -1,6 +1,6 @@
 # PLAN_phase2.md · 「校园拾光」第二阶段计划与验收
 
-> 文档状态：v1.5 · 2026-09-30（第 15 轮：匿名文案纠偏 + 密保问题与自助改密，含上线验收与真实浏览器走查；B5「城市圈」此前按站主拍板改为**形态扩展**）
+> 文档状态：v1.6 · 2026-10-01（第 15 轮：匿名文案纠偏 + 密保问题与自助改密，含上线验收与真实浏览器走查；**2026-10-01 补齐最后一环 —— Edge Function 已部署且改密端到端验证通过 10/10**；B5「城市圈」此前按站主拍板改为**形态扩展**）
 > 配套：`PROJECT_SCOPE.md`（范围与边界）、`PLAN_phase1.md`（上一阶段）、`README.md`（实现细节）
 > 相关记录：`outputs/fizz-padlet-optimization-suggestions.md`（优化建议与遗留清单）、`outputs/anon-code-design.md`（「洞号」匿名方案）、`outputs/city-circle-design.md`（城市圈与圈内热词）
 > 线上站点：https://bryanhw.github.io/my-new-programme/
@@ -267,8 +267,24 @@ A4 申诉 ────────► A3 拒稿原因（同一套「当事人可
   `privacy_probe.py` **37/0**、退出码 0（`--write` 未跑，线上表不留痕）。
   本轮的真实浏览器走查见第 7 节第 15 轮记录的「真实浏览器走查」那两条（38 步 / 0 异常）。
   站主的部署两步（SQL Editor 执行 `docs/supabase-security-question.sql`、部署
-  `docs/edge-functions/reset-password/` 并**关掉 Enforce JWT Verification**）仍待执行，
-  这是「线上真的能改成新密码」唯一还缺的一环。
+  `docs/edge-functions/reset-password/` 并**关掉 Enforce JWT Verification**）已由站主完成，
+  「线上真的能改成新密码」也在 **2026-10-01 端到端验证通过**，这一环补齐：
+  - 部署确认（自检）：`POST {"ping":true}` → `200 {"ok":true,"code":"pong"}`，`diag` 报
+    `hasUrl=true`、`hasKey=true`、`bodyBytes=14`、`contentLengthHeader="14"`、
+    `deno=supabase-edge-runtime-1.77.0 (compatible with Deno v2.1.4)`；区域 `ap-southeast-1`。
+  - 改密闭环 **10/10**（测试账号 A = `13900000001`，**密码已在末尾自动还原**）：原密码登录 →
+    登记密保 → **错答案** `400 mismatch` → **对答案** `200 {"ok":true}` → **新**密码可登录、
+    **旧**密码被拒（`400`）→ 再改回原密码 → 原密码登录成功。
+  - 零副作用分支 5 条：手机号含字母 / 密码 3 位 / 答案全空白 / 非 JSON → `400 invalid_input`
+    且文案分别正确；**格式合法但未注册的手机号 → 与「答案不对」完全同一条 `400 mismatch`**
+    （抗探测行为符合设计）。以上全部带 `Access-Control-Allow-Origin: *`。
+  - 过程留痕（下次排障直接抄）：上线前**所有 POST 都是不带 CORS 的裸 500**，而 GET / PUT / DELETE /
+    PATCH 都是我们自己的 `405` JSON、OPTIONS 预检 `204` 正常，`x-deno-execution-id` 每次都在
+    （代码确实被执行）。根因是 **Dashboard 的 Code 页里始终是旧版内容**（`{"ping":true}` 自检入口
+    与长度护栏都是这次新加的，旧版没有），整段重贴最新 `index.ts` 并 Deploy 后所有分支立刻正常。
+    期间还证实两条：**Dashboard 编辑器里 Ctrl+F 搜不到关键词 ≠ 没部署**（查找作用域怪脾气，
+    判断上线与否只认 `{"ping":true}` 有没有 `pong`）；以及该运行时 **`Content-Length` 可见**。
+    细节见 `docs/edge-functions/reset-password/README.md` 第六节。
 
 ## 6. 当前状态与下一步
 

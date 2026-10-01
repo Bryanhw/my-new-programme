@@ -78,7 +78,7 @@ curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/reset-password" 
 | `400` `{"code":"invalid_input"}`，提示「手机号格式不对」 | 手机号不是 11 位 / 不是 1 开头，或含多余字符 | 前端先归一化；确认真实手机号 |
 | `400` 提示「答案长度不对（1~60 个字）」 | 答案空了或超过 60 字 | 让同学按登记时的答案填写 |
 | `400` 提示「密码长度不对（6~72 位）」 | 新密码太短或太长 | 用 6~72 位的密码 |
-| 裸 `500` `Internal Server Error`（`content-type: text/plain`、**没有 CORS 头**、`sb-error-code: EDGE_FUNCTION_ERROR`） | 函数里有异常冒到了运行时；浏览器读不到这个响应，前端只能显示「连不上服务器」 | 先看 **Logs** 里 `[reset-password]` 那几行定位；同时确认 Code 页粘贴的是**本目录最新的 `index.ts`**（旧版没有长度护栏、读 body 未兜异常），重新粘贴并 Deploy |
+| 裸 `500` `Internal Server Error`（`content-type: text/plain`、**没有 CORS 头**、`sb-error-code: EDGE_FUNCTION_ERROR`） | 函数里有异常冒到了运行时；浏览器读不到这个响应，前端只能显示「连不上服务器」 | 先看 **Logs** 里 `[reset-password]` 那几行定位；同时确认 Code 页粘贴的是**本目录最新的 `index.ts`**（旧版没有长度护栏、读 body 未兜异常），重新粘贴并 Deploy。**本次已实测：根因就是这个**（Code 页里是旧版内容），重贴最新版并 Deploy 后所有方法恢复正常 —— 见第六节 |
 | 浏览器显示「连不上服务器，或者问一下站主…」 | 跨域被拦（预检没通过）或函数返回了不带 CORS 头的 5xx | 用上面的 `{"ping":true}` 确认函数可用；仍是 5xx 就看 Logs |
 
 ## 五、已知局限（够用，但要知道边界）
@@ -91,7 +91,61 @@ curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/reset-password" 
 4. **答案空间小**：三选一问题 + 常见答案，理论上拿到盐就能离线枚举。所以指纹只用于「对不对」的比对，
    真正的闸门是失败锁定 —— 这一点在 `docs/supabase-security-question.sql` 顶部也写明了。
 
-## 六、相关文件
+## 六、线上验证记录（2026-10-01，项目 `gvmqmzgzwnvseubpvqdx`）
+
+**部署确认（自检）**：
+
+```
+POST {"ping":true}  ->  HTTP 200  {"ok":true,"code":"pong","diag":{
+    "hasUrl":true,"hasKey":true,"bodyBytes":14,
+    "contentLengthHeader":"14",
+    "deno":"supabase-edge-runtime-1.77.0 (compatible with Deno v2.1.4)"}}
+```
+
+**运行时基线**（下次排障对照用）：
+
+- 运行时 `supabase-edge-runtime-1.77.0`（Deno 2.1.4），区域 `ap-southeast-1`
+- `Content-Length` 在这个运行时**是可见的**（自检里回读到 `"14"`）→ 函数里的长度护栏有效
+- 部署前基线（未部署时）是 `404 {"code":"NOT_FOUND"}`
+
+**端到端改密闭环（10/10 通过，测试账号 A = `13900000001`，密码已自动改回原值）**：
+
+| 步骤 | 结果 |
+|---|---|
+| 用原密码登录 | `200` |
+| 登记密保答案（RPC `set_security_answer`） | `200` |
+| 读回密保问题 | `primary_school` |
+| **错答案** | `400 {"code":"mismatch"}`，带 CORS |
+| **对答案改密** | `200 {"ok":true,...}` |
+| 用**新**密码登录 | `200` |
+| 用**旧**密码登录 | `400`（被拒，说明密码真的换了） |
+| 再改回原密码 | `200` |
+| 用**原**密码登录 | `200`（还原成功） |
+
+**零副作用分支（不碰任何账号）**：
+
+| 请求 | 结果 |
+|---|---|
+| 手机号含字母 | `400 {"code":"invalid_input","message":"手机号格式不对"}` |
+| 密码 3 位 | `400`「密码长度不对（6~72 位）」 |
+| 答案全空白 | `400`「答案长度不对（1~60 个字）」 |
+| 非 JSON 请求体 | `400`「请求格式不对」 |
+| 格式合法但未注册的手机号 | `400 {"code":"mismatch"}` —— 与「答案不对」**完全同一条**，探测不出账号是否存在 |
+
+以上全部带 `Access-Control-Allow-Origin: *`。
+
+**两条排障经验**：
+
+1. **Dashboard 代码编辑器里 Ctrl+F 搜不到关键词，不代表没部署**（那是个查找作用域/焦点的怪脾气）。判断「新版到底上没上线」只有一个可靠办法：跑 `{"ping":true}` 看有没有 `pong`。
+2. 本次「所有 POST 裸 500、GET/OPTIONS 正常」的根因是 **Code 页里是旧版内容**（旧版在进入业务逻辑前就抛异常）。把最新 `index.ts` 整段重贴并点 Deploy 后，所有分支立刻正常 —— 所以遇到裸 500，先把「Code 页内容 == 仓库最新 `index.ts`」核对掉。
+
+**遗留状态**：测试账号 A 现在登记了密保问题 `primary_school`（产品的正常状态，不影响使用）。想清掉这一行：
+
+```sql
+delete from public.security_answers where user_id = '3a305f29-70be-435b-ad62-46f403e8b64d';
+```
+
+## 七、相关文件
 
 - 数据库迁移：`docs/supabase-security-question.sql`（含验证查询与回滚）
 - 扁平粘贴版：`docs/supabase-security-question-flat.sql`
