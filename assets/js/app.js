@@ -24,6 +24,17 @@ window.Campus = (function () {
   var SITE_NAME = cfg.SITE_NAME || "校园拾光";
   var BUCKET = cfg.BUCKET || "post-images";
 
+  /* A1 图片展示三件套：
+   *   · 展示盒给一个固定比例（见 style.css 的 .post-image），图还没下完位置就已经占住 —— 列表滚动不再抖；
+   *   · 图一律 object-fit: contain，竖图整张都在画面里，不裁人；
+   *   · 同一张原图按下面几个宽度走 Supabase 的图片变换端，手机不必为了看一张图下整张原图。
+   *   实测（2026-10-01，线上桶里的真图）：只给 width 时后端只缩宽度不缩高度（739×1600 → 400×1600），
+   *   图会被横向压扁；必须带 resize=contain 才是等比例缩放（400×866）。quality=75 再省一大截
+   *   （89212 → 34867 字节，约 -61%）。这行参数是踩过坑的，改之前先看图会不会变形。 */
+  var IMAGE_WIDTHS = [400, 800, 1200];
+  var IMAGE_TRANSFORM_QUERY = "&resize=contain&quality=75";
+  var IMAGE_SIZES = "(max-width: 760px) 100vw, 680px"; // .wrap 最宽 720px，卡片里还要扣掉左右内边距
+
   var client = null;
   var configError = null;
 
@@ -794,6 +805,31 @@ window.Campus = (function () {
     return (res && res.data && res.data.publicUrl) || "";
   }
 
+  /**
+   * A1：把 Storage 里的原图换成一个更小的版本（浏览器的 srcset 用得上）。
+   * 只有「本桶里的相对路径」能变换；外链（http/https）返回空串，调用方会退回原图，
+   * 不会出现半张图或坏图。参数坑见文件头的 IMAGE_TRANSFORM_QUERY 注释。
+   */
+  function renderImageUrl(path, width) {
+    if (!path || /^https?:\/\//i.test(path)) return "";
+    var base = String(cfg.SUPABASE_URL || "").replace(/\/+$/, "");
+    if (!base) return "";
+    var key = String(path).split("/").map(encodeURIComponent).join("/");
+    return base + "/storage/v1/render/image/public/" + encodeURIComponent(BUCKET) + "/" + key +
+      "?width=" + width + IMAGE_TRANSFORM_QUERY;
+  }
+
+  /** A1：<img> 的 srcset（多个宽度让浏览器自己挑）。拿不到尺寸版本就返回空串，退回单张 src */
+  function imageSrcset(path) {
+    if (!path || /^https?:\/\//i.test(path)) return "";
+    var out = [];
+    for (var i = 0; i < IMAGE_WIDTHS.length; i++) {
+      var u = renderImageUrl(path, IMAGE_WIDTHS[i]);
+      if (u) out.push(u + " " + IMAGE_WIDTHS[i] + "w");
+    }
+    return out.join(", ");
+  }
+
   /* ------------------------------------------------------------------
    * 6.5 举报（看到违规内容时上报给站点主人）
    *     · 只能以自己的身份举报（数据库 RLS：reporter_id = auth.uid()）
@@ -1024,10 +1060,81 @@ window.Campus = (function () {
     return true;
   }
 
-  /* 卡片上的「评论 / 回复 / 删除 / 举报」按钮统一在这里接管，各页面不用再写一遍 */
+  /* ------------------------------------------------------------------
+   * 6.5.1 点图看原图（A1）
+   *     · 卡片里的图一律 object-fit: contain —— 整张都在，不裁人；
+   *       想看清细节就点图，浮层里放的是**原图**（不带任何变换参数），放大了依旧清晰。
+   *     · 外壳复用举报弹窗那套 .modal-backdrop：同一份遮罩、同样锁背景滚动，Esc 关掉。
+   * ------------------------------------------------------------------ */
+
+  var imageWrap = null;
+
+  function closeImageViewer() {
+    if (imageWrap) imageWrap.hidden = true;
+    if (document.body) document.body.classList.remove("modal-open");
+  }
+
+  /** 第一次点图时才把浮层建出来（六个页面共用，所以放在 app.js 里） */
+  function ensureImageViewer() {
+    if (imageWrap) return imageWrap;
+    if (!document.body) return null;
+
+    var wrap = document.createElement("div");
+    wrap.className = "modal-backdrop image-viewer";
+    wrap.id = "image-viewer";
+    wrap.hidden = true;
+    wrap.innerHTML =
+      '<div class="modal-image" role="dialog" aria-modal="true" aria-label="查看原图">' +
+        '<img class="modal-image-img" id="image-viewer-img" alt="原图">' +
+        '<button class="link-plain modal-image-close" type="button" id="image-close">关闭</button>' +
+      "</div>";
+    document.body.appendChild(wrap);
+    imageWrap = wrap;
+
+    wrap.addEventListener("click", function (e) {
+      // 点遮罩、点「关闭」、点已放大的那张图，都算关掉
+      var el = e.target;
+      if (el === wrap) closeImageViewer();
+      else if (el && el.closest && (el.closest("#image-close") || el.closest(".modal-image-img"))) {
+        closeImageViewer();
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if ((e.key === "Escape" || e.key === "Esc") && imageWrap && !imageWrap.hidden) {
+        closeImageViewer();
+      }
+    });
+
+    return wrap;
+  }
+
+  /** 打开原图浮层；地址为空就当没点过 */
+  function openImageViewer(url) {
+    if (!url) return false;
+    var wrap = ensureImageViewer();
+    if (!wrap) return false;
+
+    var img = document.getElementById("image-viewer-img") ||
+      (wrap.querySelector ? wrap.querySelector(".modal-image-img") : null);
+    if (img) img.src = url;
+
+    wrap.hidden = false;
+    if (document.body) document.body.classList.add("modal-open");
+    return true;
+  }
+
+  /* 卡片上的「评论 / 回复 / 删除 / 举报 / 看原图」按钮统一在这里接管，各页面不用再写一遍 */
   document.addEventListener("click", function (e) {
     var el = e.target;
     if (!el || !el.closest) return;
+
+    // A1：点卡片上的图 → 看原图（放在最前面：图上的点击不该被别的按钮抢走）
+    var imageBtn = el.closest("[data-image]");
+    if (imageBtn) {
+      openImageViewer(imageBtn.getAttribute("data-image"));
+      return;
+    }
 
     var reportBtn = el.closest("[data-report]");
     if (reportBtn) {
@@ -1720,7 +1827,18 @@ window.Campus = (function () {
       html += '<div class="post-body">' + escapeHtml(post.content) + "</div>";
     }
     if (url) {
-      html += '<div class="post-image"><img src="' + escapeHtml(url) + '" alt="分享的图片" loading="lazy"></div>';
+      var set = imageSrcset(post.image_path);
+      // A1：整块可点 → 打开原图浮层；<img> 带上 srcset / sizes / decoding=async
+      html += '<div class="post-image">';
+      html += '<button class="post-image-open" type="button" data-image="' + escapeHtml(url) +
+        '" aria-label="查看原图">';
+      html += '<img src="' + escapeHtml(url) + '" alt="分享的图片" loading="lazy" decoding="async"';
+      if (set) {
+        html += ' srcset="' + escapeHtml(set) + '" sizes="' + escapeHtml(IMAGE_SIZES) + '"';
+      }
+      html += ">";
+      html += "</button>";
+      html += "</div>";
     }
 
     html += '<div class="post-foot">';
@@ -2204,6 +2322,13 @@ window.Campus = (function () {
     deletePost: deletePost,
     toggleLike: toggleLike,
     imageUrl: imageUrl,
+    // A1：图片展示三件套 —— 变换地址 / srcset / 原图浮层
+    renderImageUrl: renderImageUrl,
+    imageSrcset: imageSrcset,
+    openImageViewer: openImageViewer,
+    closeImageViewer: closeImageViewer,
+    IMAGE_WIDTHS: IMAGE_WIDTHS,
+    IMAGE_SIZES: IMAGE_SIZES,
     saveNickname: saveNickname,
 
     // 评论

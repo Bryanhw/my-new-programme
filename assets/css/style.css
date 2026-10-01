@@ -500,18 +500,39 @@ button, input, textarea, select {
   margin-bottom: 4px;
 }
 
+/* A1 图片展示三件套：
+   ① 展示盒给一个固定比例 —— 图片还在路上时位置就已经占住，往下滚列表不会突然跳动；
+   ② 图一律 contain，竖图整张都在画面里（原来是 cover + max-height，竖图上下会被裁掉，
+      好看的那部分常常正好在裁掉的位置）。和 .home-photo 窄屏那条一个思路：宁可留白，不裁人；
+   ③ srcset / sizes / decoding=async 见 app.js 的 renderImageUrl。 */
 .post-image {
+  position: relative;
   margin-top: 12px;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface-soft);
+  aspect-ratio: 4 / 3;
 }
+/* 图整张都在展示盒里：靠 max-* + object-fit，不裁也不放大（小图居中，不糊） */
 .post-image img {
-  width: 100%;
-  height: auto;
-  max-height: 460px;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
+/* 整块可点：点开看原图（浮层样式见文件末尾「看原图浮层」）。
+   绝对定位铺满展示盒，所以图周围的留白也一样点得到 */
+.post-image-open {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+.post-image-open:focus-visible { outline: 2px solid var(--brand); outline-offset: -3px; }
 
 .post-foot {
   display: flex;
@@ -758,7 +779,8 @@ button, input, textarea, select {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
-.preview img { width: 100%; max-height: 320px; object-fit: cover; }
+/* 预览跟发布后卡片里的展示保持一致：contain，整张都在（原来是 cover，竖图预览会被裁） */
+.preview img { width: 100%; max-height: 320px; object-fit: contain; }
 
 .preview-remove {
   position: absolute;
@@ -1667,6 +1689,33 @@ body.modal-open { overflow: hidden; }
   .circle-bar-row select { flex: 1 1 100%; }
   .circle-only { margin-left: auto; }
 }
+
+/* ------------------------------ 看原图浮层（A1） ------------------------------ */
+/* 复用 .modal-backdrop 的遮罩 / 滚动锁 / 居中方式（子元素 margin:auto，
+   装得下就居中、装不下就能滚），这里只把内容换成一张原图 */
+.modal-image {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: none;   /* 覆盖 .modal 的 372px，原图可以铺大一些 */
+}
+
+.modal-image-img {
+  width: auto;
+  height: auto;
+  max-width: min(94vw, 1100px);
+  max-height: 82vh;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 26px 64px rgba(43, 27, 15, 0.5);
+  cursor: zoom-out;
+}
+
+/* 落在深色遮罩上，所以固定用浅色，别跟着卡片文字色走 */
+.modal-image-close { color: #FFF3EA; }
+.modal-image-close:hover { color: #FFFFFF; }
 
 /* 减少动效偏好 */
 @media (prefers-reduced-motion: reduce) {
