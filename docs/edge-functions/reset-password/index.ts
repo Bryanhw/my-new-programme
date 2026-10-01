@@ -42,6 +42,21 @@
 //   * 锁定期（连错 5 次锁 15 分钟）会返回 429；这个响应确实会暴露
 //     「该手机号有密保记录」—— 但它需要先连错 5 次才会触发，属于可接受的
 //     取舍（换来的是对撞库的有效拦截）。
+//
+//  自检入口（部署完先跑这个）
+//  ---------------------------------------------------------------------
+//   POST 一个 {"ping": true}，函数回一段**不含任何秘密**的自检信息：
+//     { ok: true, code: "pong",
+//       diag: { hasUrl, hasKey, bodyBytes, contentLengthHeader, deno } }
+//   它不碰数据库、不改任何东西，也不会回显手机号 / 答案 / 密码；用途是
+//   回答「函数真的部署上去了吗、密钥注入好了吗、请求体读得到吗」。
+//   （排障结束想收掉它，删掉下面的 ping 分支即可，不影响其它逻辑。）
+//
+//  另一个部署红线：任何分支都不能让异常冒到运行时
+//  ---------------------------------------------------------------------
+//   冒出去的异常会变成浏览器**读不到**的裸 500（没有 CORS 头），
+//   前端只能显示「连不上服务器」，现场既看不到原因也拿不到错误码。
+//   所以读 body、解析响应这些可能抛的地方，一律自己兜住并回 JSON。
 // =====================================================================
 
 // 只用 Deno 内置能力：Deno.serve + fetch，不引入任何 npm 包。
@@ -132,6 +147,9 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return json(405, { ok: false, code: "method_not_allowed", message: "只支持 POST" });
   }
+  // 进到这里的每次请求都留一行日志：万一后面撞上某个平台怪癖抛异常，
+  // 函数日志里至少能看到「代码确实被执行过」，而不是一片空白。
+  console.log("[reset-password] POST 进入函数");
 
   // 密钥缺失：给出清晰的状态码与错误码，而不是抛栈。
   if (!SUPABASE_URL || !SERVICE_KEY) {
@@ -140,11 +158,25 @@ Deno.serve(async (req: Request) => {
   }
 
   // 请求体大小上限：先看 Content-Length，读出来后再兜一次。
-  const declaredLen = Number(req.headers.get("content-length") || "0");
+  // 注意 Content-Length 只是**省一次读取**的便宜检查：某些网关 / 运行时下
+  // 这个头未必可见，所以最终判据永远是「读出来的字节数」。
+  let declaredLen = 0;
+  try {
+    declaredLen = Number(req.headers.get("content-length") || "0");
+  } catch {
+    declaredLen = 0;
+  }
   if (declaredLen > MAX_BODY_BYTES) {
     return json(400, { ok: false, code: "invalid_input", message: "请求体过大" });
   }
-  const raw = await req.text();
+  // 读 body 也要兜住：读失败（连接被掐断等）必须回我们自己的 JSON。
+  let raw = "";
+  try {
+    raw = await req.text();
+  } catch (e) {
+    console.log("[reset-password] 读取请求体失败：", String(e));
+    return json(400, { ok: false, code: "invalid_input", message: "请求格式不对" });
+  }
   if (raw.length > MAX_BODY_BYTES) {
     return json(400, { ok: false, code: "invalid_input", message: "请求体过大" });
   }
@@ -154,6 +186,27 @@ Deno.serve(async (req: Request) => {
     payload = JSON.parse(raw);
   } catch {
     return json(400, { ok: false, code: "invalid_input", message: "请求格式不对" });
+  }
+
+  // 自检入口：不碰数据库，只回报「函数活着 / 密钥在 / body 读到了」。
+  if (payload && payload.ping === true) {
+    let clHeader: string | null = null;
+    try {
+      clHeader = req.headers.get("content-length");
+    } catch {
+      clHeader = null;
+    }
+    return json(200, {
+      ok: true,
+      code: "pong",
+      diag: {
+        hasUrl: SUPABASE_URL !== "",
+        hasKey: SERVICE_KEY !== "",
+        bodyBytes: raw.length,
+        contentLengthHeader: clHeader,
+        deno: Deno.version.deno,
+      },
+    });
   }
 
   const phone = normalizePhone(payload.phone);
@@ -213,7 +266,13 @@ Deno.serve(async (req: Request) => {
     return json(500, { ok: false, code: "server_error" });
   }
 
-  const verify = await verifyRes.json();
+  let verify: { result?: string };
+  try {
+    verify = await verifyRes.json();
+  } catch (e) {
+    console.log("[reset-password] 解析校验结果失败：", String(e));
+    return json(500, { ok: false, code: "server_error" });
+  }
   const result = String((verify && verify.result) || "");
 
   if (result === "locked" || result === "locked_now") {

@@ -24,7 +24,22 @@ Content-Type: application/json
 
 ## 二、自查（curl）
 
-把 `<project-ref>` 与 `<anon key>` 换成自己的值后执行：
+**先跑自检**（不碰数据库、不改任何东西，只确认「函数活着 / 密钥在 / 请求体读得到」）：
+
+```bash
+curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/reset-password" \
+  -H "apikey: <anon key>" \
+  -H "Content-Type: application/json" \
+  -d '{"ping":true}'
+```
+
+期望：`HTTP 200`，`{"ok":true,"code":"pong","diag":{"hasUrl":true,"hasKey":true,"bodyBytes":12,...}}`
+
+- `hasUrl` / `hasKey` 都应为 `true`（密钥是平台自动注入的）
+- 看到 `code":"pong"` 就说明部署成功、`verify_jwt` 也关对了
+- 想收掉这个入口，删掉 `index.ts` 里的 `ping` 分支再部署即可，不影响其它逻辑
+
+**再跑真实调用**（会真的改密码，用一个测试账号试）：
 
 ```bash
 curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/reset-password" \
@@ -63,6 +78,8 @@ curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/reset-password" 
 | `400` `{"code":"invalid_input"}`，提示「手机号格式不对」 | 手机号不是 11 位 / 不是 1 开头，或含多余字符 | 前端先归一化；确认真实手机号 |
 | `400` 提示「答案长度不对（1~60 个字）」 | 答案空了或超过 60 字 | 让同学按登记时的答案填写 |
 | `400` 提示「密码长度不对（6~72 位）」 | 新密码太短或太长 | 用 6~72 位的密码 |
+| 裸 `500` `Internal Server Error`（`content-type: text/plain`、**没有 CORS 头**、`sb-error-code: EDGE_FUNCTION_ERROR`） | 函数里有异常冒到了运行时；浏览器读不到这个响应，前端只能显示「连不上服务器」 | 先看 **Logs** 里 `[reset-password]` 那几行定位；同时确认 Code 页粘贴的是**本目录最新的 `index.ts`**（旧版没有长度护栏、读 body 未兜异常），重新粘贴并 Deploy |
+| 浏览器显示「连不上服务器，或者问一下站主…」 | 跨域被拦（预检没通过）或函数返回了不带 CORS 头的 5xx | 用上面的 `{"ping":true}` 确认函数可用；仍是 5xx 就看 Logs |
 
 ## 五、已知局限（够用，但要知道边界）
 
