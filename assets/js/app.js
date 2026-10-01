@@ -1829,10 +1829,18 @@ window.Campus = (function () {
     if (url) {
       var set = imageSrcset(post.image_path);
       // A1：整块可点 → 打开原图浮层；<img> 带上 srcset / sizes / decoding=async
+      // 站主验收反馈（竖图两侧发空，见 style.css 的 .post-image-blur）：衬底用**同一张图**
+      // 模糊后 cover 铺满展示盒；图本身仍然整张不裁，盒子比例没变所以不会抖。
+      // 衬底只取最小一档（400w）省流量：手机上正图本来也会选 400w，同一个地址直接命中缓存；
+      // 桌面端多下约二十几 KB。外链没有变换能力，就退回原始地址（同一地址同样命中缓存）。
+      var blur = renderImageUrl(post.image_path, IMAGE_WIDTHS[0]) || url;
       html += '<div class="post-image">';
       html += '<button class="post-image-open" type="button" data-image="' + escapeHtml(url) +
         '" aria-label="查看原图">';
-      html += '<img src="' + escapeHtml(url) + '" alt="分享的图片" loading="lazy" decoding="async"';
+      html += '<img class="post-image-blur" src="' + escapeHtml(blur) +
+        '" alt="" aria-hidden="true" loading="lazy" decoding="async">';
+      html += '<img class="post-image-main" src="' + escapeHtml(url) +
+        '" alt="分享的图片" loading="lazy" decoding="async"';
       if (set) {
         html += ' srcset="' + escapeHtml(set) + '" sizes="' + escapeHtml(IMAGE_SIZES) + '"';
       }

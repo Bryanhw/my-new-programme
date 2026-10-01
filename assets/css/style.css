@@ -513,8 +513,23 @@ button, input, textarea, select {
   background: var(--surface-soft);
   aspect-ratio: 4 / 3;
 }
-/* 图整张都在展示盒里：靠 max-* + object-fit，不裁也不放大（小图居中，不糊） */
-.post-image img {
+/* 衬底：同一张图模糊 + cover，把展示盒铺满 —— 竖图两侧不再是空白
+   （盖在下面：z-index 0；scale 一点是为了不让模糊的透明边缘露出来） */
+.post-image-blur {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(18px) saturate(1.05);
+  transform: scale(1.12);
+  opacity: 0.55;
+}
+/* 正图整张都在展示盒里：靠 max-* + object-fit，不裁也不放大（小图居中，不糊） */
+.post-image-main {
+  position: relative;
+  z-index: 1;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
