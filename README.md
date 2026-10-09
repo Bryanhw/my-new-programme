@@ -328,6 +328,30 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 可选环境变量：`E2E_PHONE_A` / `E2E_PHONE_B` 换测试账号，
 `APP_CONFIG_JS` 指定 `config.js` 的路径（默认自动取仓库里的那一份）。
 
+### 本地回归测试与 CI
+
+两套测试都在仓库里（`tools/`），装上依赖即可跑：
+
+```powershell
+python -m pip install -r tools\requirements-dev.txt
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），689 项
+python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），733 项
+```
+
+正常都以 `checks run: N   failures: 0` 结尾、退出码 0。**这几个数字只能变好、不能变差**，
+变差必须在 `docs/PLAN_phase2.md` 第 5 节解释清楚。
+
+改动 `assets/` 下的 CSS / JS 之后，**要顺手刷新页面里的版本串**，否则线上会继续吃旧缓存
+（浏览器与 GitHub Pages 都按文件名缓存）：
+
+```powershell
+python tools\version_assets.py            # 给 8 个页面的本地 CSS/JS 引用写上 ?v=<内容哈希>
+python tools\version_assets.py --check    # 只检查、不改；有漂移就退出码 1
+```
+
+`.github/workflows/ci.yml` 会在**每次 push 到 `main` 与每个 PR** 上依次跑三步：
+静态检查 → 版本串是否最新（`--check`）→ 运行测试。三步全过才算绿；忘了刷版本串会被第二步当场拦下。
+
 ---
 
 ## 数据库结构
