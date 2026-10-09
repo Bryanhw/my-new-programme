@@ -1,10 +1,10 @@
 # PLAN_phase2.md · 「校园拾光」第二阶段计划与验收
 
-> 文档状态：v1.9 · 2026-10-01（第 16 轮：A1 图片展示三件套 —— 定比展示盒 / 多尺寸 `srcset` / 点图看原图；同日按站主验收反馈补上「竖图两侧发空 → 同图模糊衬底铺满」，**并经站主人眼验收通过（第 4.1 节第 1 条已勾）**；第 15 轮：匿名文案纠偏 + 密保问题与自助改密，含上线验收与真实浏览器走查；**2026-10-01 补齐最后一环 —— Edge Function 已部署且改密端到端验证通过 10/10**；B5「城市圈」此前按站主拍板改为**形态扩展**）
+> 文档状态：v1.10 · 2026-10-09（第 17 轮：**第二轮只读性能体检 + 第一梯队五项修复** —— 广场/首页「先渲染卡片再补点赞与评论数」、图片 `format=webp`（探到支持才加）、模糊衬底降到 64 宽、8 个页面 `<head>` 提前 `preconnect`/`dns-prefetch`、卡片 `content-visibility: auto`；**零观感改动**。第 16 轮：A1 图片展示三件套 —— 定比展示盒 / 多尺寸 `srcset` / 点图看原图；同日按站主验收反馈补上「竖图两侧发空 → 同图模糊衬底铺满」，**并经站主人眼验收通过（第 4.1 节第 1 条已勾）**；第 15 轮：匿名文案纠偏 + 密保问题与自助改密，含上线验收与真实浏览器走查；**2026-10-01 补齐最后一环 —— Edge Function 已部署且改密端到端验证通过 10/10**；B5「城市圈」此前按站主拍板改为**形态扩展**）
 > 配套：`PROJECT_SCOPE.md`（范围与边界）、`PLAN_phase1.md`（上一阶段）、`README.md`（实现细节）
-> 相关记录：`outputs/fizz-padlet-optimization-suggestions.md`（优化建议与遗留清单）、`outputs/anon-code-design.md`（「洞号」匿名方案）、`outputs/city-circle-design.md`（城市圈与圈内热词）
+> 相关记录：`outputs/site-perf-review.md`（第 17 轮只读性能体检：三梯队建议 + 实测数据）、`outputs/fizz-padlet-optimization-suggestions.md`（优化建议与遗留清单）、`outputs/anon-code-design.md`（「洞号」匿名方案）、`outputs/city-circle-design.md`（城市圈与圈内热词）
 > 线上站点：https://bryanhw.github.io/my-new-programme/
-> 工程基线：`static_checks.py` **661/0**、`run_tests.py` **707/0**（截至第 16 轮 A1 + 站主验收反馈的同日修正）
+> 工程基线：`static_checks.py` **689/0**、`run_tests.py` **733/0**（截至第 17 轮第一梯队五项修复）
 
 ## 0. 一句话
 
@@ -204,8 +204,18 @@ A4 申诉 ────────► A3 拒稿原因（同一套「当事人可
 
 任何一次改动都不能让下面的数字变差；变差必须先解释清楚：
 
-- `static_checks.py` **661/0**、`run_tests.py` **707/0**（截至第 16 轮 A1 及其同日修正：A1 本体
-  新增静态护栏 15 条、运行测试 36 条 —— 展示盒定比 4:3 与 `object-fit: contain`（**竖图不裁人**）、
+- `static_checks.py` **689/0**、`run_tests.py` **733/0**（截至第 17 轮第一梯队五项修复：新增静态护栏
+  28 条、运行测试 26 条 —— 8 个页面都在 `<head>` 里 preconnect/dns-prefetch 到 `config.js` 里的同一个
+  Supabase 主机（`crossorigin`、不得写成 `preload`）、`.post` 的 `content-visibility: auto` +
+  `contain-intrinsic-size` 两行降级写法、`IMAGE_BASE_QUERY` + `imageTransformQuery()`（`format=webp`
+  必须由 `webpSupported()` 的 `canvas` 探测把关且只问一次并缓存）、衬底走 `IMAGE_BLUR_WIDTH = 64`
+  且不许再借 `IMAGE_WIDTHS[0]`、`listPosts`/`listMyPosts`/`listFeedPosts` 三个函数体里不许再出现
+  `attachLikes(`/`attachComments(`、三个页面脚本都用「先画后补」且都带 touched/seq 守卫、
+  刷新转圈只等帖子那一步、首页点赞监听只挂一次；运行测试用 stub 新增的 `holdStats`
+  把两个统计请求扣在半空中，证明「卡片先出现、计数后到、刷新按钮不转圈、期间刷新仍能再发一次」，
+  用 `canvasWebp` 假设备证明「支持就带 `format=webp`、不支持仍是 JPEG」，
+  并改写 4 条贴着旧契约的断言）。再往前：第 16 轮 A1 及其同日修正 ——
+  A1 本体新增静态护栏 15 条、运行测试 36 条 —— 展示盒定比 4:3 与 `object-fit: contain`（**竖图不裁人**）、
   踩过的坑 `resize=contain` 不许丢（只给 `width` 服务端会把图横向压扁）、外链不得进渲染端点、卡片上的
   `srcset`/`sizes`/`decoding="async"`/`data-image`、看原图浮层复用同一个壳与三种关法；
   站主验收反馈后又补 5 + 6 条 —— 衬底必须 `cover` + 模糊、正图必须盖在衬底之上、两层顺序、
@@ -314,6 +324,20 @@ A4 申诉 ────────► A3 拒稿原因（同一套「当事人可
   线上 `style.css` 必须有 `.post-image-blur` 的 `cover` + `blur(` + `z-index: 0`、正图 `.post-image-main`
   必须 `z-index: 1`、线上 `app.js` 必须同时含 `class="post-image-blur"` 与 `class="post-image-main"`），
   真实桶的三档宽度与比例检查照旧全过。
+- 第 17 轮的线上验收（2026-10-09，提交 `774678d`）：Pages 逐字节一致（`poll_pages.py` 第 2 次尝试
+  拉齐 7 个文件全绿：`assets/js/app.js` **101705** 字节 / `assets/css/style.css` **46047** /
+  `assets/js/feed.js` **12354** / `assets/js/home.js` **9264** / `assets/js/profile.js` **14091** /
+  `feed.html` **6785** / `index.html` **8727**）；`live_smoke.py` **52/0**、`privacy_probe.py`
+  **37/0**（均无回归）、一次性探针 `_a1_live_accept.py` **36/0**（图片变换端点本身没动，
+  比例与「不放大」照旧全过）。新增的一次性线上探针 `img_fmt.py`（未入库）在**真实桶**上量了本轮
+  两条省流量改动的实际收益：竖图 `width=400` 由 **11511 → 5398** 字节（`format=webp`，-53%）、
+  `width=64` 由 **1548 → 934**；方图 `width=1200` 由 **86046 → 34102**（-60%）、`width=64`
+  由 **2123 → 1298** —— 这些 URL 都是按 `renderImageUrl` 会拼出的那一串参数请求的，全部 HTTP 200
+  且 `Content-Type` 正确，`app.js` 注释里引用的就是这组数。
+- **本轮没有视觉验收项**：五项改动都不动观感（渲染顺序、传输格式、连接预热、屏幕外的排版时机），
+  唯一可能被肉眼察觉的是 `content-visibility: auto` 让滚动时卡片按需渲染 —— 表现应当是「更跟手」，
+  若在真机上出现滚动条跳动或滚动空白，先摘掉 `style.css` 里那两行 `contain-intrinsic-size`
+  再看（只影响这一处）。
 - **仍未由人眼确认的部分（交给第 4.1 节）**：A1 是视觉改动，观感只能靠站主自测清单第 1 条与第 10 条
   （手机重复）拍板；自动化证明的是「属性与尺寸关系对、原图拿得到」，不替人判断好不好看。
   第一轮人眼反馈已经来了（「竖图两侧留白太大」）并当日修好（见上条 + 第 16 轮记录）；
@@ -493,11 +517,50 @@ A4 申诉 ────────► A3 拒稿原因（同一套「当事人可
   - 基线再走一步：静态检查 656 → **661/0**、运行测试 701 → **707/0**。
   - 已知遗留（等站主定）：发布页的预览框 `.preview` 还是「`contain` + 留白」，没加衬底 ——
     它是本地 `object URL`、面积也小，要统一的话只需在 `post.html` 多放一层。
+- 第 17 轮（2026-10-09）**第二轮只读性能体检 + 第一梯队五项修复**（零迁移、零新依赖、零观感改动）：
+  - **体检怎么做的（只读，不动站）**：把线上页面与子资源逐字节拉回来量体积、用匿名公钥在真实库上
+    计时三种查询、在真实桶上试图片变换端点。结论写进 `outputs/site-perf-review.md`（含三梯队建议
+    与「10 分钟诊断法」）。关键实测：广场首屏要发**三个串行** REST 请求，最好的那轮合计约 **918 ms**
+    （帖子 237/247/471 ms、`post_likes` 278/303/2393 ms、`post_comment_counts` 225/258/867 ms），
+    而**帖子本身只占约四分之一**；静态 wire 合计 **122594 字节**（`supabase.js` 56239 最大）；
+    `school-gate.png` 单图 272501 字节；图片变换端支持 `format=webp`（同宽度省 44%~60%）。
+  - **① 先渲染卡片，再补点赞数与评论数**（本轮主要一条）：`listPosts` / `listMyPosts` /
+    `listFeedPosts`（含只看本圈与合并两条路径）**不再挂计数**，只回帖子本身；新增
+    `Campus.attachEngagement(posts)`（内部 `Promise.all([attachLikes, attachComments])` 并行发，
+    省掉一次往返，且各自内部照旧吃掉错误、拿不到就按 0）。`feed.js` / `home.js` / `profile.js`
+    改成两段式：拿到帖子就 `renderAll()` / `paintLatest()` / `paintMyPosts()`，计数回来再补一次重画。
+    晚到的结果要过两道闸：**轮次**（`seq` / `latestSeq` / `myPostSeq`，期间又刷新过就丢掉）与
+    **用户已动过这批卡片**（`touched` / `latestTouched` / `mineTouched`，看评论区被收回去会很难受）。
+    顺带修掉两个隐藏问题：刷新按钮的转圈原来要等三个请求全部落地（现在只等帖子那一步），
+    以及首页预览区的点赞监听原来挂在 `.then` 里、每次重画都会再叠一层（点一下加两次赞）——
+    现在 `bindLikes(latestEl)` 只在初始化时挂一次。
+  - **② WebP**：`renderImageUrl` 的固定参数改叫 `IMAGE_BASE_QUERY`，新增 `imageTransformQuery()` ——
+    设备支持时追加 `&format=webp`。支持与否用 `document.createElement("canvas").toDataURL("image/webp")`
+    探一次并缓存（`try/catch` 兜住 canvas 不可用的老浏览器 / 被插件拦掉 / 测试环境，探不到就照旧 JPEG，
+    宁可多花流量也不能出破图）。
+  - **③ 模糊衬底降到 64 宽**：新增 `IMAGE_BLUR_WIDTH = 64`，衬底不再借 `IMAGE_WIDTHS[0]`（400）。
+    理由：衬底会被 `blur(18px)` 抹成一片色，400 宽那张对竖图要 11~23 KB，而 64 宽只有 0.9~2.1 KB。
+  - **④ 提前建连**：8 个页面的 `<head>` 都加了 `preconnect` + `dns-prefetch` 到 `config.js` 里那个
+    Supabase 主机（带 `crossorigin`，否则跨域请求不会复用这条连接；只开连接、不 `preload` 任何文件）。
+  - **⑤ 屏幕外的卡片先不算**：`.post` 加 `content-visibility: auto` + 两行 `contain-intrinsic-size`
+    （`0 360px` 给旧浏览器、`auto 360px` 给认它的新浏览器，避免滚动条跳动）。省掉的主要是每张卡片
+    两个大图的解码与模糊衬底的重绘。
+  - **护栏**：`stub.js` 新增 `__mockOpts.holdStats`（把两个统计请求扣在半空中，`__releaseStats()`
+    再放行）与 `canvas.toDataURL` 的 `webp` 假阳性开关；运行测试新增 26 条（含「卡片先出现 / 计数后到 /
+    刷新按钮不转圈 / 期间刷新仍能再发一次 / 支持 WebP 就带 `format=webp`、不支持仍是 JPEG」），
+    静态检查新增 28 条；同时改写了 4 条贴着旧契约的断言（衬底宽度 400 → 64、三个评论计数用例改为
+    先 `attachEngagement` 再断言、并新增「调列表本身不发统计请求」）。
+  - 基线：静态检查 661 → **689/0**、运行测试 707 → **733/0**。
+  - 线上验收见第 5 节「第 17 轮的线上验收」（Pages 7/7 逐字节一致、`live_smoke.py` 52/0、
+    `privacy_probe.py` 37/0、一次性探针 36/0，另在真实桶上量到 WebP 与 64 宽的实际字节）。
+  - **体检里没做的（第二 / 第三梯队，等站主拍板）**：② 的「本地静态图生成多尺寸变体」（`school-gate.png`
+    272 KB 是单图最大一笔，但首页 hero 不是卡片，超出 A1 范围）、③ 的「`supabase.js` 56239 字节是否
+    换成按需加载 / 缩小体积」、以及滚动与筛选等交互侧的进一步优化。建议连同第 4 节的同学反馈一起排期。
 - 已拍板：**「同城大学圈」走方案 B**（同城 / 同校筛选视图，仍是一个广场，`PROJECT_SCOPE.md` 第 5 节不动）；
   第 14 轮把它扩展成**城市圈**，但「不产生独立子广场」这条底线没动 —— 圈子只改排序与筛选，
   没有第二个广场、没有第二套内容。
 - 已确认：**第 4.4 节的判定阈值采用默认值并即刻生效**（≥5 人试用、第 1/2/3 题平均 ≥4.0、
   匿名性小测 ≥5 人全部"看不出"、新增互动 ≥2 项被真实使用）。
-- 拍板后的排队顺序建议：**D2 学校规范化（✅ 第 12 轮）→ D1 洞号与 likes 收口（✅ 第 13 轮）→ B5 城市圈（✅ 第 14 轮）→ A1 图片三件套（✅ 第 16 轮）→ A2/B1/B2/B3/B4 → A3/A4 → D3/D4/D6**（D6 的自检部分已在第 11 轮落地，剩文档收尾；B5 已完成，D2 提供的城市/省份数据在圈里实际用上了）。
+- 拍板后的排队顺序建议：**D2 学校规范化（✅ 第 12 轮）→ D1 洞号与 likes 收口（✅ 第 13 轮）→ B5 城市圈（✅ 第 14 轮）→ A1 图片三件套（✅ 第 16 轮）→ 性能第一梯队（✅ 第 17 轮，插队：站主要求先做只读体检并落地低风险项）→ A2/B1/B2/B3/B4 → A3/A4 → D3/D4/D6**（D6 的自检部分已在第 11 轮落地，剩文档收尾；B5 已完成，D2 提供的城市/省份数据在圈里实际用上了）。
 - Phase 1 遗留的「站主人工实测 + 邀请同学试用」如果还没做，**可以并进本阶段第 4 节一起做**，
   不必单独跑两轮。
