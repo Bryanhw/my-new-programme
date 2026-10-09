@@ -1,0 +1,7 @@
+# Dev/CI tooling for the local test suites (not needed by the site itself).
+#
+#   python tools/static_checks.py      # esprima-based static checks
+#   python tools/run_tests.py          # duktape-based runtime smoke tests
+#   python tools/version_assets.py     # refresh ?v= hashes in the HTML pages
+esprima>=4.0.0
+dukpy>=0.5.0

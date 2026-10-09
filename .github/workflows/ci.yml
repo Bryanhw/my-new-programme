@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/requirements-dev.txt
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tools/requirements-dev.txt
+
+      - name: Static checks (esprima)
+        run: python tools/static_checks.py
+
+      - name: Asset version strings are up to date
+        run: python tools/version_assets.py --check
+
+      - name: Runtime smoke tests (duktape)
+        run: python tools/run_tests.py
