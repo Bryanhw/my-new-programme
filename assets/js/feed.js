@@ -29,6 +29,8 @@
   var loading = false;
   var loaded = [];     // 已经拿到的那批（筛词只在这批里找）
   var keyword = "";    // 当前筛的词（空 = 不筛）
+  var seq = 0;         // 每次 load 自增：晚到的计数不许回填到新的一轮里
+  var touched = false; // 这批卡片用户已经动过（点赞/展开评论）：不再整体重画
 
   /* 地址栏带来的圈子与词：首页的热词 chips 就是这么跳过来的 */
   var params = (function () {
@@ -196,6 +198,8 @@
   function load() {
     if (loading) return;
     loading = true;
+    touched = false;
+    var mySeq = ++seq;
     setRefreshLoading(true);
     feedEl.innerHTML = skeletonList();
 
@@ -204,10 +208,23 @@
       ? C.listFeedPosts({ limit: 50, circleId: id, onlyCircle: onlyCircle() })
       : C.listPosts(50);
 
+    // 第一步：只等帖子本身，先让卡片出现。
     load$.then(function (posts) {
       loaded = posts || [];
       renderBar();
       renderAll();
+
+      // 第二步（不挡渲染）：点赞数 / 评论数回来后再补一次。
+      //   体检实测：三个请求串行约 0.9 秒，帖子本身只占 ~0.25 秒 ——
+      //   先画卡片能让内容早到三分之二的时间，数字晚半拍出现。
+      //   用户已经动过这批卡片就跳过重画（免得把他刚点开的评论收起来）；
+      //   期间又刷新过（seq 变了）也跳过，新的一轮会自己补。
+      if (C.attachEngagement) {
+        C.attachEngagement(loaded).then(function () {
+          if (mySeq !== seq || touched) return;
+          renderAll();
+        });
+      }
     }).catch(function (err) {
       feedEl.innerHTML =
         '<div class="notice notice-error">加载失败：' + C.escapeHtml(err.message) + "</div>" +
@@ -215,6 +232,7 @@
       var retry = document.getElementById("retry");
       if (retry) retry.addEventListener("click", load);
     }).then(function () {
+      // 注意：这里只等「帖子」那一步 —— 统计请求还在路上不该让刷新按钮一直转圈
       loading = false;
       setRefreshLoading(false);
     });
@@ -257,6 +275,9 @@
 
   /* 点赞 */
   feedEl.addEventListener("click", function (e) {
+    // 用户已经动过这批卡片（点赞 / 展开评论 / 看图）：计数回来时不要再整体重画，
+    // 否则刚点开的评论会被收回去。点完这一下，数字留在原地就够了。
+    touched = true;
     var btn = e.target.closest ? e.target.closest("[data-like]") : null;
     if (!btn) return;
 

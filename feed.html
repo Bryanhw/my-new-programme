@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#CB9243">
+<!-- 提前和 Supabase 握手：广场 / 首页的首屏都要等它那边两三个请求，
+     先把 DNS + TLS 建好，能省掉一段完全空等的时间（实测首屏那几个 REST 中位 250ms 上下）。
+     地址必须与 assets/js/config.js 里的 SUPABASE_URL 一致，换项目时两处一起改。
+     crossorigin：Supabase 的请求是跨域带 CORS 的，不加这个属性浏览器不会复用这条连接。 -->
+<link rel="preconnect" href="https://gvmqmzgzwnvseubpvqdx.supabase.co" crossorigin>
+<link rel="dns-prefetch" href="https://gvmqmzgzwnvseubpvqdx.supabase.co">
 <meta name="description" content="看看同学们都在分享什么。">
 <!-- 分享卡片：og:image / og:url 用完整网址，社交平台才能抓到（已上线 GitHub Pages）-->
 <meta property="og:type" content="website">

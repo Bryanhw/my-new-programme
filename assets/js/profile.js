@@ -22,6 +22,8 @@
 
   var mineCard   = document.getElementById("mine-card");
   var mineEl     = document.getElementById("mine-list");
+  var myPostSeq  = 0;      // 每次刷新自增：晚到的计数不许回填到新的一轮里
+  var mineTouched = false; // 这批卡片用户已经动过（删过 / 展开过评论）：不再整体重画
 
   var reportsCard = document.getElementById("reports-card");
   var reportsEl   = document.getElementById("reports-list");
@@ -137,31 +139,47 @@
     }
   }
 
+  function paintMyPosts(posts) {
+    if (!posts.length) {
+      mineEl.innerHTML =
+        '<div class="empty">' +
+          '<div class="empty-icon">📮</div>' +
+          '<div class="empty-title">还没有发布过内容</div>' +
+          '<div class="empty-text">写下第一句话，或者分享一张今天的照片。</div>' +
+        "</div>" +
+        '<a class="btn btn-primary btn-block mt-16" href="post.html">去分享</a>';
+      return;
+    }
+
+    mineEl.innerHTML = posts.map(function (p) {
+      return C.renderPostCard(p) +
+        '<div class="text-center mb-16" style="margin-top:-8px">' +
+          '<button class="link-plain" data-del="' + C.escapeHtml(p.id) + '">删除这条</button>' +
+        "</div>";
+    }).join("");
+  }
+
   function loadMyPosts() {
     C.listMyPosts().then(function (posts) {
-      statPosts.textContent = posts.length;
+      var rows = posts || [];
+      myPostSeq += 1;
+      var mySeq = myPostSeq;
+      mineTouched = false;
+
+      statPosts.textContent = rows.length;
 
       var anonCount = 0;
-      posts.forEach(function (p) { if (p.is_anonymous) anonCount++; });
+      rows.forEach(function (p) { if (p.is_anonymous) anonCount++; });
       statLikes.textContent = anonCount;
 
-      if (!posts.length) {
-        mineEl.innerHTML =
-          '<div class="empty">' +
-            '<div class="empty-icon">📮</div>' +
-            '<div class="empty-title">还没有发布过内容</div>' +
-            '<div class="empty-text">写下第一句话，或者分享一张今天的照片。</div>' +
-          "</div>" +
-          '<a class="btn btn-primary btn-block mt-16" href="post.html">去分享</a>';
-        return;
-      }
-
-      mineEl.innerHTML = posts.map(function (p) {
-        return C.renderPostCard(p) +
-          '<div class="text-center mb-16" style="margin-top:-8px">' +
-            '<button class="link-plain" data-del="' + C.escapeHtml(p.id) + '">删除这条</button>' +
-          "</div>";
-      }).join("");
+      // 先画卡片，点赞数 / 评论数回来后再补一次（理由见 app.js 的 attachEngagement）。
+      // 用户已经动过（删过一条 / 展开过评论）或期间又刷新过，就跳过重画。
+      paintMyPosts(rows);
+      if (!rows.length || !C.attachEngagement) return;
+      C.attachEngagement(rows).then(function () {
+        if (mySeq !== myPostSeq || mineTouched) return;
+        paintMyPosts(rows);
+      });
     }).catch(function (err) {
       mineEl.innerHTML = '<div class="notice notice-error">加载失败：' + C.escapeHtml(err.message) + "</div>";
     });
@@ -223,6 +241,8 @@
 
   /* 删除自己的帖子 */
   mineEl.addEventListener("click", function (e) {
+    // 用户动过这批卡片了：计数回来时不再整体重画（免得刚点开的评论被收回去）
+    mineTouched = true;
     var btn = e.target.closest ? e.target.closest("[data-del]") : null;
     if (!btn) return;
 

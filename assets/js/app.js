@@ -30,10 +30,36 @@ window.Campus = (function () {
    *   · 同一张原图按下面几个宽度走 Supabase 的图片变换端，手机不必为了看一张图下整张原图。
    *   实测（2026-10-01，线上桶里的真图）：只给 width 时后端只缩宽度不缩高度（739×1600 → 400×1600），
    *   图会被横向压扁；必须带 resize=contain 才是等比例缩放（400×866）。quality=75 再省一大截
-   *   （89212 → 34867 字节，约 -61%）。这行参数是踩过坑的，改之前先看图会不会变形。 */
+   *   （89212 → 34867 字节，约 -61%）。这行参数是踩过坑的，改之前先看图会不会变形。
+   *   2026-10-09 第二轮体检后追加两条（都是为了「打开广场的那一下更跟手」）：
+   *   · format=webp：同宽度再省一半（实测 86046 → 34102 字节，-60%）；老浏览器探不到 WebP 就退回 JPEG；
+   *   · 衬底只用 64 宽的极小图（实测 934～2123 字节）。它会被 filter: blur(18px) 抹成一片色，
+   *     用 400 宽那张纯属白花流量，而且模糊一张 64px 的图对手机 GPU 几乎免费。 */
   var IMAGE_WIDTHS = [400, 800, 1200];
-  var IMAGE_TRANSFORM_QUERY = "&resize=contain&quality=75";
+  var IMAGE_BASE_QUERY = "&resize=contain&quality=75";
+  var IMAGE_BLUR_WIDTH = 64;
   var IMAGE_SIZES = "(max-width: 760px) 100vw, 680px"; // .wrap 最宽 720px，卡片里还要扣掉左右内边距
+
+  /* 这台设备认不认 WebP：canvas 探一次，同步、不额外下东西，结果记下来复用。
+     canvas 不可用（老浏览器、被插件拦掉、测试环境）就按不支持处理 —— 宁可多花点流量，
+     也不能让人看到破图。 */
+  var webpOk = null;
+  function webpSupported() {
+    if (webpOk !== null) return webpOk;
+    webpOk = false;
+    try {
+      var c = document.createElement("canvas");
+      if (c && typeof c.toDataURL === "function") {
+        webpOk = c.toDataURL("image/webp").indexOf("data:image/webp") === 0;
+      }
+    } catch (e) { webpOk = false; }
+    return webpOk;
+  }
+
+  /** 图片变换的查询串：resize / quality 是踩过坑的固定参数，只有 format 看设备能力 */
+  function imageTransformQuery() {
+    return IMAGE_BASE_QUERY + (webpSupported() ? "&format=webp" : "");
+  }
 
   var client = null;
   var configError = null;
@@ -389,7 +415,9 @@ window.Campus = (function () {
       });
   }
 
-  /** 取内容流（最新在前） */
+  /** 取内容流（最新在前）。
+   *  只取帖子本身：点赞数 / 评论数由调用方拿到数据后调 attachEngagement 补 ——
+   *  两个统计请求不再挡住第一张卡片（实测三个请求串行约 0.9 秒，分开能省掉三分之二）。 */
   function listPosts(limit) {
     if (!client) return Promise.reject(new Error(configError));
     return withAnonCodeFallback(function () {
@@ -400,13 +428,14 @@ window.Campus = (function () {
     })
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
-        return attachLikes(res.data || []).then(attachComments);
+        return res.data || [];
       });
   }
 
   /** 取「我发过的帖子」。
    *  过滤在服务端完成：视图 public.my_posts 用 auth.uid() 推导，客户端不再
-   *  （也没有权限）用 author_id 过滤 —— 列级权限同样管住 WHERE 里的列。 */
+   *  （也没有权限）用 author_id 过滤 —— 列级权限同样管住 WHERE 里的列。
+   *  同样只返回帖子本身，计数交给 attachEngagement（理由见 listPosts）。 */
   function listMyPosts(limit) {
     if (!client) return Promise.reject(new Error(configError));
     return withAnonCodeFallback(function () {
@@ -417,7 +446,7 @@ window.Campus = (function () {
     })
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
-        return attachLikes(res.data || []).then(attachComments);
+        return res.data || [];
       });
   }
 
@@ -502,6 +531,8 @@ window.Campus = (function () {
    *   opts.circleId  已选圈子（空 = 没选，走原来的单请求）
    *   opts.onlyCircle 只看本圈（不再拉全量）
    * 返回的帖子会带上 circle_id / circle_name（本圈批次在前），卡片据此标圈名。
+   * 和 listPosts 一样只给帖子本身：计数由调用方拿到数据后补（attachEngagement），
+   * 这样第一张卡片不用等两个统计请求。
    */
   function listFeedPosts(opts) {
     opts = opts || {};
@@ -512,15 +543,13 @@ window.Campus = (function () {
       return listPosts(limit);
     }
     if (opts.onlyCircle) {
-      return listCirclePosts(circleId, limit).then(function (posts) {
-        return attachLikes(posts).then(attachComments);
-      });
+      return listCirclePosts(circleId, limit);
     }
     return listCirclePosts(circleId, limit).then(function (mine) {
       return listPosts(limit).then(function (all) {
-        // 合并之后补一次点赞/评论数：本圈那批是单独取的，不补的话
-        // 卡片上的 🤍 会全变成 0 —— 换了排序方式不该让计数消失。
-        return attachLikes(mergeFeedPosts(mine, all)).then(attachComments);
+        // 合并后只返回一份（本圈那批的对象在前）：换了排序方式不该让内容重复，
+        // 计数同样交给调用方补。
+        return mergeFeedPosts(mine, all);
       });
     });
   }
@@ -808,7 +837,7 @@ window.Campus = (function () {
   /**
    * A1：把 Storage 里的原图换成一个更小的版本（浏览器的 srcset 用得上）。
    * 只有「本桶里的相对路径」能变换；外链（http/https）返回空串，调用方会退回原图，
-   * 不会出现半张图或坏图。参数坑见文件头的 IMAGE_TRANSFORM_QUERY 注释。
+   * 不会出现半张图或坏图。参数坑见文件头的 IMAGE_BASE_QUERY / imageTransformQuery 注释。
    */
   function renderImageUrl(path, width) {
     if (!path || /^https?:\/\//i.test(path)) return "";
@@ -816,7 +845,7 @@ window.Campus = (function () {
     if (!base) return "";
     var key = String(path).split("/").map(encodeURIComponent).join("/");
     return base + "/storage/v1/render/image/public/" + encodeURIComponent(BUCKET) + "/" + key +
-      "?width=" + width + IMAGE_TRANSFORM_QUERY;
+      "?width=" + width + imageTransformQuery();
   }
 
   /** A1：<img> 的 srcset（多个宽度让浏览器自己挑）。拿不到尺寸版本就返回空串，退回单张 src */
@@ -1322,6 +1351,25 @@ window.Campus = (function () {
         posts.forEach(function (p) { p.comment_count = 0; });
         return posts;
       });
+  }
+
+  /**
+   * 给一批帖子补上点赞数与评论数，补齐后 resolve（对象是原地改的，调用方手里的数组不用换）。
+   *
+   * 为什么把计数从 listPosts / listMyPosts / listFeedPosts 里拆出来：
+   *   体检实测广场首屏要发三个请求 —— 帖子 247ms、点赞视图 303ms、评论数 258ms，
+   *   串行下来约 0.9 秒，而原来的写法是「三个都回来才画第一张卡片」。
+   *   现在页面先画卡片（~250ms 就能看到内容），计数回来后再补一次，
+   *   看到的顺序没变，只是不用为两个数字干等三分之二的时间。
+   *
+   * 两个统计请求互不依赖，用 Promise.all 并行发（省掉一次往返）；
+   * 各自内部已经吃掉错误，计数拿不到就按 0 显示，不影响列表。
+   */
+  function attachEngagement(posts) {
+    if (!posts || !posts.length) return Promise.resolve(posts || []);
+    return Promise.all([attachLikes(posts), attachComments(posts)]).then(function () {
+      return posts;
+    });
   }
 
   /**
@@ -1831,9 +1879,10 @@ window.Campus = (function () {
       // A1：整块可点 → 打开原图浮层；<img> 带上 srcset / sizes / decoding=async
       // 站主验收反馈（竖图两侧发空，见 style.css 的 .post-image-blur）：衬底用**同一张图**
       // 模糊后 cover 铺满展示盒；图本身仍然整张不裁，盒子比例没变所以不会抖。
-      // 衬底只取最小一档（400w）省流量：手机上正图本来也会选 400w，同一个地址直接命中缓存；
-      // 桌面端多下约二十几 KB。外链没有变换能力，就退回原始地址（同一地址同样命中缓存）。
-      var blur = renderImageUrl(post.image_path, IMAGE_WIDTHS[0]) || url;
+      // 衬底走 64 宽那一档（IMAGE_BLUR_WIDTH）：它会被 blur(18px) 抹成一片色，
+      // 用 400 宽那张纯属白花流量（实测 64w 只有 0.9～2.1KB，而竖图的 400w 要 11～23KB），
+      // 模糊一张 64px 的图对手机 GPU 也几乎免费。外链没有变换能力，退回原始地址。
+      var blur = renderImageUrl(post.image_path, IMAGE_BLUR_WIDTH) || url;
       html += '<div class="post-image">';
       html += '<button class="post-image-open" type="button" data-image="' + escapeHtml(url) +
         '" aria-label="查看原图">';
@@ -2327,6 +2376,8 @@ window.Campus = (function () {
     listCircleHotwords: listCircleHotwords,
     filterPostsByTerm: filterPostsByTerm,
     listMyPosts: listMyPosts,
+    // 计数与帖子分开取：调用方先画卡片，再用它补点赞数 / 评论数（见 attachEngagement）
+    attachEngagement: attachEngagement,
     deletePost: deletePost,
     toggleLike: toggleLike,
     imageUrl: imageUrl,
@@ -2336,6 +2387,7 @@ window.Campus = (function () {
     openImageViewer: openImageViewer,
     closeImageViewer: closeImageViewer,
     IMAGE_WIDTHS: IMAGE_WIDTHS,
+    IMAGE_BLUR_WIDTH: IMAGE_BLUR_WIDTH,
     IMAGE_SIZES: IMAGE_SIZES,
     saveNickname: saveNickname,
 

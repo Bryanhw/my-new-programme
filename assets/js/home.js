@@ -140,31 +140,50 @@
   /* ---------------------------------------------------------------
    * 最新动态预览（最多 3 条；选了圈子就本圈优先）
    * --------------------------------------------------------------- */
+  var latestSeq = 0;         // 每次刷新自增：晚到的计数不许回填到新的一轮里
+  var latestTouched = false; // 这批卡片用户已经动过：不再整体重画
+
+  function paintLatest(posts) {
+    if (!posts.length) {
+      latestEl.innerHTML =
+        '<div class="empty">' +
+          '<div class="empty-icon">🍃</div>' +
+          '<div class="empty-title">这里还很安静</div>' +
+          '<div class="empty-text">成为第一个分享的人吧，<br>一句话、一张照片，都很好。</div>' +
+        "</div>" +
+        '<a class="btn btn-primary btn-block mt-16" href="post.html">✏️ 写下第一条</a>';
+      return;
+    }
+    latestEl.innerHTML = posts.map(C.renderPostCard).join("") +
+      '<a class="btn btn-ghost btn-block" href="feed.html">去看看更多同学的分享 →</a>';
+  }
+
   function renderLatest() {
     if (!C.isReady()) {
       latestEl.innerHTML = C.setupCard();
       return;
     }
+    var mySeq = ++latestSeq;
+    latestTouched = false;
     var circleId = currentCircle();
     var load = (circleId && C.listFeedPosts)
       ? C.listFeedPosts({ limit: 3, circleId: circleId })
       : C.listPosts(3);
 
+    // 先画卡片，点赞数 / 评论数回来后再补一次（理由见 app.js 的 attachEngagement）：
+    // 首页只是三张预览，更不该为了两个数字一直空着。
+    // 用户已经动过这批卡片、或期间又刷新过，就跳过重画。
     load.then(function (posts) {
-      if (!posts.length) {
-        latestEl.innerHTML =
-          '<div class="empty">' +
-            '<div class="empty-icon">🍃</div>' +
-            '<div class="empty-title">这里还很安静</div>' +
-            '<div class="empty-text">成为第一个分享的人吧，<br>一句话、一张照片，都很好。</div>' +
-          "</div>" +
-          '<a class="btn btn-primary btn-block mt-16" href="post.html">✏️ 写下第一条</a>';
-        return;
-      }
-      latestEl.innerHTML = posts.map(C.renderPostCard).join("") +
-        '<a class="btn btn-ghost btn-block" href="feed.html">去看看更多同学的分享 →</a>';
-      bindLikes(latestEl);
+      if (mySeq !== latestSeq) return;
+      var rows = posts || [];
+      paintLatest(rows);
+      if (!rows.length || !C.attachEngagement) return;
+      C.attachEngagement(rows).then(function () {
+        if (mySeq !== latestSeq || latestTouched) return;
+        paintLatest(rows);
+      });
     }).catch(function (err) {
+      if (mySeq !== latestSeq) return;
       latestEl.innerHTML =
         '<div class="notice notice-error">加载失败：' + C.escapeHtml(err.message) + "</div>";
     });
@@ -173,6 +192,8 @@
   /* 点赞（预览区同样可点） */
   function bindLikes(root) {
     root.addEventListener("click", function (e) {
+      // 用户动过预览区了（点赞 / 展开评论 / 看图）：计数回来时不再整体重画
+      latestTouched = true;
       var btn = e.target.closest ? e.target.closest("[data-like]") : null;
       if (!btn) return;
       var id = btn.getAttribute("data-like");
@@ -193,6 +214,9 @@
   }
 
   renderIdentity();
+  // 点赞的监听只挂一次（卡片会整块重画，挂在容器上才不会被重画弄丢，
+  // 也避免每重画一次就多叠一个监听 → 点一下加两次赞）
+  bindLikes(latestEl);
   renderLatest();
   if (renderCirclePicker()) renderCircleHot();
 })();

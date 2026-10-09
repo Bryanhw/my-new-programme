@@ -404,6 +404,15 @@ button, input, textarea, select {
 /* ------------------------------ 帖子卡片 ------------------------------ */
 .post {
   animation: rise 0.4s var(--ease) both;
+  /* 打开广场那一下更跟手：屏幕外的卡片先不排版也不上色 —— 省掉的主要是每张卡片
+     那两个大图的解码，以及 filter: blur(18px) 那张衬底的重绘，滚到跟前再算。
+     contain-intrinsic-size 是「还没量过时按这个高度占位」：
+       · 旧浏览器只认第一行（固定 360px），滚动条可能在滚动时轻微跳动，内容不受影响；
+       · 新浏览器（Chrome 111+）认第二行的 auto —— 卡片真正渲染过一次后记住自己的高度，
+         之后连滚动条都不会跳。 */
+  content-visibility: auto;
+  contain-intrinsic-size: 0 360px;
+  contain-intrinsic-size: auto 360px;
 }
 
 @keyframes rise {
