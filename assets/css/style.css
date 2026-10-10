@@ -1714,6 +1714,166 @@ body.modal-open { overflow: hidden; }
   .circle-only { margin-left: auto; }
 }
 
+/* --------------------- 卡片「⋯」菜单 / 分享高亮 / 本机隐藏（F1·F6） --------------------- */
+/* 举报原来是一个裸文字按钮，现在和「复制链接」「不感兴趣」一起收进右上角的「⋯」。
+   它仍然带着 .report-btn 这个类（举报弹窗那条链路没动），只是换了位置。 */
+/* F1 的一条硬约束：菜单是绝对定位的，要往下探一整块（三个菜单项约 112px），
+   而 .post 上有 content-visibility: auto —— 它顺带给了卡片 contain: paint，
+   越过卡片边框的部分会被**真的裁掉**（不是画上去再被别的元素盖住，
+   z-index 再高也没用）。卡片最矮的一档是「一句话、没图」，窄屏（320px）下
+   约 178px 高，菜单底边离卡片底边只剩几像素：任何一台浏览器行高差一点点，
+   最后一项「不感兴趣」就会被切掉。所以把「卡片要装得下菜单」写成一条明确下限。
+   这不是排版洁癖：200px 只比最矮的那档高二十来像素，看不出变化。 */
+.post { min-height: 200px; }
+
+.post-more {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.post-more-btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-faint);
+  font-size: 19px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.18s var(--ease);
+}
+.post-more-btn:hover,
+.post-more-btn[aria-expanded="true"] {
+  background: var(--surface-soft);
+  color: var(--text-muted);
+}
+.post-more-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+.post-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  min-width: 134px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+/* display:flex 会盖掉 hidden 属性默认的 display:none，所以这里点明一次 */
+.post-menu[hidden] { display: none; }
+
+/* 写在后半段，是为了盖住 .report-btn 那两条（同一个「举报」按钮） */
+.post-menu .link-plain {
+  text-decoration: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.post-menu .link-plain:hover {
+  background: var(--brand-ghost);
+  color: var(--brand-strong);
+  text-decoration: none;
+}
+
+/* F1/B4：从分享直链进来的那一条 —— 柔和地圈一下，别做得像警告 */
+.post-target {
+  box-shadow: 0 0 0 2px var(--brand), var(--shadow-md);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes target-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px var(--brand), var(--shadow-sm); }
+    50%      { box-shadow: 0 0 0 8px rgba(255, 140, 105, 0.20), var(--shadow-md); }
+  }
+  .post-target {
+    animation: rise 0.4s var(--ease) both, target-pulse 1.5s var(--ease) 2;
+  }
+}
+
+/* F6：不感兴趣 —— 只在本机隐藏，卡片收起成一行，但留一个撤销口子 */
+.post-hidden {
+  min-height: 0;              /* 收起的一行不需要装菜单，把上面那条下限放行 */
+  padding: 14px 20px;
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+.post-hidden-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.post-hidden-text { flex: 1; min-width: 0; }
+
+/* 轻提示条（复制链接成功 / 撤销隐藏）：贴在底部导航上方 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(92vw, 460px);
+  padding: 11px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--ink-solid);
+  color: #FFF6EF;
+  font-size: 13.5px;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: translate(-50%, 12px);
+  pointer-events: none;
+  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.toast[hidden] { display: none; }
+.toast-action {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  color: var(--ink-sun);
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* U1：宽屏（≥768px）下广场改两列 —— 纯 CSS，桌面不再是中间一条窄栏。
+   只用 auto-fill，窗口窄了自己就退回一列，不需要第二个断点；
+   第 17 轮加的 content-visibility: auto 管的是「屏外的卡片先不排版」，
+   和网格布局不冲突。 */
+@media (min-width: 768px) {
+  #feed {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    align-items: start;
+  }
+  /* 空态 / 错误提示 / 整块按钮要占满整行，不能挤在半列里 */
+  #feed > .empty,
+  #feed > .notice,
+  #feed > .btn,
+  #feed > a.btn { grid-column: 1 / -1; }
+  #feed > .skeleton-card { margin-bottom: 0; }
+}
+
 /* ------------------------------ 看原图浮层（A1） ------------------------------ */
 /* 复用 .modal-backdrop 的遮罩 / 滚动锁 / 居中方式（子元素 margin:auto，
    装得下就居中、装不下就能滚），这里只把内容换成一张原图 */

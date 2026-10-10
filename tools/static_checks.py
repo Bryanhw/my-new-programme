@@ -1413,6 +1413,141 @@ check("A6: the blur layer no longer borrows the smallest sharp width",
       "IMAGE_WIDTHS[0]) || url" not in a1_app)
 
 print()
+print("R18) F1 卡片「...」菜单 + 分享直链、F6 本机隐藏、U1 桌面双列、U2 计数占位")
+r18_app = sources.get("app.js", "")
+r18_feed = sources.get("feed.js", "")
+r18_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
+r18_foot = _fn_body(r18_app, "renderPostCard")
+
+# ---- U2：计数还没回来时印占位符，不印 0 -----------------------------------
+check("R18/U2: the count slot has a placeholder for 'not known yet'",
+      'COUNT_PLACEHOLDER = "\u2013"' in r18_app)
+check("R18/U2: ...an en dash, not a stand-in zero",
+      'COUNT_PLACEHOLDER = "0"' not in r18_app)
+check("R18/U2: countText is what decides: a real number, or the placeholder",
+      "function countText(n)" in r18_app
+      and '(typeof n === "number" && isFinite(n)) ? String(n) : COUNT_PLACEHOLDER' in r18_app)
+check("R18/U2: the card prints both counts through countText, never a raw field",
+      r18_foot.count("countText(") == 2
+      and "countText(post.like_count)" in r18_foot
+      and "countText(post.comment_count)" in r18_foot,
+      r18_foot.count("countText("))
+check("R18/U2: countText is exported for the pages that repaint counts later",
+      "countText: countText" in r18_app)
+
+# ---- F1：卡片右上角的「⋯」菜单 -------------------------------------------
+check("R18/F1: the card grew a '...' menu button",
+      "function moreMenuHtml(post)" in r18_app and 'class="post-more-btn"' in r18_app)
+check("R18/F1: the menu carries the three entries",
+      'data-copy-link="' in r18_app and 'data-report="' in r18_app and 'data-hide-post="' in r18_app)
+check("R18/F1: the report entry stays the same button the report flow already knows",
+      'class="link-plain report-btn"' in r18_app)
+check("R18/F1: the card head renders the menu",
+      "moreMenuHtml(post)" in r18_foot)
+check("R18/F1: the old bare report button is gone from the card foot",
+      'data-report="' not in r18_foot and "report-btn" not in r18_foot)
+check("R18/F1: the menu starts closed",
+      '<div class="post-menu" role="menu" hidden>' in r18_app)
+check("R18/F1: the button says out loud whether it is open",
+      'aria-haspopup="true"' in r18_app
+      and 'setAttribute("aria-expanded", "true")' in r18_app
+      and 'setAttribute("aria-expanded", "false")' in r18_app)
+check("R18/F1: only one card menu is open at a time",
+      "function closePostMenus()" in r18_app and r18_app.count("openMenuBtn = btn") == 1)
+check("R18/F1: the card click delegate routes the menu, the copy and the hide",
+      'closest("[data-post-menu]")' in r18_app and 'closest("[data-copy-link]")' in r18_app
+      and 'closest("[data-hide-post]")' in r18_app)
+check("R18/F1: a click outside the card, or Escape, closes it",
+      'closest(".post-more")' in r18_app and "closePostMenus();" in r18_app
+      and 'e.key === "Escape"' in r18_app)
+
+# ---- F1/B4：分享直链 ------------------------------------------------------
+check("R18/F1: the share link is built from the site root, not from the current page",
+      "function postShareUrl(postId)" in r18_app and "function siteBase()" in r18_app
+      and '"feed.html?post=" + encodeURIComponent(' in r18_app)
+check("R18/F1: it points at the feed, because there is no post detail page",
+      "post.html?post=" not in r18_app and "post.html?post=" not in r18_feed)
+check("R18/F1: copying falls back when the clipboard API is missing",
+      "navigator.clipboard" in r18_app and 'document.execCommand("copy")' in r18_app)
+check("R18/F1: the copy gives feedback, and a manual fallback when it fails",
+      "function copyPostLink(postId)" in r18_app
+      and "\u94fe\u63a5\u5df2\u590d\u5236" in r18_app
+      and "\u6ca1\u590d\u5236\u4e0a" in r18_app)
+check("R18/F1+B4: feed.js reads the ?post= id from the address bar",
+      'var out = { circle: "", q: "", post: "" };' in r18_feed
+      and 'var targetId = params.post || "";' in r18_feed)
+check("R18/F1+B4: it only rings the card whose id matches, exactly once",
+      "function markTarget(html)" in r18_feed
+      and "'<article class=\"card post post-target\"'" in r18_feed
+      and "if (targetId) noteTarget(hit);" in r18_feed)
+check("R18/F1+B4: a shared id that is not in the batch is reported, not faked",
+      "\u5df2\u7ecf\u9ad8\u4eae" in r18_feed and "\u4e0d\u5728\u8fd9\u6279\u5185\u5bb9\u91cc" in r18_feed)
+check("R18/F1+B4: it scrolls to that card once, and only once",
+      "if (targetScrolled) return;" in r18_feed
+      and 'scrollIntoView({ block: "center" })' in r18_feed)
+
+# ---- F6：不感兴趣 = 本机隐藏，可撤销 --------------------------------------
+_hide_body = _fn_body(r18_app, "hidePost")
+check("R18/F6: 'not interested' is remembered on this device",
+      'HIDDEN_POSTS_KEY = "campus.hiddenPosts"' in r18_app
+      and "window.localStorage.setItem(HIDDEN_POSTS_KEY" in r18_app)
+check("R18/F6: hiding a card never becomes a server round-trip",
+      _hide_body != "" and ".from(" not in _hide_body and ".rpc(" not in _hide_body
+      and "fetch(" not in _hide_body)
+check("R18/F6: a hidden card collapses, but keeps a way back",
+      "function hiddenCardHtml(post)" in r18_app and 'data-unhide-post="' in r18_app
+      and "function unhidePost(id)" in r18_app)
+check("R18/F6: every list that draws a card respects the local hide",
+      "isPostHidden(post.id)" in r18_foot)
+check("R18/F6: a corrupt local store is ignored instead of breaking the page",
+      "} catch (e) {\n      return [];" in r18_app)
+check("R18/F6: the local store is the only place that list lives",
+      "campus.hiddenPosts" in r18_app
+      and r18_app.count("HIDDEN_POSTS_KEY") == 3)
+
+# ---- F1：轻提示条 ---------------------------------------------------------
+check("R18/F1: the toast is a real status region, not a floating div",
+      'id="toast" class="toast" role="status" aria-live="polite" hidden' in read(os.path.join(ROOT, "feed.html")))
+_r18_card_pages = ["index.html", "feed.html", "post.html", "profile.html"]
+_r18_no_toast = [p for p in _r18_card_pages if 'id="toast"' not in read(os.path.join(ROOT, p))]
+check("R18/F1: every page that can show a card has somewhere to put the toast",
+      not _r18_no_toast, _r18_no_toast)
+
+# ---- U1 / F1 样式 --------------------------------------------------------
+for _sel in (".post-more", ".post-more-btn", ".post-menu", ".post-menu[hidden]",
+             ".post-menu .link-plain", ".post-target", ".post-hidden",
+             ".post-hidden-row", ".toast", ".toast[hidden]"):
+    check("R18/CSS: style.css has " + _sel, _a1_block(r18_css, _sel) != "")
+check("R18/CSS: the menu entries read as menu entries, not as the old foot button",
+      "text-align: left" in _a1_block(r18_css, ".post-menu .link-plain")
+      and "padding: 8px 10px" in _a1_block(r18_css, ".post-menu .link-plain"))
+check("R18/CSS: the ringed card is a soft ring, not a warning colour",
+      "box-shadow: 0 0 0 2px var(--brand)" in _a1_block(r18_css, ".post-target"))
+check("R18/CSS: the toast hides for real when it is hidden (display wins over flex)",
+      "display: none" in _a1_block(r18_css, ".toast[hidden]"))
+check("R18/CSS: so does the menu", "display: none" in _a1_block(r18_css, ".post-menu[hidden]"))
+# 「⋯」菜单是绝对定位的，而卡片带着 content-visibility: auto —— 它顺带给了卡片
+# contain: paint，越过卡片的部分是真的被裁掉（真实浏览器夹具量过：窄屏最矮的卡片
+# 178px，菜单顶边 60 + 高 112 = 底边 172，只剩几像素）。所以卡片高度要有下限。
+check("R18/CSS: the card is floored at a height that can actually hold its own menu",
+      re.search(r"(?m)^\.post\s*\{[^}]*min-height:\s*200px", r18_css) is not None)
+check("R18/CSS: ...but the collapsed 'hidden' row is let off that floor",
+      "min-height: 0" in _a1_block(r18_css, ".post-hidden"))
+
+_u1_at = r18_css.find("@media (min-width: 768px)")
+_u1 = r18_css[_u1_at:_u1_at + 500] if _u1_at >= 0 else ""
+check("R18/U1: the wide-screen layout is a plain CSS media query",
+      _u1_at >= 0 and _u1.startswith("@media (min-width: 768px)"))
+check("R18/U1: ...that turns the feed into a two-up grid",
+      "#feed {" in _u1 and "display: grid" in _u1
+      and "grid-template-columns: repeat(auto-fill, minmax(320px, 1fr))" in _u1, _u1[:120])
+check("R18/U1: empty states and whole-width prompts still take the full row",
+      "grid-column: 1 / -1" in _u1)
+check("R18/U1: the grid is CSS only, the pages never switch columns in JS",
+      "768" not in r18_app and "min-width" not in r18_feed)
+check("R18/U1: it does not fight the off-screen deferral added in round 17",
+      "content-visibility: auto" in _a1_block(r18_css, ".post"))
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)

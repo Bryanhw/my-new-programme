@@ -32,15 +32,16 @@
   var seq = 0;         // 每次 load 自增：晚到的计数不许回填到新的一轮里
   var touched = false; // 这批卡片用户已经动过（点赞/展开评论）：不再整体重画
 
-  /* 地址栏带来的圈子与词：首页的热词 chips 就是这么跳过来的 */
+  /* 地址栏带来的圈子、词与「分享过来的那一条」：首页的热词 chips 和
+     卡片上的「复制链接」就是这么跳过来的 */
   var params = (function () {
-    var out = { circle: "", q: "" };
+    var out = { circle: "", q: "", post: "" };
     var qs = String(window.location.search || "").replace(/^\?/, "");
     var pairs = qs ? qs.split("&") : [];
     for (var i = 0; i < pairs.length; i++) {
       var kv = pairs[i].split("=");
       var k = decodeURIComponent(kv[0] || "");
-      if (k !== "circle" && k !== "q") continue;
+      if (k !== "circle" && k !== "q" && k !== "post") continue;
       var v = "";
       try { v = decodeURIComponent((kv[1] || "").replace(/\+/g, " ")); } catch (e) { v = ""; }
       out[k] = v;
@@ -50,6 +51,35 @@
 
   if (params.circle && C.listCircles().length) C.setCircle(params.circle);
   keyword = params.q || "";
+
+  /* F1/B4：分享直链 feed.html?post=<id> —— 打开后滚到那条并高亮。
+     站点没有帖子详情页（post.html 是发布页），所以这里只做「至少高亮」这件事：
+     给那条卡片多戴一个 class，滚过去，并说清它是被人分享进来的。 */
+  var targetId = params.post || "";
+  var targetScrolled = false;
+
+  /** 给分享进来的那条卡片多戴一个 class（高亮交给 CSS） */
+  function markTarget(html) {
+    return html.indexOf('<article class="card post"') === 0
+      ? html.replace('<article class="card post"', '<article class="card post post-target"')
+      : html;
+  }
+
+  /** 提示 + 滚动。找不到时如实说明原因，不假装高亮过了。 */
+  function noteTarget(found) {
+    if (found) {
+      C.showNotice(noticeEl, "info", "这条是同学分享给你的，已经高亮。");
+    } else {
+      C.showNotice(noticeEl, "info",
+        "分享链接里的那条不在这批内容里 —— 可能已经下架，或者比最近加载的 50 条更早。");
+    }
+    if (targetScrolled) return;
+    var el = feedEl.querySelector ? feedEl.querySelector(".post-target") : null;
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ block: "center" });
+      targetScrolled = true;
+    }
+  }
 
   function circleId() { return C.getCircle(); }
   function onlyCircle() { return !!(onlyEl && onlyEl.checked); }
@@ -182,7 +212,14 @@
         '<a class="btn btn-primary btn-block mt-16" href="post.html">✏️ 我要分享</a>';
       return;
     }
-    feedEl.innerHTML = posts.map(C.renderPostCard).join("");
+    var hit = false;
+    feedEl.innerHTML = posts.map(function (p) {
+      var card = C.renderPostCard(p);
+      if (!targetId || p.id !== targetId) return card;
+      hit = true;
+      return markTarget(card);
+    }).join("");
+    if (targetId) noteTarget(hit);
     if (countEl) {
       var id = circleId();
       countEl.textContent = "共 " + posts.length + " 条分享" +

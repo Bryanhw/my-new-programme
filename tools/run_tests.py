@@ -141,6 +141,23 @@ ZH_IMAGE = "\u56fe\u7247"
 ZH_AD = "\u5e7f\u544a\u8425\u9500"
 ZH_THANKS = "\u8c22\u8c22"
 ZH_JUSTNOW = "\u521a\u521a"
+# Round 18 - U2: the count slot before the stats come back (en dash, not 0).
+ZH_DASH = "\u2013"
+# Round 18 - F1/F6: the card menu and the local hide.
+#   ZH_COPY        = fu-zhi-lian-jie        (copy link)
+#   ZH_HIDE        = bu-gan-xing-qu         (not interested)
+#   ZH_SHARED_HIT  = yi-jing-gao-liang     (already highlighted)
+#   ZH_SHARED_MISS = bu-zai-zhe-pi-nei-rong-li (not in this batch)
+#   ZH_HIDDEN_ROW  = yi-yin-cang-zhe-tiao  (this one is hidden)
+#   ZH_UNDO        = che-xiao               (undo)
+#   ZH_RESTORED    = yi-hui-fu              (restored)
+ZH_COPY = "\u590d\u5236\u94fe\u63a5"
+ZH_HIDE = "\u4e0d\u611f\u5174\u8da3"
+ZH_SHARED_HIT = "\u5df2\u7ecf\u9ad8\u4eae"
+ZH_SHARED_MISS = "\u4e0d\u5728\u8fd9\u6279\u5185\u5bb9\u91cc"
+ZH_HIDDEN_ROW = "\u5df2\u9690\u85cf\u8fd9\u6761"
+ZH_UNDO = "\u64a4\u9500"
+ZH_RESTORED = "\u5df2\u6062\u590d"
 
 # Round 6 - comments, replies and nickname sync:
 #   ZH_COMMENT   = ping-lun             (comment)
@@ -2700,13 +2717,17 @@ def _seg(html, marker, n=200):
 
 
 def like_count(html, post_id):
-    """The number the like button shows for one post (or None if that button is gone)."""
-    m = _re.search(r"</span><span>(\d+)</span>", _seg(html, 'data-like="%s"><span>' % post_id))
+    """The number the like button shows for one post (or None if that button is gone).
+
+    U2: before the counts arrive the slot holds a placeholder (\u2013), so the
+    capture is "anything that is not a tag", not just digits.
+    """
+    m = _re.search(r"</span><span>([^<]*)</span>", _seg(html, 'data-like="%s"><span>' % post_id))
     return m.group(1) if m else None
 
 
 def comment_count(html, post_id):
-    m = _re.search(r'class="comment-count">(\d+)<', _seg(html, 'data-comments="%s">' % post_id))
+    m = _re.search(r'class="comment-count">([^<]*)<', _seg(html, 'data-comments="%s">' % post_id))
     return m.group(1) if m else None
 
 
@@ -2717,9 +2738,11 @@ check("cards are on screen while the counts are still in flight",
       "hello from seed" in held and held.count("data-post-id=") == 3, held[:200])
 check("every card already carries its like and comment slots",
       held.count("data-like=") == 3 and held.count("data-comments=") == 3)
-check("the like counts read 0 for now (a placeholder, not an error)",
-      like_count(held, "p-1") == "0" and like_count(held, "p-3") == "0",
+check("before the counts land the slot says 'not known yet', not 0 (U2)",
+      like_count(held, "p-1") == ZH_DASH and like_count(held, "p-3") == ZH_DASH,
       like_count(held, "p-1"))
+check("the comment slot is honest about it too (U2)",
+      comment_count(held, "p-1") == ZH_DASH, comment_count(held, "p-1"))
 check("the two count requests really are in flight", js(it, "__heldStats.length") == 2,
       js(it, "__heldStats.length"))
 check("the refresh button is not left spinning while the counts are pending",
@@ -2780,6 +2803,99 @@ it = load("feed.html", "mock-logged")
 j400 = js(it, "Campus.renderImageUrl('u-1/a.jpg', 400)")
 check("a device that cannot take WebP keeps getting JPEG",
       "format=webp" not in j400 and j400.endswith("?width=400&resize=contain&quality=75"), j400)
+
+print("- F1: the card's '...' menu carries report / copy link / not interested")
+it = load("feed.html", "mock-logged")
+card = js(it, "Campus.renderPostCard({ id: 'p-m', is_anonymous: false, display_name: 'N',"
+              " content: 'x', created_at: '2026-09-20T10:00:00.000Z' })")
+check("the card has a '...' button", 'data-post-menu="p-m"' in card, card[:160])
+check("the menu starts closed", '<div class="post-menu" role="menu" hidden>' in card)
+check("the menu holds the report entry", 'data-report="p-m"' in card and ZH_REPORT in card)
+check("the report entry is still the button the report flow knows",
+      'class="link-plain report-btn"' in card)
+check("the menu offers copying the link", 'data-copy-link="p-m"' in card and ZH_COPY in card)
+check("the menu offers 'not interested'", 'data-hide-post="p-m"' in card and ZH_HIDE in card)
+check("the report entry left the card foot (one entry, not two)",
+      'class="post-foot"' in card and card.count("data-report=") == 1)
+
+print("- F1: one document listener drives every menu on the page")
+it = load("feed.html", "mock-logged")
+js(it,
+   "__menu = { hidden: true };"
+   "__wrap = { querySelector: function () { return __menu; } };"
+   "__btn = { _a: {}, parentNode: __wrap,"
+   "  getAttribute: function (n) { return this._a[n] === undefined ? null : this._a[n]; },"
+   "  setAttribute: function (n, v) { this._a[n] = v; } };"
+   "__btn.closest = function (s) {"
+   "  if (s === '[data-post-menu]') return __btn;"
+   "  if (s === '.post-more') return __wrap;"
+   "  return null; };"
+   "__outside = { closest: function () { return null; } };")
+js(it, "__docEmit('click', { target: __btn });")
+check("clicking '...' opens that card's menu", js(it, "__menu.hidden") is False)
+check("and the button reports it as open",
+      js(it, "__btn._a['aria-expanded']") == "true")
+js(it, "__docEmit('click', { target: __outside });")
+check("clicking anywhere else closes it", js(it, "__menu.hidden") is True)
+check("...and the button is told as well",
+      js(it, "__btn._a['aria-expanded']") == "false")
+
+print("- F1/B4: the share link is an absolute feed link with just the post id")
+it = load("feed.html", "mock-logged")
+js(it, "window.location.href = 'https://example.test/sub/feed.html?circle=c1&q=x';")
+check("the query of the current page is dropped",
+      js(it, "Campus.postShareUrl('p-1')") == "https://example.test/sub/feed.html?post=p-1",
+      js(it, "Campus.postShareUrl('p-1')"))
+check("an id that needs encoding is encoded",
+      js(it, "Campus.postShareUrl('a b/c')") == "https://example.test/sub/feed.html?post=a%20b%2Fc",
+      js(it, "Campus.postShareUrl('a b/c')"))
+
+print("- F1/B4: feed.html?post=<id> rings the shared card and says why")
+it = load("feed.html", "mock-logged", pre="window.location.search = '?post=p-2';")
+html = js(it, "document.getElementById('feed').innerHTML")
+check("the shared card is the ringed one",
+      'class="card post post-target" data-post-id="p-2"' in html, html[:200])
+check("exactly one card is ringed", html.count("post-target") == 1)
+check("the reader is told why this one is ringed",
+      ZH_SHARED_HIT in js(it, "document.getElementById('notice').textContent"),
+      js(it, "document.getElementById('notice').textContent"))
+
+print("- F1/B4: a shared id that is not in the batch is not faked")
+it = load("feed.html", "mock-logged", pre="window.location.search = '?post=p-nope';")
+html = js(it, "document.getElementById('feed').innerHTML")
+check("nothing is ringed when the post is not there", "post-target" not in html)
+check("the reader is told why instead of being left guessing",
+      ZH_SHARED_MISS in js(it, "document.getElementById('notice').textContent"),
+      js(it, "document.getElementById('notice').textContent"))
+
+print("- U2: the count slot / F6: hiding a card stays on this device")
+it = load("feed.html", "mock-logged")
+check("an unknown count prints the placeholder, not 0",
+      js(it, "Campus.countText(undefined)") == ZH_DASH
+      and js(it, "Campus.countText(null)") == ZH_DASH,
+      js(it, "Campus.countText(undefined)"))
+check("a real count (a real 0 included) still prints the number",
+      js(it, "Campus.countText(0)") == "0" and js(it, "Campus.countText(12)") == "12")
+js(it, "__before_hide = __calls.length;")
+js(it, "Campus.hidePost('p-1');")
+check("hiding is recorded on this device", js(it, "Campus.isPostHidden('p-1')") is True)
+check("...and the local store holds exactly that id",
+      js(it, "JSON.parse(window.localStorage.getItem('campus.hiddenPosts')).join(',')") == "p-1")
+check("hiding never talks to the server",
+      js(it, "__calls.length") == js(it, "__before_hide"),
+      "%s -> %s" % (js(it, "__before_hide"), js(it, "__calls.length")))
+hidden_card = js(it, "Campus.renderPostCard({ id: 'p-1', is_anonymous: false, display_name: 'N',"
+                     " content: 'x', created_at: '2026-09-20T10:00:00.000Z' })")
+check("a hidden card collapses to one line",
+      "post-hidden" in hidden_card and ZH_HIDDEN_ROW in hidden_card)
+check("...with a way back", ZH_UNDO in hidden_card and 'data-unhide-post="p-1"' in hidden_card)
+check("...and the content itself is gone", "post-body" not in hidden_card)
+js(it, "Campus.unhidePost('p-1');")
+check("undo clears it from the local store", js(it, "Campus.isPostHidden('p-1')") is False)
+check("and the card comes back in full",
+      "post-body" in js(it, "Campus.renderPostCard({ id: 'p-1', is_anonymous: false,"
+                            " display_name: 'N', content: 'x',"
+                            " created_at: '2026-09-20T10:00:00.000Z' })"))
 
 print()
 print("=" * 70)

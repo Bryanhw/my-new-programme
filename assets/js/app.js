@@ -24,6 +24,15 @@ window.Campus = (function () {
   var SITE_NAME = cfg.SITE_NAME || "校园拾光";
   var BUCKET = cfg.BUCKET || "post-images";
 
+  /* U2：计数占位符。点赞数 / 评论数还没回来时，数字位先显示它。
+     「0」的含义是「一个赞也没有」—— 在还不知道的时候先印 0，等于替同学说了
+     一句不成立的话；这一条是第 17 轮「先渲染后补计数」的收尾。 */
+  var COUNT_PLACEHOLDER = "–";          // en dash，比连字符更像「待定」
+
+  /* F6：本机隐藏过的帖子 id。和城市圈一样只存本机 —— 匿名访客也有 localStorage，
+     存进数据库反而要加迁移，还会多出一个「谁屏蔽了什么」的读取口子。 */
+  var HIDDEN_POSTS_KEY = "campus.hiddenPosts";
+
   /* A1 图片展示三件套：
    *   · 展示盒给一个固定比例（见 style.css 的 .post-image），图还没下完位置就已经占住 —— 列表滚动不再抖；
    *   · 图一律 object-fit: contain，竖图整张都在画面里，不裁人；
@@ -1165,6 +1174,36 @@ window.Campus = (function () {
       return;
     }
 
+    // F1：「⋯」的开合，以及菜单里的三个动作（都在同一处代理，三个列表共用）
+    var menuBtn = el.closest("[data-post-menu]");
+    if (menuBtn) {
+      togglePostMenu(menuBtn);
+      return;
+    }
+
+    var copyBtn = el.closest("[data-copy-link]");
+    if (copyBtn) {
+      closePostMenus();
+      copyPostLink(copyBtn.getAttribute("data-copy-link"));
+      return;
+    }
+
+    var hideBtn = el.closest("[data-hide-post]");
+    if (hideBtn) {
+      closePostMenus();
+      hidePost(hideBtn.getAttribute("data-hide-post"));
+      return;
+    }
+
+    var unhideBtn = el.closest("[data-unhide-post]");
+    if (unhideBtn) {
+      unhidePost(unhideBtn.getAttribute("data-unhide-post"));
+      return;
+    }
+
+    // 点了菜单里的举报：照旧走下面的举报分支，但先把菜单收起来
+    if (el.closest(".post-menu")) closePostMenus();
+
     var reportBtn = el.closest("[data-report]");
     if (reportBtn) {
       openReportDialog(reportBtn.getAttribute("data-report"));
@@ -1211,6 +1250,18 @@ window.Campus = (function () {
       if (dZone) removeComment(dZone.getAttribute("data-comment-zone"), delBtn.getAttribute("data-comment-del"));
       return;
     }
+  });
+
+  /* F1：点菜单外面 / 按 Esc 就把「⋯」收起来 —— 菜单开着的时候不该赖着不走。
+     上面那个代理先跑（先处理动作），这里只负责「点到别处就关」。 */
+  document.addEventListener("click", function (e) {
+    var el = e.target;
+    if (el && el.closest && el.closest(".post-more")) return;
+    closePostMenus();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" || e.key === "Esc") closePostMenus();
   });
 
   /* ------------------------------------------------------------------
@@ -1847,8 +1898,214 @@ window.Campus = (function () {
     return /^[0-9A-F]{6}$/.test(raw) ? raw : "";
   }
 
+  /** U2：计数格子里该印什么 —— 拿到数字印数字，还没拿到就印占位符（不是 0） */
+  function countText(n) {
+    return (typeof n === "number" && isFinite(n)) ? String(n) : COUNT_PLACEHOLDER;
+  }
+
+  /* ================= F1：卡片「⋯」菜单 + 分享直链（B4） =================
+   *  三件事共用一套机制，所以放在一起做（只跑一轮回归）：
+   *    · 举报 / 复制链接 / 不感兴趣 收进卡片右上角的「⋯」；
+   *    · 分享直链 feed.html?post=<id> 打开后滚到那条并高亮；
+   *    · 「不感兴趣」是本机隐藏（F6），能撤销。
+   *  站点没有帖子详情页（post.html 是发布页），所以直链的验收标准就是
+   *  「至少高亮」—— 这里刻意不造详情页。
+   * ===================================================================== */
+
+  /* 渲染过的帖子按 id 记一份：撤销「不感兴趣」时要就地把它画回来，
+     没必要为了这一条再打一次接口。 */
+  var postCache = {};
+
+  function hiddenPostIds() {
+    try {
+      var raw = window.localStorage.getItem(HIDDEN_POSTS_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Object.prototype.toString.call(arr) === "[object Array]" ? arr : [];
+    } catch (e) {
+      return [];                       // 存坏了就当没隐藏过，不能因此白屏
+    }
+  }
+
+  function saveHiddenPostIds(ids) {
+    try { window.localStorage.setItem(HIDDEN_POSTS_KEY, JSON.stringify(ids)); } catch (e) {}
+  }
+
+  /** 是不是被本机隐藏过（只认本机，不问服务器 —— 也没有这条通道） */
+  function isPostHidden(id) {
+    return !!id && hiddenPostIds().indexOf(id) >= 0;
+  }
+
+  /** 站点根目录（去掉 query / hash / 文件名）。不依赖 URL 构造函数，老浏览器也认。 */
+  function siteBase() {
+    var href = String((window.location && window.location.href) || "");
+    var cut = href.indexOf("#");
+    if (cut >= 0) href = href.slice(0, cut);
+    cut = href.indexOf("?");
+    if (cut >= 0) href = href.slice(0, cut);
+    cut = href.lastIndexOf("/");
+    return cut >= 0 ? href.slice(0, cut + 1) : "";
+  }
+
+  /** B4：一条帖子的分享直链 —— 落在广场上，由 feed.js 高亮那一条 */
+  function postShareUrl(postId) {
+    return siteBase() + "feed.html?post=" + encodeURIComponent(String(postId == null ? "" : postId));
+  }
+
+  /** 复制到剪贴板：优先异步 API，老浏览器退回 textarea + execCommand */
+  function copyText(text) {
+    if (typeof navigator !== "undefined" && navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "readonly");
+        ta.style.position = "fixed";
+        ta.style.top = "-1000px";
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand && document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (ok) resolve(); else reject(new Error("copy unavailable"));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  var toastTimer = null;
+
+  /** 轻量提示条：一次只留一条，几秒后自己淡出。
+      action 形如 {label, run} —— 给「不感兴趣」留一条后悔路。 */
+  function announce(text, action) {
+    var el = document.getElementById("toast");
+    if (!el) return;
+    el.textContent = String(text);
+    if (action && action.label) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "toast-action";
+      btn.textContent = action.label;
+      btn.addEventListener("click", function () {
+        hideToast();
+        if (typeof action.run === "function") action.run();
+      });
+      el.appendChild(btn);
+    }
+    el.hidden = false;
+    el.className = "toast show";
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, (action && action.label) ? 6000 : 3200);
+  }
+
+  function hideToast() {
+    var el = document.getElementById("toast");
+    if (!el) return;
+    el.hidden = true;
+    el.className = "toast";
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+  }
+
+  /** 卡片右上角的「⋯」：举报 / 复制链接 / 不感兴趣。
+      开合只由页面上那一个 click 代理接管（见下面的 document 监听），
+      所以三个列表都不用各自绑一遍。 */
+  function moreMenuHtml(post) {
+    var id = escapeHtml(post.id);
+    return '<div class="post-more">' +
+      '<button class="post-more-btn" type="button" aria-haspopup="true" aria-expanded="false"' +
+      ' aria-label="这条内容的更多操作" data-post-menu="' + id + '">⋯</button>' +
+      '<div class="post-menu" role="menu" hidden>' +
+      '<button class="link-plain" type="button" role="menuitem" data-copy-link="' + id + '">复制链接</button>' +
+      '<button class="link-plain report-btn" type="button" role="menuitem" data-report="' + id + '">举报</button>' +
+      '<button class="link-plain" type="button" role="menuitem" data-hide-post="' + id + '">不感兴趣</button>' +
+      "</div></div>";
+  }
+
+  /** 「已隐藏」的那一行：内容收起，但留一个撤销口子 —— 本机操作就该能本机撤回 */
+  function hiddenCardHtml(post) {
+    var id = escapeHtml(post && post.id);
+    return '<article class="card post post-hidden" data-post-id="' + id + '">' +
+      '<div class="post-hidden-row">' +
+      '<span class="post-hidden-text">已隐藏这条（只在这台设备上生效）</span>' +
+      '<button class="link-plain" type="button" data-unhide-post="' + id + '">撤销</button>' +
+      "</div></article>";
+  }
+
+  /* 同时只开一个菜单：省得每次点击都去扫一遍 DOM */
+  var openMenuBtn = null;
+
+  function menuOf(btn) {
+    return (btn && btn.parentNode && btn.parentNode.querySelector)
+      ? btn.parentNode.querySelector(".post-menu") : null;
+  }
+
+  function closePostMenus() {
+    if (!openMenuBtn) return;
+    var menu = menuOf(openMenuBtn);
+    if (menu) menu.hidden = true;
+    openMenuBtn.setAttribute("aria-expanded", "false");
+    openMenuBtn = null;
+  }
+
+  function togglePostMenu(btn) {
+    var menu = menuOf(btn);
+    if (!menu) return;
+    var wasOpen = (openMenuBtn === btn);
+    closePostMenus();
+    if (wasOpen) return;                 // 再点一下就是收起来
+    menu.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    openMenuBtn = btn;
+  }
+
+  /** 复制分享直链并给一句反馈（复制失败就把链接亮出来，让人能手抄） */
+  function copyPostLink(postId) {
+    if (!postId) return;
+    var url = postShareUrl(postId);
+    return copyText(url).then(function () {
+      announce("链接已复制，发给同学就能直达这条");
+    }).catch(function () {
+      announce("没复制上，手动抄一下：" + url);
+    });
+  }
+
+  /** 把某条卡片就地换成另一段 HTML（列表不用整个重画，滚动位置也不会跳） */
+  function swapCard(id, html) {
+    var card = document.querySelector('[data-post-id="' + id + '"]');
+    if (card && "outerHTML" in card) card.outerHTML = html;
+  }
+
+  function collapsePost(id) {
+    swapCard(id, hiddenCardHtml(postCache[id] || { id: id }));
+  }
+
+  /** F6：不感兴趣 —— 只在本机生效，并把这条从眼前收起来（可撤销） */
+  function hidePost(id) {
+    if (!id) return;
+    var ids = hiddenPostIds();
+    if (ids.indexOf(id) < 0) ids.push(id);
+    saveHiddenPostIds(ids);
+    collapsePost(id);
+    announce("以后少给你看这类内容（只在这台设备上）", {
+      label: "撤销",
+      run: function () { unhidePost(id); }
+    });
+  }
+
+  function unhidePost(id) {
+    saveHiddenPostIds(hiddenPostIds().filter(function (x) { return x !== id; }));
+    var post = postCache[id];
+    if (post) swapCard(id, renderPostCard(post));
+    announce("已恢复");
+  }
+
   /** 渲染单条帖子卡片 */
   function renderPostCard(post) {
+    if (post && post.id) postCache[post.id] = post;
+    // F6：本机隐藏过的那条，三个列表（广场 / 首页预览 / 我的）都渲染成收起的一行
+    if (post && post.id && isPostHidden(post.id)) return hiddenCardHtml(post);
+
     var url = imageUrl(post.image_path);
     var name = post.is_anonymous ? anonName(post) : (post.display_name || "一位同学");
 
@@ -1869,7 +2126,9 @@ window.Campus = (function () {
     html += statusTag(post.status);
     html += "</div>";
     html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + "</div>";
-    html += "</div></div>";
+    html += "</div>";                       // 关 .post-meta
+    html += moreMenuHtml(post);             // F1：「⋯」在卡片右上角
+    html += "</div>";                       // 关 .post-head
 
     if (post.content) {
       html += '<div class="post-body">' + escapeHtml(post.content) + "</div>";
@@ -1901,16 +2160,15 @@ window.Campus = (function () {
     html += '<div class="post-foot">';
     html += '<button class="like-btn' + (post.liked_by_me ? " liked" : "") + '" data-like="' + escapeHtml(post.id) + '">';
     html += "<span>" + (post.liked_by_me ? "🧡" : "🤍") + "</span>";
-    html += "<span>" + (post.like_count || 0) + "</span>";
+    html += "<span>" + countText(post.like_count) + "</span>";
     html += "</button>";
     html += '<button class="like-btn comment-btn" type="button" data-comments="' + escapeHtml(post.id) + '">';
     html += "<span>💬</span>";
-    html += '<span class="comment-count">' + (post.comment_count || 0) + "</span>";
+    html += '<span class="comment-count">' + countText(post.comment_count) + "</span>";
     html += "</button>";
     html += '<span class="post-time">' + escapeHtml(timeAgo(post.created_at)) + "</span>";
-    html += '<button class="link-plain report-btn" type="button" data-report="' + escapeHtml(post.id) +
-      '">举报</button>';
     html += "</div>";
+    // 「举报」已经从底栏收进右上角的「⋯」（F1），底栏只留计数与时间
     // 评论区：懒加载，点上面的「💬 N」才拉取
     html += '<div class="comments" data-comment-zone="' + escapeHtml(post.id) + '" hidden></div>';
     html += "</article>";
@@ -2419,6 +2677,13 @@ window.Campus = (function () {
     greeting: greeting,
     initial: initial,
     renderPostCard: renderPostCard,
+    // F1：分享直链 / U2：计数占位 / F6：本机隐藏（导出是为了能单独自测）
+    postShareUrl: postShareUrl,
+    countText: countText,
+    isPostHidden: isPostHidden,
+    hidePost: hidePost,
+    unhidePost: unhidePost,
+    announce: announce,
     anonCodeOf: anonCodeOf,
     anonName: anonName,
     // D1：服务端稳定洞号（形状不对时返回空串）+ 「这个库有没有迁移过」的探测结果
