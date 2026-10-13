@@ -1628,6 +1628,16 @@ check("R22: ...and the migration allows the very same words",
 check("R22: the CHECK caps it at the same number the page enforces",
       "cardinality(topics) <= 3" in r22_sql and "var TOPIC_LIMIT = 3;" in r22_app
       and "posts_topics_allowed" in r22_sql and "using gin (topics)" in r22_sql)
+check("R22: the migration also grants the new column (anon has column-level SELECT only)",
+      "grant select (topics) on public.posts to anon, authenticated;" in r22_sql
+      and "grant select (topics) on public.posts to anon, authenticated;" in r22_sql_flat)
+check("R22: ...and rebuilds my_posts with topics appended, or /profile would drop it",
+      "create or replace view public.my_posts as" in r22_sql
+      and "p.topics" in r22_sql
+      and "grant select on public.my_posts to anon, authenticated;" in r22_sql
+      and "create or replace view public.my_posts as" in r22_sql_flat
+      and "p.topics" in r22_sql_flat
+      and "grant select on public.my_posts to anon, authenticated;" in r22_sql_flat)
 check("R22: the flat paste version carries the same statements",
       "add column if not exists topics text[] not null default '{}'" in r22_sql_flat
       and "posts_topics_allowed" in r22_sql_flat
