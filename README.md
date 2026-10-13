@@ -192,12 +192,22 @@ my-new-programme/
 > 可重复执行；不执行也不会坏 —— 前端会自己探测到这列不存在，退回每帖一个编号。
 > 详见下文「匿名洞号为什么跨帖稳定」。
 >
-> 🏷 **话题标签（C3，需站主执行一次）**：最后执行
-> [`docs/supabase-topics.sql`](docs/supabase-topics.sql)（或 [`-flat`](docs/supabase-topics-flat.sql)
-> 粘贴版）。它给 `posts` 加一列 `topics`（话题数组）、加一条「只允许约定的 8 个话题、最多 3 个」的
-> 约束、再加一个 gin 索引。**没有盐、没有占位符，整段照抄执行即可**，可重复执行。
-> 不执行也不会坏 —— 前端会自己探测到这列不存在：广场照常、只是不出现话题筛选条，
-> 发帖时话题存不下来（会明确说一句「话题这次没带上」）。执行完刷新页面即可，**不用重新发布**。
+> 🏷 **话题标签（C3）**：[`docs/supabase-topics.sql`](docs/supabase-topics.sql)（或
+> [`-flat`](docs/supabase-topics-flat.sql) 粘贴版）。它做五件事：给 `posts` 加一列 `topics`
+> （话题数组）、加一条「只允许约定的 8 个话题、最多 3 个」的约束、加一个 gin 索引、
+> **给这一列补上列级读授权**、**把 `my_posts` 视图原样重建成「原定义 + `topics`」**。
+> **没有盐、没有占位符，整段照抄执行即可**，可重复执行（先跑过旧版的，重跑一遍补上后两项）。
+>
+> > ⚠️ 后两项最容易漏，漏了不是小毛病：本站的 `anon` / `authenticated` 是**列级** SELECT 授权
+> > （见 `supabase-setup.sql` 里那串 `grant select (id, content, ...)`），**新列不会自动可读** ——
+> > 不带 grant，前端一带上 `topics` 就是 `42501 permission denied for table posts`
+> > （报的是**表**权限，很容易误判成 RLS 问题）；而 `my_posts` 写死了列清单，少一列会 `42703`，
+> > **并把整个会话的话题功能一起关掉**（前端一探到「列不存在」就全局降级）。
+>
+> 2026-10-13 已在本站执行并验证（`select=id,topics` 与按话题的数组包含查询都返回 200）。
+> 迁移和页面是两条独立线，谁先谁后都可能发生：**没执行也不会坏** —— 前端会自己探测到这列不存在，
+> 广场照常、只是不出现话题筛选条，发帖时话题存不下来（会明确说一句「话题这次没带上」）。
+> 执行完刷新页面即可，**不用重新发布**。
 
 ### 第 2 步：开启两项认证设置
 
@@ -347,7 +357,7 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），776 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），778 项
 python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），804 项
 ```
 
