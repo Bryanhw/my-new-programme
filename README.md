@@ -34,6 +34,7 @@
 | 💬 评论与回复 | 每条分享可以评论、回复（只支持一级回复）；先发后审，被举报核实后会下架；可以删自己的评论 |
 | 🕵️ 发布先审核 | 新发布的分享先进入「审核中」，站点主人在后台点通过之后，其他同学才看得到 |
 | 🚩 举报不当内容 | 每条分享右上角「⋯」菜单里、每条评论下方都有「举报」，选一个原因提交；举报只有站点管理员看得到 |
+| 🏷 话题标签 | 发布时可以挑 1–3 个**站里约定好的话题**（#食堂 #图书馆 #晚霞 #emo #求组队 #学习 #运动 #随手拍，也可以一个都不挑）；广场顶部会出现筛选条（**只在有人打过标签时出现**），点一下只看这个话题；卡片上的 #话题 是链接，任何页面点它都会跳到广场的那个话题下。不加标签的分享照样出现在「全部」里 |
 | 🔗 分享直链 | 卡片「⋯」菜单里的「复制链接」给出一条 `feed.html?post=<id>`。同学打开后会滚到那一条并**高亮**它；那条**不在这批里时会按 id 单独问一次**（同一张表、同一套 RLS，不新增读取通道），答得出来就补进来高亮，答不出来才说「现在看不到了 —— 可能已经下架，或者还没通过审核」。站点**没有帖子详情页**，所以链接落在广场上 |
 | 🙈 不感兴趣 | 「⋯」菜单里的「不感兴趣」把这条收成一行，旁边留一个「撤销」。**只写在本机浏览器**，服务器不知道你藏过什么，也不新增任何能关联到人的读取通道 |
 | 🛡️ 我举报的（回执） | 「我的」页能看到自己举报过的分享和评论处理到哪一步：处理中 / 已处理 / 未违规，并附上被举报内容的摘要 |
@@ -120,6 +121,8 @@ my-new-programme/
     ├── supabase-anon-code-flat.sql   上面那份的粘贴版
     ├── supabase-security-question.sql      密保问题：指纹表（零策略）+ 设置 / 校验两个函数 + 只读视图
     ├── supabase-security-question-flat.sql 上面那份的粘贴版
+    ├── supabase-topics.sql           话题标签：`posts.topics` 数组列 + 取值约束 + gin 索引
+    ├── supabase-topics-flat.sql      上面那份的粘贴版
     └── edge-functions/
         └── reset-password/        Edge Function：手机号 + 答案 → 改密码（service_role 只在这里）
             ├── index.ts
@@ -188,6 +191,13 @@ my-new-programme/
 > （`python -c "import secrets; print(secrets.token_urlsafe(32))"`），**盐只留在数据库里，别提交**。
 > 可重复执行；不执行也不会坏 —— 前端会自己探测到这列不存在，退回每帖一个编号。
 > 详见下文「匿名洞号为什么跨帖稳定」。
+>
+> 🏷 **话题标签（C3，需站主执行一次）**：最后执行
+> [`docs/supabase-topics.sql`](docs/supabase-topics.sql)（或 [`-flat`](docs/supabase-topics-flat.sql)
+> 粘贴版）。它给 `posts` 加一列 `topics`（话题数组）、加一条「只允许约定的 8 个话题、最多 3 个」的
+> 约束、再加一个 gin 索引。**没有盐、没有占位符，整段照抄执行即可**，可重复执行。
+> 不执行也不会坏 —— 前端会自己探测到这列不存在：广场照常、只是不出现话题筛选条，
+> 发帖时话题存不下来（会明确说一句「话题这次没带上」）。执行完刷新页面即可，**不用重新发布**。
 
 ### 第 2 步：开启两项认证设置
 
@@ -337,8 +347,8 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），760 项
-python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），780 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），776 项
+python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），804 项
 ```
 
 > **用哪个 Python**：这两套工具依赖 `dukpy` / `esprima`，目前是在 **Python 3.14** 上跑通的
