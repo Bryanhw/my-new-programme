@@ -147,14 +147,14 @@ ZH_DASH = "\u2013"
 #   ZH_COPY        = fu-zhi-lian-jie        (copy link)
 #   ZH_HIDE        = bu-gan-xing-qu         (not interested)
 #   ZH_SHARED_HIT  = yi-jing-gao-liang     (already highlighted)
-#   ZH_SHARED_MISS = bu-zai-zhe-pi-nei-rong-li (not in this batch)
+#   ZH_SHARED_MISS = xian-zai-kan-bu-dao-le (gone for good / never approved)
 #   ZH_HIDDEN_ROW  = yi-yin-cang-zhe-tiao  (this one is hidden)
 #   ZH_UNDO        = che-xiao               (undo)
 #   ZH_RESTORED    = yi-hui-fu              (restored)
 ZH_COPY = "\u590d\u5236\u94fe\u63a5"
 ZH_HIDE = "\u4e0d\u611f\u5174\u8da3"
 ZH_SHARED_HIT = "\u5df2\u7ecf\u9ad8\u4eae"
-ZH_SHARED_MISS = "\u4e0d\u5728\u8fd9\u6279\u5185\u5bb9\u91cc"
+ZH_SHARED_MISS = "\u73b0\u5728\u770b\u4e0d\u5230\u4e86"
 ZH_HIDDEN_ROW = "\u5df2\u9690\u85cf\u8fd9\u6761"
 ZH_UNDO = "\u64a4\u9500"
 ZH_RESTORED = "\u5df2\u6062\u590d"
@@ -2867,6 +2867,64 @@ check("nothing is ringed when the post is not there", "post-target" not in html)
 check("the reader is told why instead of being left guessing",
       ZH_SHARED_MISS in js(it, "document.getElementById('notice').textContent"),
       js(it, "document.getElementById('notice').textContent"))
+
+print("- B4 fallback: an id that is not in the batch is asked for on its own")
+# 一个形状就是 uuid 的 id（真实库里 posts.id 是 uuid）——批次里没有它，
+# 页面应该按 id 单独问一次服务端，而不是只在那批里翻。
+SHARED_UUID = "33333333-3333-3333-3333-333333333333"
+it = load("feed.html", "mock-logged",
+          pre="window.location.search = '?post=" + SHARED_UUID + "';")
+js(it, "__posts_selects = 0; __calls.forEach(function (c) {"
+       " if (c[0] === 'select' && c[1] === 'posts') __posts_selects++; });")
+# 批次那一次是两跳：先带 anon_code（列还没迁移，撞 42703）
+# 再降级重试；第三跳才是「按 id 问那一条」。删了按 id 那一跳就变 2，这条会报警。
+check("the shared id is asked for on its own, after the batch and its retry",
+      js(it, "__posts_selects") == 3,
+      "%s posts select(s)" % js(it, "__posts_selects"))
+check("a shared id nobody has is reported as gone, not as 'maybe older'",
+      ZH_SHARED_MISS in js(it, "document.getElementById('notice').textContent"),
+      js(it, "document.getElementById('notice').textContent"))
+check("nothing is ringed for an id that does not exist",
+      "post-target" not in js(it, "document.getElementById('feed').innerHTML"))
+
+# 同一条链接，但这次服务端答得出来：应该补在最前面并高亮（走的是同一条渲染路）
+js(it, "Campus.getPostById = function (id) {"
+       " return P.resolve({ id: id, is_anonymous: false, display_name: 'N',"
+       " content: 'shared by id', image_path: null,"
+       " created_at: '2026-09-23T10:00:00.000Z' }); };")
+js(it, "document.getElementById('refresh').click();")
+html = js(it, "document.getElementById('feed').innerHTML")
+check("the fetched one is drawn like any other card, and ringed",
+      ('class="card post post-target" data-post-id="' + SHARED_UUID + '"') in html,
+      html[:200])
+check("exactly one card is ringed", html.count("post-target") == 1)
+check("the rest of the batch is still there", html.count('class="card post') == 4,
+      "%s card(s)" % html.count('class="card post'))
+check("and the reader is told it is the shared one",
+      ZH_SHARED_HIT in js(it, "document.getElementById('notice').textContent"))
+
+print("- B4 fallback: getPostById only ever asks for that one row")
+it = load("feed.html", "mock-logged")
+js(it, "__before = __calls.length;")
+js(it, "__got = 'unset';"
+       " Campus.getPostById('p-1').then(function (v) { __got = String(v); });"
+       " Campus.getPostById('dc803106').then(function (v) { __got += '/' + String(v); });")
+check("an id that is not even shaped like one never hits the network",
+      js(it, "__got") == "null/null" and js(it, "__calls.length") == js(it, "__before"),
+      "%s :: %s -> %s" % (js(it, "__got"), js(it, "__before"), js(it, "__calls.length")))
+js(it, "__got2 = 'unset';"
+       " Campus.getPostById('" + SHARED_UUID + "').then(function (v) { __got2 = String(v); });")
+check("a well-shaped id is looked up once",
+      js(it, "__got2") == "null" and js(it, "__calls.length") == js(it, "__before") + 1,
+      "%s :: %s -> %s" % (js(it, "__got2"), js(it, "__before"), js(it, "__calls.length")))
+js(it, "__mockOpts.store.posts.push({ id: '" + SHARED_UUID + "', author_id: 'u-2',"
+       " is_anonymous: false, display_name: 'N', school: 'Test Univ',"
+       " content: 'by id', image_path: null, status: 'approved',"
+       " created_at: '2026-09-19T10:00:00.000Z' });")
+js(it, "__got3 = 'unset';"
+       " Campus.getPostById('" + SHARED_UUID + "').then(function (v) { __got3 = v.content; });")
+check("...and a post that is still up comes back as that row",
+      js(it, "__got3") == "by id", js(it, "__got3"))
 
 print("- U2: the count slot / F6: hiding a card stays on this device")
 it = load("feed.html", "mock-logged")

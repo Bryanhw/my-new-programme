@@ -441,6 +441,28 @@ window.Campus = (function () {
       });
   }
 
+  /** B4 的兜底：按 id 单独取一条 —— 分享链接里那条不在这批里的时候用。
+   *  和 listPosts 走同一张表、同一套 RLS，所以「读得到 = 还能看，读不到 = 真的看不到」，
+   *  不必再靠猜。先看一眼 id 的形状（posts.id 是 uuid，见 docs/supabase-setup.sql）：
+   *  残缺或乱写的 id 直接当「看不到」，既不发无用请求，也不会让 PostgREST 回一个 400。 */
+  function getPostById(id) {
+    if (!client) return Promise.reject(new Error(configError));
+    var want = String(id == null ? "" : id);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(want)) {
+      return Promise.resolve(null);
+    }
+    return withAnonCodeFallback(function () {
+      return client.from("posts")
+        .select(postColumns())
+        .eq("id", want)
+        .limit(1);
+    })
+      .then(function (res) {
+        if (res.error) throw new Error("加载失败：" + res.error.message);
+        return (res.data && res.data[0]) || null;
+      });
+  }
+
   /** 取「我发过的帖子」。
    *  过滤在服务端完成：视图 public.my_posts 用 auth.uid() 推导，客户端不再
    *  （也没有权限）用 author_id 过滤 —— 列级权限同样管住 WHERE 里的列。
@@ -2628,6 +2650,7 @@ window.Campus = (function () {
     // 数据
     createPost: createPost,
     listPosts: listPosts,
+    getPostById: getPostById,
     listCirclePosts: listCirclePosts,
     listFeedPosts: listFeedPosts,
     mergeFeedPosts: mergeFeedPosts,

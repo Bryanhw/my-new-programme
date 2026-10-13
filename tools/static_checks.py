@@ -1481,7 +1481,7 @@ check("R18/F1+B4: it only rings the card whose id matches, exactly once",
       and "'<article class=\"card post post-target\"'" in r18_feed
       and "if (targetId) noteTarget(hit);" in r18_feed)
 check("R18/F1+B4: a shared id that is not in the batch is reported, not faked",
-      "\u5df2\u7ecf\u9ad8\u4eae" in r18_feed and "\u4e0d\u5728\u8fd9\u6279\u5185\u5bb9\u91cc" in r18_feed)
+      "\u5df2\u7ecf\u9ad8\u4eae" in r18_feed and "\u770b\u4e0d\u5230\u4e86" in r18_feed)
 check("R18/F1+B4: it scrolls to that card once, and only once",
       "if (targetScrolled) return;" in r18_feed
       and 'scrollIntoView({ block: "center" })' in r18_feed)
@@ -1547,6 +1547,34 @@ check("R18/U1: the grid is CSS only, the pages never switch columns in JS",
       "768" not in r18_app and "min-width" not in r18_feed)
 check("R18/U1: it does not fight the off-screen deferral added in round 17",
       "content-visibility: auto" in _a1_block(r18_css, ".post"))
+print()
+print("R20) shared-link fallback: ask the server for that one id")
+r20_app = sources.get("app.js", "")
+r20_feed = sources.get("feed.js", "")
+_r20_get = _fn_body(r20_app, "getPostById")
+
+check("R20: there is a single-row reader for the shared id",
+      "function getPostById(id)" in r20_app and "getPostById: getPostById" in r20_app)
+check("R20: it reads the same table the feed reads - no new read channel",
+      'from("posts")' in _r20_get and _r20_get.count('from("') == 1,
+      _r20_get[:160])
+check("R20: ...one row, by id, and nothing clever",
+      '.eq("id"' in _r20_get and ".limit(1)" in _r20_get
+      and ".in(" not in _r20_get and ".or(" not in _r20_get)
+check("R20: an id that is not even shaped like one is answered without a request",
+      ".test(want)" in _r20_get and "Promise.resolve(null)" in _r20_get)
+check("R20: the feed asks for it before the first paint, and only when needed",
+      "ensureTargetLoaded()" in r20_feed
+      and r20_feed.find("ensureTargetLoaded()") < r20_feed.find("renderBar()"))
+check("R20: ...and that helper is what calls getPostById",
+      "C.getPostById(targetId)" in r20_feed)
+check("R20: a post that comes back joins the batch instead of being drawn apart",
+      "loaded = [post].concat(loaded)" in r20_feed)
+check("R20: the miss message is definite now, not a two-way guess",
+      "\u6bd4\u6700\u8fd1\u52a0\u8f7d\u7684 50 \u6761\u66f4\u65e9" not in r20_feed
+      and "\u770b\u4e0d\u5230\u4e86" in r20_feed)
+check("R20: the share link still points at feed.html?post=, never the publish page",
+      "feed.html?post=" in r20_app and "post.html?post=" not in r20_app)
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:

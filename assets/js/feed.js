@@ -71,7 +71,7 @@
       C.showNotice(noticeEl, "info", "这条是同学分享给你的，已经高亮。");
     } else {
       C.showNotice(noticeEl, "info",
-        "分享链接里的那条不在这批内容里 —— 可能已经下架，或者比最近加载的 50 条更早。");
+        "分享链接里的那条现在看不到了 —— 可能已经下架，或者还没通过审核。");
     }
     if (targetScrolled) return;
     var el = feedEl.querySelector ? feedEl.querySelector(".post-target") : null;
@@ -83,6 +83,21 @@
 
   function circleId() { return C.getCircle(); }
   function onlyCircle() { return !!(onlyEl && onlyEl.checked); }
+
+  /** 分享链接那条不在这批里（更早、或被圈子挡住）时：按 id 单独问一次服务端，
+   *  取到就补进这批的最前面，跟正常卡片一起画 —— 这样高亮、滚动、计数都走同一条路。
+   *  取不到就是真的看不到（下架 / 没通过审核），由 noteTarget 如实说，不再两头猜。 */
+  function ensureTargetLoaded() {
+    if (!targetId) return Promise.resolve();
+    var i;
+    for (i = 0; i < loaded.length; i++) {
+      if (loaded[i] && loaded[i].id === targetId) return Promise.resolve();
+    }
+    if (!C.getPostById) return Promise.resolve();
+    return C.getPostById(targetId).then(function (post) {
+      if (post) loaded = [post].concat(loaded);
+    }).catch(function () {});
+  }
 
   function skeletonList() {
     var s = "";
@@ -248,6 +263,9 @@
     // 第一步：只等帖子本身，先让卡片出现。
     load$.then(function (posts) {
       loaded = posts || [];
+      // 分享直链：那条可能不在这批里 → 先补进来再画，省得先画一遍再插一条
+      return ensureTargetLoaded();
+    }).then(function () {
       renderBar();
       renderAll();
 
