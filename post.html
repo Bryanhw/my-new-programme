@@ -22,7 +22,7 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <title>分享此刻 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=f7309e23">
+<link rel="stylesheet" href="assets/css/style.css?v=71736c25">
 </head>
 <body>
 
@@ -86,6 +86,13 @@
   <div class="notice notice-info" id="notice" hidden></div>
 
   <form class="card" id="post-form" novalidate>
+
+    <!-- 今日一问（C1）：按天轮换的一句话，点「写这个」带进正文，不强制 -->
+    <div class="daily-q" id="daily-q" hidden>
+      <span class="daily-q-label">今日一问</span>
+      <span class="daily-q-text" id="daily-q-text"></span>
+      <button class="btn btn-soft btn-sm daily-q-use" id="daily-q-use" type="button">写这个</button>
+    </div>
 
     <div class="field">
       <label class="label" for="content">想说点什么</label>
@@ -178,6 +185,6 @@
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
 <script src="assets/js/app.js?v=ba2b3ce4"></script>
-<script src="assets/js/post.js?v=f384752e"></script>
+<script src="assets/js/post.js?v=bb4eb66b"></script>
 </body>
 </html>

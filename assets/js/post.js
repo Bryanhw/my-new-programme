@@ -23,6 +23,66 @@
   var selectedFile = null;
   var anon = false;
 
+  /* ---------------------------------------------------------------
+   * 今日一问（C1）：一句按天轮换的话题，点一下带进正文（不强制）
+   *   - 纯前端：不联网、不写存储、不新增读取通道
+   *   - 同一天永远是同一句（按本地日期算，跨天自动换）
+   *   - 已经在写字时不覆盖，接在后面另起一行
+   * --------------------------------------------------------------- */
+  var DAILY_QUESTIONS = [
+    "图书馆哪一层最安静？",
+    "食堂里哪道菜值得排队？",
+    "今天的天是什么颜色？",
+    "最近哪门课让你改观了？",
+    "学校附近有什么只有你知道的小店？",
+    "手机里最新的一张照片拍的是什么？",
+    "这周有没有哪件事，你想说声谢谢？",
+    "晚上从教学楼走回宿舍，你在想什么？",
+    "有什么小事，今天让你笑了一下？",
+    "想找个人一起做的事，是什么？",
+    "你最近在循环哪首歌？",
+    "如果明天没课，你最想去哪？",
+    "宿舍楼下那棵树，你注意过吗？",
+    "哪句话是你最近常对自己说的？"
+  ];
+
+  /** 今天这一句：按「本地日期」数天，同一天恒定、每天换一句、轮完从头来。
+   *  传一个 Date 只是为了测试能问「明天是哪句」，页面自己从不传。 */
+  function questionOfTheDay(now) {
+    var d = now || new Date();
+    var midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    var day = Math.floor(midnight / 86400000);
+    var n = DAILY_QUESTIONS.length;
+    return DAILY_QUESTIONS[((day % n) + n) % n];
+  }
+
+  var dailyQEl    = document.getElementById("daily-q");
+  var dailyQText  = document.getElementById("daily-q-text");
+  var dailyQUse   = document.getElementById("daily-q-use");
+  var todayQuestion = "";
+
+  function renderDailyQuestion() {
+    if (!dailyQEl) return;               // 页面里没有这条就不管，别把发布页搞崩
+    todayQuestion = questionOfTheDay();
+    if (dailyQText) dailyQText.textContent = todayQuestion;
+    dailyQEl.hidden = false;
+  }
+
+  if (dailyQUse) {
+    dailyQUse.addEventListener("click", function () {
+      if (!todayQuestion) return;
+      var written = contentEl.value;
+      contentEl.value = written.trim()
+        ? written.replace(/\s+$/, "") + "\n" + todayQuestion   // 已经在写：接在后面，不覆盖
+        : todayQuestion;
+      updateCounter();
+      contentEl.focus();
+      if (contentEl.setSelectionRange) {
+        contentEl.setSelectionRange(contentEl.value.length, contentEl.value.length);
+      }
+    });
+  }
+
   document.title = "分享此刻 · " + C.SITE_NAME;
   C.markTabbar("post");
   C.blockIfNotReady(noticeEl);
@@ -294,5 +354,6 @@
       : "发布分享";
   }
 
+  renderDailyQuestion();
   renderIdentity();
 })();

@@ -4,10 +4,13 @@
 Builds a minimal DOM + Supabase mock, then actually executes the real page
 scripts and asserts on the rendered output. ASCII-only source on purpose.
 """
+import datetime
 import io
 import json
 import os
+import re
 import sys
+import time
 import dukpy
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (tools/ -> repo)
@@ -2954,6 +2957,44 @@ check("and the card comes back in full",
       "post-body" in js(it, "Campus.renderPostCard({ id: 'p-1', is_anonymous: false,"
                             " display_name: 'N', content: 'x',"
                             " created_at: '2026-09-20T10:00:00.000Z' })"))
+
+print("- C1: one rotating question above the box on the publish page")
+POST_SRC = read(os.path.join(ROOT, "assets", "js", "post.js"))
+_m = re.search(r"var DAILY_QUESTIONS = \[(.*?)\];", POST_SRC, re.S)
+QUESTIONS = re.findall(r'"([^"]+)"', _m.group(1)) if _m else []
+check("there is a pool to rotate through", len(QUESTIONS) >= 7, len(QUESTIONS))
+
+# 和页面同一套算法：本地零点那天的序号 mod 池子大小
+_day = int(time.mktime(datetime.date.today().timetuple()) // 86400)
+TODAY_Q = QUESTIONS[_day % len(QUESTIONS)] if QUESTIONS else None
+
+it = load("post.html", "mock-logged")
+shown = js(it, "document.getElementById('daily-q-text').textContent")
+check("the bar stops being hidden once a question is ready",
+      js(it, "document.getElementById('daily-q').hidden") is False)
+check("it shows today's question, by the same day count the page uses",
+      shown == TODAY_Q and shown in QUESTIONS, "%r vs %r" % (shown, TODAY_Q))
+check("nothing is written to this device just for showing it",
+      js(it, "Object.keys(__ls).length") == 0, js(it, "Object.keys(__ls).join(',')"))
+
+ev(it, "document.getElementById('daily-q-use').click();")
+check("clicking it puts exactly that question in the box",
+      js(it, "document.getElementById('content').value") == shown)
+check("the counter keeps up with it",
+      js(it, "document.getElementById('counter').textContent") == "%d / 1000" % len(shown))
+
+ev(it, "document.getElementById('content').value = '\u6211\u81ea\u5df1\u5199\u7684';"
+       " document.getElementById('daily-q-use').click();")
+_after = js(it, "document.getElementById('content').value")
+check("text already written is appended to, never overwritten",
+      _after == "\u6211\u81ea\u5df1\u5199\u7684\n" + shown, repr(_after))
+
+ev(it, "document.getElementById('content').value = '';"
+       " document.getElementById('daily-q-use').click();"
+       " document.getElementById('daily-q-use').click();")
+check("clicking it twice with an empty box does not stack duplicates",
+      js(it, "document.getElementById('content').value.split('\\n').length") == 2,
+      js(it, "document.getElementById('content').value"))
 
 print()
 print("=" * 70)

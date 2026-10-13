@@ -655,6 +655,38 @@ button, input, textarea, select {
 }
 .counter.warn { color: var(--brand-strong); font-weight: 700; }
 
+/* 今日一问（C1）：发布页正文框上方的一句话，点「写这个」带进正文（不强制）。
+   默认 hidden，脚本算好今天那句才显出来 —— 脚本没跑起来时它不会留个空壳。 */
+.daily-q {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  font-size: 14px;
+}
+.daily-q[hidden] { display: none; }
+.daily-q-label {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #FFFDFB;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.daily-q-text { flex: 1 1 auto; min-width: 0; }
+.daily-q-use { flex: none; }
+@media (max-width: 420px) {
+  /* 窄屏放不下就换行，别把问题挤成一条竖线 */
+  .daily-q { flex-wrap: wrap; }
+  .daily-q-text { flex: 1 1 100%; order: 3; }
+}
+
 /* 单选胶囊（反馈页的「你用什么设备浏览」）：原生 radio 藏起来，
    点整块都能选中，键盘 Tab 也能用（:focus-visible 有描边） */
 .choice-row {

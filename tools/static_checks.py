@@ -1576,6 +1576,38 @@ check("R20: the miss message is definite now, not a two-way guess",
 check("R20: the share link still points at feed.html?post=, never the publish page",
       "feed.html?post=" in r20_app and "post.html?post=" not in r20_app)
 print()
+print("R21) C1: the daily question above the box on the publish page")
+r21_post = sources["post.js"]
+r21_html = read(os.path.join(ROOT, "post.html"))
+r21_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
+
+_m = re.search(r"var DAILY_QUESTIONS = \[(.*?)\];", r21_post, re.S)
+_r21_pool = re.findall(r'"([^"]+)"', _m.group(1)) if _m else []
+_r21_block = r21_post.split("var DAILY_QUESTIONS", 1)[1].split("/* ---", 1)[0] if _m else ""
+
+check("R21: there is a pool of questions to rotate through", len(_r21_pool) >= 7, len(_r21_pool))
+check("R21: the pick is the local day number - same day, same question, next day moves on",
+      "function questionOfTheDay" in r21_post and "86400000" in r21_post
+      and "% n" in r21_post)
+check("R21: no dice are rolled anywhere in it", "Math.random" not in r21_post)
+check("R21: it needs no network and no storage at all",
+      not re.search(r"(fetch\(|from\(|localStorage|sessionStorage)", _r21_block),
+      _r21_block[:120])
+check("R21: the bar sits in the publish page, above the box, and is hidden in the markup",
+      'id="daily-q"' in r21_html and 'id="daily-q-text"' in r21_html
+      and 'id="daily-q-use"' in r21_html
+      and 'class="daily-q" id="daily-q" hidden' in r21_html
+      and r21_html.find('id="daily-q"') < r21_html.find('id="content"'))
+check("R21: the button is type=button - otherwise it would submit the post",
+      re.search(r'<button[^>]*id="daily-q-use"[^>]*type="button"', r21_html) is not None)
+check("R21: the page fills the bar in when it starts", "renderDailyQuestion();" in r21_post)
+check("R21: what is already written is appended to, never thrown away",
+      r'replace(/\s+$/, "")' in _r21_block and r'"\n"' in _r21_block)
+check("R21: the bar has styles of its own, hidden state included",
+      ".daily-q {" in r21_css and ".daily-q[hidden] { display: none; }" in r21_css)
+check("R21: ...and it wraps on a narrow phone instead of squeezing the question",
+      "max-width: 420px" in r21_css and ".daily-q-text { flex: 1 1 100%;" in r21_css)
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)
