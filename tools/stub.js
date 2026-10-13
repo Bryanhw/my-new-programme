@@ -264,7 +264,24 @@ function __missingColumn(clientOpts, st) {
   if (!(clientOpts && clientOpts.anonCodeColumn)) {
     miss.push('posts.anon_code', 'my_posts.anon_code');
   }
+  /* C3 的话题列同理：默认按「迁移还没跑」模拟（docs/supabase-topics.sql），
+     clientOpts.topicsColumn = true 才表示那一列已经在库里了。
+     两列都缺时，页面应该连降两次、最多三个来回，而不是整页读挂。 */
+  if (!(clientOpts && clientOpts.topicsColumn)) {
+    miss.push('posts.topics');
+  }
   if (!miss.length) return '';
+  /* 写进去的列同样受「这一列存不存在」影响：insert / update 的载荷在 st.payload 里。
+     不检查它的后果是：列没迁移时插入照样「成功」，前端那套降级重试根本没被考到。 */
+  if (st.payload && (st.op === 'insert' || st.op === 'update')) {
+    for (var pk in st.payload) {
+      if (!st.payload.hasOwnProperty(pk)) continue;
+      for (var pi = 0; pi < miss.length; pi++) {
+        var pp = String(miss[pi]).split('.');
+        if (pp.length === 2 && pp[0] === st.table && pp[1] === pk) return pk;
+      }
+    }
+  }
   var cols = String(st.select || '').split(',');
   for (var c = 0; c < cols.length; c++) cols[c] = cols[c].replace(/\s/g, '');
   for (var i = 0; i < miss.length; i++) {

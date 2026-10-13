@@ -88,6 +88,58 @@
   C.blockIfNotReady(noticeEl);
 
   /* ---------------------------------------------------------------
+   * 话题标签（C3）：从站里约定的那份列表里挑，最多 3 个，可以不挑。
+   *   列表只有一份（Campus.TOPICS），发布页和广场筛选条用的是同一个 ——
+   *   自己造词会让标签碎成一片没人看得懂的东西，所以这里只给选项。
+   * --------------------------------------------------------------- */
+  var topicPickerEl = document.getElementById("topic-picker");
+  var topicHintEl   = document.getElementById("topic-hint");
+  var pickedTopics  = [];
+
+  function renderTopicPicker() {
+    if (!topicPickerEl) return;
+    var all = C.TOPICS || [];
+    var html = "";
+    for (var i = 0; i < all.length; i++) {
+      var on = pickedTopics.indexOf(all[i]) >= 0 ? " chip-on" : "";
+      html += '<button class="chip' + on + '" type="button" data-pick="' +
+        C.escapeHtml(all[i]) + '">#' + C.escapeHtml(all[i]) + "</button>";
+    }
+    topicPickerEl.innerHTML = html;
+  }
+
+  function renderTopicHint() {
+    if (!topicHintEl) return;
+    topicHintEl.textContent = pickedTopics.length
+      ? "已选：" + pickedTopics.join("、") + "（再点一下取消）"
+      : "话题是站里约定好的几个，方便同学按兴趣翻。不加也照样能发。";
+  }
+
+  /** 点一下选中、再点一下取消；满了就直说，不静默丢掉 */
+  function toggleTopic(name) {
+    var i = pickedTopics.indexOf(name);
+    if (i >= 0) {
+      pickedTopics.splice(i, 1);
+    } else if (pickedTopics.length >= C.TOPIC_LIMIT) {
+      C.showNotice(noticeEl, "warn",
+        "一条最多带 " + C.TOPIC_LIMIT + " 个话题，先点掉一个再选。");
+      return;
+    } else {
+      pickedTopics.push(name);
+    }
+    renderTopicPicker();
+    renderTopicHint();
+  }
+
+  if (topicPickerEl) {
+    topicPickerEl.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest("[data-pick]") : null;
+      if (!btn) return;
+      toggleTopic(btn.getAttribute("data-pick") || "");
+    });
+  }
+
+  /* ---------------------------------------------------------------
    * 身份提示
    * --------------------------------------------------------------- */
   function renderIdentity() {
@@ -269,7 +321,8 @@
     return C.createPost({
       content: content,
       file: selectedFile,
-      isAnonymous: isAnonymous
+      isAnonymous: isAnonymous,
+      topics: pickedTopics
     });
   }
 
@@ -323,9 +376,16 @@
         return publish(content, opt.isAnonymous);
       });
     }).then(function () {
-      // 发布成功后清空表单，避免重复提交或返回本页时看到旧内容
+      // 发布成功后清空表单，避免重复提交或返回本页时看到旧内容。
+      // 话题要在这之前记下来：resetForm 会清掉它；而「库迁移过没有」的探测结果
+      // 在刚才那次发帖里已经定下来了，此刻读是准的。
+      var asked = pickedTopics.length;
+      var carried = asked > 0 && C.topicsSupported();
       resetForm();
-      C.showNotice(noticeEl, "ok", "已提交审核。你自己现在就能在广场看到它（带「审核中」标记），别人要等通过后才看得到。");
+      C.showNotice(noticeEl, "ok",
+        "已提交审核" + (carried ? "（带 " + asked + " 个话题）" : "") +
+        "。你自己现在就能在广场看到它（带「审核中」标记），别人要等通过后才看得到。" +
+        (asked > 0 && !carried ? "话题这次没带上 —— 站点的标签功能还没开启。" : ""));
       setTimeout(function () { window.location.href = "feed.html"; }, 1200);
     }).catch(function (err) {
       if (err && err.message === "__aborted__") { setLoading(false); return; }
@@ -337,6 +397,9 @@
   function resetForm() {
     contentEl.value = "";
     updateCounter();
+    pickedTopics = [];
+    renderTopicPicker();
+    renderTopicHint();
     selectedFile = null;
     fileEl.value = "";
     previewImg.removeAttribute("src");
@@ -355,5 +418,7 @@
   }
 
   renderDailyQuestion();
+  renderTopicPicker();
+  renderTopicHint();
   renderIdentity();
 })();

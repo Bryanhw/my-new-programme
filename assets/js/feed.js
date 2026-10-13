@@ -21,6 +21,9 @@
   var noteEl = document.getElementById("circle-note");
   var hotEl = document.getElementById("circle-hot");
   var filterEl = document.getElementById("feed-filter");
+  var topicBarEl = document.getElementById("topic-bar");
+  var topicChipsEl = document.getElementById("topic-chips");
+  var topicNoteEl = document.getElementById("topic-note");
 
   document.title = "同学们的分享 · " + C.SITE_NAME;
   C.markTabbar("feed");
@@ -29,19 +32,20 @@
   var loading = false;
   var loaded = [];     // 已经拿到的那批（筛词只在这批里找）
   var keyword = "";    // 当前筛的词（空 = 不筛）
+  var topic = "";      // 当前筛的话题（空 = 全部；不带话题的分享也在「全部」里）
   var seq = 0;         // 每次 load 自增：晚到的计数不许回填到新的一轮里
   var touched = false; // 这批卡片用户已经动过（点赞/展开评论）：不再整体重画
 
   /* 地址栏带来的圈子、词与「分享过来的那一条」：首页的热词 chips 和
      卡片上的「复制链接」就是这么跳过来的 */
   var params = (function () {
-    var out = { circle: "", q: "", post: "" };
+    var out = { circle: "", q: "", post: "", topic: "" };
     var qs = String(window.location.search || "").replace(/^\?/, "");
     var pairs = qs ? qs.split("&") : [];
     for (var i = 0; i < pairs.length; i++) {
       var kv = pairs[i].split("=");
       var k = decodeURIComponent(kv[0] || "");
-      if (k !== "circle" && k !== "q" && k !== "post") continue;
+      if (k !== "circle" && k !== "q" && k !== "post" && k !== "topic") continue;
       var v = "";
       try { v = decodeURIComponent((kv[1] || "").replace(/\+/g, " ")); } catch (e) { v = ""; }
       out[k] = v;
@@ -51,6 +55,7 @@
 
   if (params.circle && C.listCircles().length) C.setCircle(params.circle);
   keyword = params.q || "";
+  topic = params.topic || "";
 
   /* F1/B4：分享直链 feed.html?post=<id> —— 打开后滚到那条并高亮。
      站点没有帖子详情页（post.html 是发布页），所以这里只做「至少高亮」这件事：
@@ -97,6 +102,68 @@
     return C.getPostById(targetId).then(function (post) {
       if (post) loaded = [post].concat(loaded);
     }).catch(function () {});
+  }
+
+  /* ---------------------------------------------------------------
+   * 话题标签（C3）：按话题筛当前这批；**不带话题的分享仍在「全部」里**
+   *   筛选条只在「这批里真的有人打过标签」时才出现，免得点进去是一条空流。
+   * --------------------------------------------------------------- */
+  function topicOf(post) { return C.normalizeTopics(post && post.topics); }
+
+  function filterByTopic(posts) {
+    if (!topic) return posts;
+    return posts.filter(function (p) { return topicOf(p).indexOf(topic) >= 0; });
+  }
+
+  /** 这批里出现过的话题（按约定顺序）+ 当前选中的那个（外部链接带来的也算） */
+  function topicsInBatch() {
+    var out = [];
+    var all = C.TOPICS || [];
+    for (var i = 0; i < all.length; i++) {
+      if (all[i] === topic) { out.push(all[i]); continue; }
+      for (var j = 0; j < loaded.length; j++) {
+        if (topicOf(loaded[j]).indexOf(all[i]) >= 0) { out.push(all[i]); break; }
+      }
+    }
+    if (topic && out.indexOf(topic) < 0) out.unshift(topic);
+    return out;
+  }
+
+  function renderTopics() {
+    if (!topicBarEl || !topicChipsEl) return;
+    var list = topicsInBatch();
+    if (!list.length) {
+      topicBarEl.hidden = true;
+      topicChipsEl.innerHTML = "";
+      if (topicNoteEl) topicNoteEl.hidden = true;
+      return;
+    }
+    var html = '<button class="chip' + (topic ? "" : " chip-on") +
+      '" type="button" data-topic-pick="">全部</button>';
+    for (var i = 0; i < list.length; i++) {
+      html += '<button class="chip' + (list[i] === topic ? " chip-on" : "") +
+        '" type="button" data-topic-pick="' + C.escapeHtml(list[i]) + '">#' +
+        C.escapeHtml(list[i]) + "</button>";
+    }
+    topicChipsEl.innerHTML = html;
+    topicBarEl.hidden = false;
+    if (topicNoteEl) {
+      if (topic) {
+        topicNoteEl.hidden = false;
+        topicNoteEl.textContent = "正在看「#" + topic + "」：在已加载的 " + loaded.length +
+          " 条里找到 " + filterByTopic(loaded).length + " 条 —— 没打话题的分享在「全部」里。";
+      } else {
+        topicNoteEl.hidden = true;
+        topicNoteEl.textContent = "";
+      }
+    }
+  }
+
+  /** 切换话题：就地重画，不重新加载（地址栏那份数据不动，免得来回改历史记录） */
+  function setTopic(next) {
+    topic = next || "";
+    renderTopics();
+    renderAll();
   }
 
   function skeletonList() {
@@ -199,6 +266,17 @@
           "</div>";
         return;
       }
+      if (topic) {
+        feedEl.innerHTML =
+          '<div class="empty">' +
+            '<div class="empty-icon">🏷</div>' +
+            '<div class="empty-title">已加载的分享里还没有 #' + C.escapeHtml(topic) + "</div>" +
+            '<div class="empty-text">这里只筛当前已经加载出来的那几条，不是全站搜索 —— ' +
+              "看看「全部」就知道大家最近在聊什么。</div>" +
+          "</div>" +
+          '<button class="btn btn-soft btn-block mt-16" type="button" data-clear-topic>看看全部</button>';
+        return;
+      }
       if (onlyCircle() && circleId()) {
         feedEl.innerHTML =
           '<div class="empty">' +
@@ -238,13 +316,14 @@
     if (countEl) {
       var id = circleId();
       countEl.textContent = "共 " + posts.length + " 条分享" +
+        (topic ? "（#" + topic + "）" : "") +
         (id && !onlyCircle() ? "（" + C.circleName(id) + "的在前面）" : "");
     }
   }
 
   function renderAll() {
     renderFilter();
-    renderList(C.filterPostsByTerm(loaded, keyword));
+    renderList(filterByTopic(C.filterPostsByTerm(loaded, keyword)));
   }
 
   function load() {
@@ -267,6 +346,7 @@
       return ensureTargetLoaded();
     }).then(function () {
       renderBar();
+      renderTopics();
       renderAll();
 
       // 第二步（不挡渲染）：点赞数 / 评论数回来后再补一次。
@@ -328,11 +408,38 @@
     });
   }
 
+  if (topicChipsEl) {
+    topicChipsEl.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest("[data-topic-pick]") : null;
+      if (!btn) return;
+      setTopic(btn.getAttribute("data-topic-pick") || "");
+    });
+  }
+
   /* 点赞 */
   feedEl.addEventListener("click", function (e) {
     // 用户已经动过这批卡片（点赞 / 展开评论 / 看图）：计数回来时不要再整体重画，
     // 否则刚点开的评论会被收回去。点完这一下，数字留在原地就够了。
     touched = true;
+
+    // 卡片上的 #话题：在广场里就地切换筛选，不重新加载页面（其它页面上它就是个
+    // 普通链接，跳到 feed.html?topic=…）。只接管普通的左键单击，
+    // 中键 / Ctrl+点击该开新标签页就让它开。
+    var tag = (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.target.closest)
+      ? e.target.closest("[data-topic]") : null;
+    if (tag && e.preventDefault) {
+      e.preventDefault();
+      setTopic(tag.getAttribute("data-topic") || "");
+      return;
+    }
+
+    // 话题空态里的「看看全部」
+    var clearTopic = e.target.closest ? e.target.closest("[data-clear-topic]") : null;
+    if (clearTopic) {
+      setTopic("");
+      return;
+    }
+
     var btn = e.target.closest ? e.target.closest("[data-like]") : null;
     if (!btn) return;
 

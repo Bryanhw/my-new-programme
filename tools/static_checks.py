@@ -534,7 +534,7 @@ check("post inserts echo the display columns explicitly",
       and "insert(row).select().single()" not in appjs)
 check("the insert echo still lists the columns through POST_COLUMNS (never select=*)",
       "var POST_COLUMNS = " in appjs
-      and "POST_COLUMNS + (anonCodeColumnOk" in appjs)
+      and re.search(r"POST_COLUMNS \+\s*\(anonCodeColumnOk \?", appjs) is not None)
 check("profile.js asks for my posts without a uid",
       "C.listMyPosts()" in profjs and "listMyPosts(id.user.id)" not in profjs)
 check("loadMyPosts is always called without arguments",
@@ -1474,7 +1474,7 @@ check("R18/F1: the copy gives feedback, and a manual fallback when it fails",
       and "\u94fe\u63a5\u5df2\u590d\u5236" in r18_app
       and "\u6ca1\u590d\u5236\u4e0a" in r18_app)
 check("R18/F1+B4: feed.js reads the ?post= id from the address bar",
-      'var out = { circle: "", q: "", post: "" };' in r18_feed
+      'var out = { circle: "", q: "", post: "", topic: "" };' in r18_feed
       and 'var targetId = params.post || "";' in r18_feed)
 check("R18/F1+B4: it only rings the card whose id matches, exactly once",
       "function markTarget(html)" in r18_feed
@@ -1607,6 +1607,63 @@ check("R21: the bar has styles of its own, hidden state included",
       ".daily-q {" in r21_css and ".daily-q[hidden] { display: none; }" in r21_css)
 check("R21: ...and it wraps on a narrow phone instead of squeezing the question",
       "max-width: 420px" in r21_css and ".daily-q-text { flex: 1 1 100%;" in r21_css)
+print()
+print("R22) C3: topics - one list of words, and the column stays optional")
+r22_app = appjs
+r22_feed = sources["feed.js"]
+r22_post = sources["post.js"]
+r22_html_post = read(os.path.join(ROOT, "post.html"))
+r22_html_feed = read(os.path.join(ROOT, "feed.html"))
+r22_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
+r22_sql = read(os.path.join(ROOT, "docs", "supabase-topics.sql"))
+r22_sql_flat = read(os.path.join(ROOT, "docs", "supabase-topics-flat.sql"))
+
+_m = re.search(r'var TOPICS = \[(.*?)\];', r22_app, re.S)
+_r22_topics = re.findall(r'"([^"]+)"', _m.group(1)) if _m else []
+
+check("R22: the fixed topic list lives in one place in the front-end",
+      len(_r22_topics) >= 5, len(_r22_topics))
+check("R22: ...and the migration allows the very same words",
+      bool(_r22_topics) and all(t in r22_sql for t in _r22_topics))
+check("R22: the CHECK caps it at the same number the page enforces",
+      "cardinality(topics) <= 3" in r22_sql and "var TOPIC_LIMIT = 3;" in r22_app
+      and "posts_topics_allowed" in r22_sql and "using gin (topics)" in r22_sql)
+check("R22: the flat paste version carries the same statements",
+      "add column if not exists topics text[] not null default '{}'" in r22_sql_flat
+      and "posts_topics_allowed" in r22_sql_flat
+      and "notify pgrst, 'reload schema';" in r22_sql_flat)
+check("R22: normalizeTopics drops unknown words, dedupes, and stops at the limit",
+      "function normalizeTopics(list)" in r22_app
+      and "TOPICS.indexOf(t) < 0" in r22_app
+      and "out.indexOf(t) >= 0" in r22_app
+      and "out.length >= TOPIC_LIMIT" in r22_app)
+check("R22: the row only carries topics when something was picked and the column exists",
+      re.search(r"if \(picked\.length && topicsColumnOk\) row\.topics = picked;", r22_app) is not None)
+check("R22: the row is built inside the retry, or the next attempt would carry it again",
+      re.search(r"return withAnonCodeFallback\(function \(\) \{\s*var row = \{", r22_app) is not None)
+check("R22: topics is in the read list too, behind its own switch",
+      re.search(r'\(topicsColumnOk \? ", " \+ TOPICS_COLUMN : ""\)', r22_app) is not None)
+check("R22: the fallback keeps going until every missing optional column is dropped",
+      r22_app.count("return withAnonCodeFallback(run);") == 1
+      and "topicsColumnOk = false;" in r22_app and "anonCodeColumnOk = false;" in r22_app)
+check("R22: the publish page builds its picker from that one list",
+      'id="topic-picker"' in r22_html_post and "var all = C.TOPICS || [];" in r22_post
+      and 'type="button" data-pick=' in r22_post)
+check("R22: it says out loud when the topics could not be carried",
+      "C.topicsSupported()" in r22_post and "\u6807\u7b7e\u529f\u80fd\u8fd8\u6ca1\u5f00\u542f" in r22_post)
+check("R22: the feed reads ?topic= and hides the bar when nobody has tagged anything",
+      'topic: ""' in r22_feed and "function renderTopics()" in r22_feed
+      and "topicBarEl.hidden = true;" in r22_feed
+      and 'id="topic-bar"' in r22_html_feed and 'id="topic-chips"' in r22_html_feed)
+check("R22: untagged posts stay in 全部 - no filter unless one is picked",
+      "function filterByTopic(posts)" in r22_feed and "if (!topic) return posts;" in r22_feed)
+check("R22: the topic filter adds no query of its own (it narrows the loaded batch)",
+      ".from(" not in r22_feed and "\u98df\u5802" not in r22_feed)
+check("R22: card tags are real links, and the feed takes over the click",
+      "feed.html?topic=' + encodeURIComponent(tags[ti])" in r22_app
+      and 'e.target.closest("[data-topic]")' in r22_feed and "function setTopic(next)" in r22_feed)
+check("R22: the topic rows have styles of their own",
+      ".post-tags {" in r22_css and ".topic-bar {" in r22_css and ".post-tags .tag:hover" in r22_css)
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:

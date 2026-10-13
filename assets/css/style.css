@@ -501,6 +501,29 @@ button, input, textarea, select {
   vertical-align: middle;
 }
 
+/* 话题标签（C3）：卡片上的一行 #话题。它是链接 —— 点一下去广场看这个话题
+   （在广场里则由 JS 接管，就地切换筛选、不重新加载）。 */
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+.post-tags .tag {
+  text-decoration: none;
+  transition: background .15s ease, border-color .15s ease;
+}
+.post-tags .tag:hover,
+.post-tags .tag:focus-visible {
+  background: var(--brand-ghost);
+  border-color: var(--brand);
+}
+
+/* 话题筛选条（C3）：只在「这批里真的有人打过标签」时才显示 */
+.topic-bar {
+  margin: 10px 0 2px;
+}
+
 .post-body {
   font-size: 15.5px;
   line-height: 1.78;

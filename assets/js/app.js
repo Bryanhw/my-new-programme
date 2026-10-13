@@ -301,7 +301,7 @@ window.Campus = (function () {
 
   /**
    * 发布一条帖子
-   * @param {Object} o { content, file, isAnonymous }
+   * @param {Object} o { content, file, isAnonymous, topics }
    */
   function createPost(o) {
     if (!client) return Promise.reject(new Error(configError));
@@ -330,20 +330,25 @@ window.Campus = (function () {
           : Promise.resolve(null);
 
         return upload.then(function (imagePath) {
-          var row = {
-            author_id: id.user.id,
-            is_anonymous: isAnonymous,
-            display_name: displayName,
-            school: school || null,
-            content: content || null,
-            image_path: imagePath,
-            // 新内容一律进待审核：数据库里 RLS 的 posts_insert_self
-            // 也只接受 status = 'pending'，自己改不成 approved。
-            status: "pending"
-          };
+          var picked = normalizeTopics(o.topics);
           // 这里必须列出列名：数据库已撤销 posts.author_id 的读权限，
-          // select=* 会整条失败（42501），列出来才只回显需要的展示字段。
+          // 要求回显全部列（不写列名的那种写法）会整条失败（42501），
+          // 列出来才只回显需要的展示字段。
+          // 行对象在闭包里现造：话题列还没迁移时（topicsColumnOk 变 false）
+          // 重试的那一次就不会再带上它，否则会一直撞同一个错。
           return withAnonCodeFallback(function () {
+            var row = {
+              author_id: id.user.id,
+              is_anonymous: isAnonymous,
+              display_name: displayName,
+              school: school || null,
+              content: content || null,
+              image_path: imagePath,
+              // 新内容一律进待审核：数据库里 RLS 的 posts_insert_self
+              // 也只接受 status = 'pending'，自己改不成 approved。
+              status: "pending"
+            };
+            if (picked.length && topicsColumnOk) row.topics = picked;
             return client.from("posts").insert(row).select(postColumns()).single();
           }).then(function (res) {
             if (res.error) throw new Error("发布失败：" + res.error.message);
@@ -360,39 +365,76 @@ window.Campus = (function () {
   // status 用来显示「审核中 / 未通过」角标：只有本人看得见自己的待审核内容。
   var POST_COLUMNS = "id, is_anonymous, display_name, school, content, image_path, created_at, status";
 
+  /* 话题标签（C3 / r18 的 B2）：站里约定的固定话题，发布时最多挑 3 个。
+     这份列表是**唯一**的样本 —— 发布页的 chips、广场的筛选条、卡片上的 #标签
+     都从它来；数据库那边还有一层 CHECK 兜底（见 docs/supabase-topics.sql）。
+     写死而不是让同学自己造词，是为了不让标签长成一片没人看得懂的碎片。 */
+  var TOPICS = ["食堂", "图书馆", "晚霞", "emo", "求组队", "学习", "运动", "随手拍"];
+  var TOPIC_LIMIT = 3;
+
+  /** 只认约定的那几个话题：去掉不认识的、去重、最多 3 个。
+   *  库里万一有脏数据（或以后改了列表），渲染时也不会冒出乱七八糟的标签。 */
+  function normalizeTopics(list) {
+    var out = [];
+    if (!list || !list.length) return out;
+    for (var i = 0; i < list.length; i++) {
+      if (out.length >= TOPIC_LIMIT) break;
+      var t = String(list[i] || "").trim();
+      if (TOPICS.indexOf(t) < 0) continue;
+      if (out.indexOf(t) >= 0) continue;
+      out.push(t);
+    }
+    return out;
+  }
+
   /**
    * 稳定洞号（D1）：posts.anon_code 是数据库的生成列，同一个人的匿名帖共用一个号。
+   * 话题标签（C3）：posts.topics 是上面那份固定列表里的数组。
    *
-   * 为什么要有下面这套「能力探测」：
+   * 这两列都是「页面先上、迁移后跑」的可选列，所以共用下面同一套能力探测：
    *   数据库迁移和页面发布是两条独立的线，谁先谁后都可能发生 ——
-   *   在库里还没有这一列时，请求里带上它会让**整条查询**失败（42703），
+   *   在库里还没有某一列时，请求里带上它会让**整条查询**失败（42703），
    *   广场直接白屏。所以先带列请求，一旦接口说「没这列」，就在本次会话里
-   *   记住并改回不带列的老查询（页面退回 S1 的每帖编号，功能不受影响）。
-   *   探测失败最多一次，之后不再多花一次请求。
+   *   记住并改回不带那一列的老查询（页面退回没有它的样子，功能不受影响）。
+   *   探测失败最多两次（两列各一次），之后不再多花请求。
    */
   var ANON_CODE_COLUMN = "anon_code";
+  var TOPICS_COLUMN = "topics";
   var anonCodeColumnOk = true;
+  var topicsColumnOk = true;
 
   function postColumns() {
-    return POST_COLUMNS + (anonCodeColumnOk ? ", " + ANON_CODE_COLUMN : "");
+    return POST_COLUMNS +
+      (anonCodeColumnOk ? ", " + ANON_CODE_COLUMN : "") +
+      (topicsColumnOk ? ", " + TOPICS_COLUMN : "");
   }
 
   /** 接口是不是在说「这个列不存在」（Postgres 42703 / PostgREST PGRST204） */
   function isMissingColumn(err) {
     if (!err) return false;
-    return String(err.code || "") === "42703" ||
-           String(err.code || "") === "PGRST204" ||
-           String(err.message || "").indexOf(ANON_CODE_COLUMN) >= 0;
+    if (String(err.code || "") === "42703" ||
+        String(err.code || "") === "PGRST204") return true;
+    var msg = String(err.message || "");
+    return msg.indexOf(ANON_CODE_COLUMN) >= 0 || msg.indexOf(TOPICS_COLUMN) >= 0;
   }
 
-  /** 统一封一层：带上 anon_code 的请求若因「列不存在」失败，就降级重试一次 */
+  /** 统一封一层：请求里带了可选列、却因「列不存在」失败时，关掉那一列重试。
+   *  消息点名了哪个列就先关哪个；没点名就按 anon_code → topics 的顺序关。
+   *  关键：**重试的那一次也要再检查一遍** —— 两列都没迁移时要连降两次
+   *  （三次请求），只降一次会把第二跳的错误漏给调用方。
+   *  每层最多关掉一列，所以最多两层递归；两列都关掉后还报同样的错就如实交回去。 */
   function withAnonCodeFallback(run) {
     return run().then(function (res) {
-      if (res && res.error && anonCodeColumnOk && isMissingColumn(res.error)) {
+      if (!res || !res.error || !isMissingColumn(res.error)) return res;
+      var msg = String(res.error.message || "");
+      if (anonCodeColumnOk && msg.indexOf(TOPICS_COLUMN) < 0) {
         anonCodeColumnOk = false;
-        return run();
+      } else if (topicsColumnOk) {
+        topicsColumnOk = false;
+      } else {
+        return res;                       // 能关的都关了：如实交回去，不再重试
       }
-      return res;
+      return withAnonCodeFallback(run);
     });
   }
 
@@ -2179,6 +2221,18 @@ window.Campus = (function () {
       html += "</div>";
     }
 
+    // 话题标签（C3）：卡片上带 #，点一下去广场看这个话题（带上 ?topic=，
+    // 广场那边会预选好筛选条；在广场页里点则是就地切换，不重新加载）。
+    var tags = normalizeTopics(post.topics);
+    if (tags.length) {
+      html += '<div class="post-tags">';
+      for (var ti = 0; ti < tags.length; ti++) {
+        html += '<a class="tag" href="feed.html?topic=' + encodeURIComponent(tags[ti]) +
+          '" data-topic="' + escapeHtml(tags[ti]) + '">#' + escapeHtml(tags[ti]) + "</a>";
+      }
+      html += "</div>";
+    }
+
     html += '<div class="post-foot">';
     html += '<button class="like-btn' + (post.liked_by_me ? " liked" : "") + '" data-like="' + escapeHtml(post.id) + '">';
     html += "<span>" + (post.liked_by_me ? "🧡" : "🤍") + "</span>";
@@ -2712,6 +2766,12 @@ window.Campus = (function () {
     // D1：服务端稳定洞号（形状不对时返回空串）+ 「这个库有没有迁移过」的探测结果
     anonCode: anonCode,
     anonCodeSupported: function () { return anonCodeColumnOk; },
+    // C3：约定的话题清单（发布页 / 广场筛选 / 卡片标签的唯一来源）
+    TOPICS: TOPICS,
+    TOPIC_LIMIT: TOPIC_LIMIT,
+    normalizeTopics: normalizeTopics,
+    // C3：这个库迁移过没有（发帖后用它判断「话题是不是没带上」）
+    topicsSupported: function () { return topicsColumnOk; },
     avatarHtml: avatarHtml,
     statusTag: statusTag,
     showNotice: showNotice,

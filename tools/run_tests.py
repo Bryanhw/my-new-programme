@@ -1954,14 +1954,15 @@ MOON = "\U0001F319"
 
 it = load("feed.html", "mock-logged")
 
-print("- the column is not there yet (what the live site looks like today)")
+print("- the optional columns are not there yet (what a fresh project looks like)")
 calls = json.loads(js(it, "JSON.stringify(__calls)"))
 bounced = [c for c in calls if len(c) > 3 and str(c[3]).startswith("missing:")]
-check("the first request was bounced by the missing column (42703)",
-      len(bounced) == 1 and bounced[0][3] == "missing:anon_code", bounced)
+check("both optional columns got bounced, one after the other (42703)",
+      [b[3] for b in bounced] == ["missing:anon_code", "missing:topics"], bounced)
 sels = [c for c in calls if c[0] == "select" and c[1] == "posts"]
-check("the retry dropped anon_code instead of giving up",
-      sels and "anon_code" not in sels[-1][2], sels)
+check("the retries dropped the optional columns instead of giving up",
+      len(sels) == 3 and "anon_code" not in sels[-1][2] and "topics" not in sels[-1][2],
+      [c[2] for c in sels])
 check("the page still rendered after degrading",
       "hello from seed" in js(it, "document.getElementById('feed').innerHTML"))
 check("the probe remembers there is no such column",
@@ -1972,8 +1973,9 @@ check("the anonymous post falls back to the per-post code",
                                    " status: 'approved', created_at: '2026-09-23T10:00:00.000Z' })"
                                % A1))
 
-print("- once the migration has run, the card uses the code the database gives")
-it = load("feed.html", "mock-logged", pre="__mockOpts.anonCodeColumn = true;")
+print("- once the migrations have run, the card uses the code the database gives")
+it = load("feed.html", "mock-logged",
+          pre="__mockOpts.anonCodeColumn = true; __mockOpts.topicsColumn = true;")
 calls = json.loads(js(it, "JSON.stringify(__calls)"))
 bounced = [c for c in calls if len(c) > 3 and str(c[3]).startswith("missing:")]
 check("the feed asks the database for anon_code",
@@ -2879,10 +2881,11 @@ it = load("feed.html", "mock-logged",
           pre="window.location.search = '?post=" + SHARED_UUID + "';")
 js(it, "__posts_selects = 0; __calls.forEach(function (c) {"
        " if (c[0] === 'select' && c[1] === 'posts') __posts_selects++; });")
-# 批次那一次是两跳：先带 anon_code（列还没迁移，撞 42703）
-# 再降级重试；第三跳才是「按 id 问那一条」。删了按 id 那一跳就变 2，这条会报警。
-check("the shared id is asked for on its own, after the batch and its retry",
-      js(it, "__posts_selects") == 3,
+# 批次那一次是**三跳**：先带 anon_code（列还没迁移，撞 42703）→ 降级重试又撞
+# topics 那一列 → 再降级；第四跳才是「按 id 问那一条」。
+# 删了按 id 那一跳就变 3，这条会报警。
+check("the shared id is asked for on its own, after the batch and its retries",
+      js(it, "__posts_selects") == 4,
       "%s posts select(s)" % js(it, "__posts_selects"))
 check("a shared id nobody has is reported as gone, not as 'maybe older'",
       ZH_SHARED_MISS in js(it, "document.getElementById('notice').textContent"),
@@ -2995,6 +2998,119 @@ ev(it, "document.getElementById('content').value = '';"
 check("clicking it twice with an empty box does not stack duplicates",
       js(it, "document.getElementById('content').value.split('\\n').length") == 2,
       js(it, "document.getElementById('content').value"))
+
+print("- C3: topics on the feed, and untagged posts stay in 全部")
+TOPIC_A = "\u98df\u5802"        # 食堂
+TOPIC_B = "\u665a\u971e"        # 晚霞
+TOPIC_C = "\u56fe\u4e66\u9986"  # 图书馆
+ZH_ALL = "\u5168\u90e8"         # 全部
+ZH_NONE_YET = "\u8fd8\u6ca1\u6709"  # 还没有
+
+TAGGED = ("__mockOpts.store.posts[0].topics = ['" + TOPIC_A + "'];"
+          "__mockOpts.store.posts[2].topics = ['" + TOPIC_A + "', '" + TOPIC_B + "'];")
+
+
+def topic_url(t):
+    return "window.location.search = '?topic=' + encodeURIComponent('" + t + "');"
+
+
+it = load("feed.html", "mock-logged")
+check("with nobody tagged, the topic bar stays hidden",
+      js(it, "document.getElementById('topic-bar').hidden") is True)
+check("...and all three posts are still in 全部",
+      js(it, "document.getElementById('feed').innerHTML.split('data-post-id=').length - 1") == 3)
+check("...and no card carries a topic tag",
+      js(it, "document.getElementById('feed').innerHTML").count('class="tag"') == 0)
+
+it = load("feed.html", "mock-logged", pre=TAGGED)
+chips = js(it, "document.getElementById('topic-chips').innerHTML")
+check("the bar shows up as soon as somebody tagged something",
+      js(it, "document.getElementById('topic-bar').hidden") is False)
+check("it offers 全部 plus only the topics this batch actually has",
+      ZH_ALL in chips and TOPIC_A in chips and TOPIC_B in chips and TOPIC_C not in chips, chips)
+check("全部 is the one selected by default",
+      'class="chip chip-on" type="button" data-topic-pick=""' in chips, chips)
+
+html = js(it, "document.getElementById('feed').innerHTML")
+check("a tagged card carries a link to that topic, tagged for the feed to catch",
+      html.count('class="tag"') == 3 and 'data-topic="' + TOPIC_A + '"' in html
+      and 'href="feed.html?topic=' in html, html.count('class="tag"'))
+
+it = load("feed.html", "mock-logged", pre=TAGGED + topic_url(TOPIC_A))
+html = js(it, "document.getElementById('feed').innerHTML")
+count = js(it, "document.getElementById('feed-count').textContent")
+note = js(it, "document.getElementById('topic-note').textContent")
+check("?topic= keeps just the tagged ones",
+      "hello from seed" in html and "with image" in html and "p-2" not in html)
+check("...the count says which topic",
+      TOPIC_A in count, count)
+check("...the bar marks that topic as selected",
+      'class="chip chip-on" type="button" data-topic-pick="' + TOPIC_A + '"' in
+      js(it, "document.getElementById('topic-chips').innerHTML"))
+check("...and the note is honest about it being the loaded batch, not a search",
+      TOPIC_A in note and "\u5df2\u52a0\u8f7d" in note, note)
+check("filtering costs no extra request: the batch was asked for once (plus its retries)",
+      js(it, "__calls.filter(function(c){ return c[0] === 'select' && c[1] === 'posts'; }).length") == 3,
+      js(it, "JSON.stringify(__calls)"))
+
+it = load("feed.html", "mock-logged", pre=TAGGED + topic_url(TOPIC_C))
+html = js(it, "document.getElementById('feed').innerHTML")
+check("a topic nobody has used says so, and offers the way back",
+      ZH_NONE_YET in html and "data-clear-topic" in html, html)
+
+it = load("feed.html", "mock-logged",
+          pre="__mockOpts.store.posts[0].topics = ['not-a-topic', '" + TOPIC_A + "'];")
+check("a stray word in the database is not rendered as a tag",
+      js(it, "document.getElementById('feed').innerHTML").count('class="tag"') == 1)
+
+print("- C3: publishing with topics, before and after the migration")
+# 发布页是「库还没迁移」最能体现的地方：这一页不读帖子列表，
+# 所以发帖那一刻页面还不知道 topics 存不下来 —— 插入会先带上它、撞 42703，
+# 再降级重发一次。广场那边第一屏就已经探明了，反而看不到这一幕。
+it = load("post.html", "mock-logged")
+js(it, "__r = {}; Campus.createPost({ content: 'tagged one', isAnonymous: false,"
+       " topics: ['" + TOPIC_A + "', '" + TOPIC_B + "'] })"
+       ".then(function(){ __r.ok = true; }, function(e){ __r.err = String(e.message); });")
+ins = json.loads(js(it, "JSON.stringify(__calls.filter(function(c){ return c[0] === 'insert'; }))"))
+check("a post with topics still gets published when the column is missing",
+      js(it, "__r.ok") is True, js(it, "__r.err"))
+check("...the first insert carried topics and was bounced, then the retries dropped them",
+      [c[3] if len(c) > 3 else "" for c in ins] == ["missing:topics", "missing:anon_code", ""],
+      ins)
+check("...and the retry stored it without a topics field",
+      js(it, "String('topics' in __mockOpts.store.posts[3])") == "false")
+check("...so the page now knows the tag feature is off",
+      js(it, "Campus.topicsSupported()") is False)
+
+it = load("post.html", "mock-logged", pre="__mockOpts.topicsColumn = true;")
+js(it, "__r = {}; Campus.createPost({ content: 'tagged two', isAnonymous: false,"
+       " topics: ['" + TOPIC_A + "', '" + TOPIC_B + "'] })"
+       ".then(function(){ __r.ok = true; }, function(e){ __r.err = String(e.message); });")
+check("with the column there, the topics are stored as picked",
+      js(it, "JSON.stringify(__mockOpts.store.posts[3].topics)")
+      == json.dumps([TOPIC_A, TOPIC_B], ensure_ascii=False, separators=(",", ":")),
+      js(it, "JSON.stringify(__mockOpts.store.posts[3].topics)"))
+check("...and the probe reports the column is there",
+      js(it, "Campus.topicsSupported()") is True)
+
+js(it, "__r = {}; Campus.createPost({ content: 'messy', isAnonymous: false, topics:"
+       " ['" + TOPIC_A + "', '" + TOPIC_A + "', 'not-a-topic', '" + TOPIC_B + "', '" + TOPIC_C + "'] })"
+       ".then(function(){ __r.ok = true; }, function(e){ __r.err = String(e.message); });")
+check("stray words are dropped, repeats collapse, and it stops at three",
+      js(it, "JSON.stringify(__mockOpts.store.posts[4].topics)")
+      == json.dumps([TOPIC_A, TOPIC_B, TOPIC_C], ensure_ascii=False, separators=(",", ":")),
+      js(it, "JSON.stringify(__mockOpts.store.posts[4].topics)"))
+
+it = load("post.html", "mock-logged")
+picker = js(it, "document.getElementById('topic-picker').innerHTML")
+n_topics = js(it, "Campus.TOPICS.length")
+check("the publish page builds its picker from that one shared list",
+      picker.count("data-pick=") == n_topics and n_topics >= 5, picker.count("data-pick="))
+check("...every chip is type=button, or it would submit the form",
+      picker.count("type=\"button\"") == n_topics, picker[:160])
+check("...and the hint says picking none is fine too",
+      "\u4e0d\u52a0\u4e5f\u7167\u6837\u80fd\u53d1" in
+      js(it, "document.getElementById('topic-hint').textContent"))
 
 print()
 print("=" * 70)
