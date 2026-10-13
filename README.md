@@ -22,6 +22,7 @@
 | 🏠 温暖主页 | 按时段问候、一张校园照片、一个「✏️ 发布作品」入口，主打「没有压力的分享」 |
 | 🧭 底栏两个入口 | 首页 / 发布；广场、我的、常见问题、关于这里都收在页头右上角的「☰ 更多」菜单里；登录 / 注册是页头独立的高对比入口（已登录时自动收起） |
 | ✏️ 分享此刻 | 文字（最多 1000 字）+ 一张图片（最大 5MB），支持拖拽上传；上传前自动压缩到最长边 1600px 的 JPEG；广场上点任意一张图可以看**原图**，竖图不会被裁 |
+| 💡 今日一问 | 发布页正文框上方一句**按天轮换**的话题（如「图书馆哪层最安静？」），点「写这个」把它带进正文，已经在写的字不会被覆盖。纯前端：不联网、不写本机存储、不新增任何读取通道 |
 | 🌙 匿名发布 | 每一条都可以单独选择是否匿名；匿名帖不显示昵称（署名换成匿名编号），但**学校仍然会显示** |
 | ✍️ 署名小弹窗 | 匿名访客发布前会问一次「要不要署个名字」，写一个名字就只显示这个名字 |
 | 📱 手机号注册 | 填手机号 + 学校（从列表补全，也能手输）+ 密码即可注册，**不发真实短信**，手机号只作登录账号 |
@@ -336,9 +337,15 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），750 项
-python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），772 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），760 项
+python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），780 项
 ```
+
+> **用哪个 Python**：这两套工具依赖 `dukpy` / `esprima`，目前是在 **Python 3.14** 上跑通的
+> （CI 用 3.12，也没问题）。机器上装了多个 Python 时，别用没装过依赖的那个 —— 直接 `python`
+> 可能指向另一个版本，会报 `ModuleNotFoundError: No module named 'dukpy'`。
+> Windows 上可以显式指定：`py -3.14 tools\run_tests.py`；或对当前解释器补装依赖
+> （`python -m pip install -r tools\requirements-dev.txt`）。`version_assets.py` 只用标准库，任何 3.x 都能跑。
 
 正常都以 `checks run: N   failures: 0` 结尾、退出码 0。**这几个数字只能变好、不能变差**，
 变差必须在 `docs/PLAN_phase2.md` 第 5 节解释清楚。
