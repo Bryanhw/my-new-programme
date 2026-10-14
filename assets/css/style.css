@@ -615,6 +615,37 @@ button, input, textarea, select {
 }
 .like-btn:disabled { cursor: default; opacity: 0.8; }
 
+/* F2：收藏按钮。和点赞键同一副骨架，但状态差别做得明显一点 ——
+   「这条我存过了」是要一眼扫出来的信息，不能只差一个浅色底。
+   aria-pressed 与 .saved 同步变化（见 app.js 的 refreshSaveButtons）。 */
+.save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.save-btn:hover { background: var(--brand-ghost); color: var(--ink-soft); }
+.save-btn:focus-visible { outline: 2px solid var(--brand-strong); outline-offset: 2px; }
+.save-btn.saved {
+  background: var(--brand);
+  color: #FFFFFF;
+}
+.save-btn.saved:hover { background: var(--brand-strong); color: #FFFFFF; }
+
+/* 底栏在窄屏上要能换行：多了一个「收藏」之后，四个元素挤在一行会互相压 */
+@media (max-width: 420px) {
+  .post-foot { flex-wrap: wrap; row-gap: 8px; }
+}
+
 .post-time {
   margin-left: auto;
   font-size: 12.5px;
@@ -1960,3 +1991,65 @@ body.modal-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* --------------------- F2：「我的」三格 + 我的评论 --------------------- */
+/* 三格沿用广场那套 chips（同一套 .chip / .chip-on），只补排布与计数。
+   选中态靠 chip-on 之外，还带 aria-selected —— 读屏也要能听出在哪一格。 */
+.mine-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.mine-tabs .chip { cursor: pointer; }
+.mine-tabs .chip:focus-visible { outline: 2px solid var(--brand-strong); outline-offset: 2px; }
+.chip-count {
+  margin-left: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.chip-count:empty { display: none; }   /* 还没数出来就不留一个空括号 */
+
+/* 我的评论：一条一张小卡，正文与帖子卡片同字号下限，长评论不撑破容器 */
+.my-comment {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.my-comment-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+.my-comment-go {
+  margin-left: auto;
+  color: var(--brand-strong);
+  font-weight: 600;
+  text-decoration: none;
+}
+.my-comment-go:hover { text-decoration: underline; text-underline-offset: 2px; }
+.my-comment-text {
+  margin-top: 6px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;      /* 评论里的换行照原样保留 */
+  word-break: break-word;
+}
+
+/* 收藏里那些「现在读不到」的条目：轻描淡写地列出来，不吓人，也不假装还在 */
+.saves-missing {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.saves-missing b { color: var(--ink-soft); }
+.saves-missing .link-plain { margin-top: 8px; }

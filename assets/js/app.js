@@ -33,6 +33,20 @@ window.Campus = (function () {
      存进数据库反而要加迁移，还会多出一个「谁屏蔽了什么」的读取口子。 */
   var HIDDEN_POSTS_KEY = "campus.hiddenPosts";
 
+  /* F2：收藏（「存下来」）的帖子 id，同样只存本机。
+     和 F6 同一条理由，但方向相反：F6 是本机不看，F2 是本机想看。
+     这里刻意**只存 id、不存内容**（三个理由，缺一个都会变成坑）：
+       · 帖子可能被删除 / 下架，快照会留下一条再也点不开的幽灵；
+       · 存内容等于在 localStorage 里留一份「读过什么」的副本，
+         而按 id 回读走的是同一套 RLS —— 读得到才是真的还能看；
+       · 内容/署名随时可能被作者改，快照必然过期。
+     换句话说：本地存的是「想看哪条」，不是「那条长什么样」。 */
+  var SAVED_POSTS_KEY = "campus.savedPosts";
+
+  /* 帖子的 id 是 uuid（见 docs/supabase-setup.sql）。拿到残缺或乱写的 id
+     既不发无用请求，也不会让 PostgREST 回一个 400。 */
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   /* A1 图片展示三件套：
    *   · 展示盒给一个固定比例（见 style.css 的 .post-image），图还没下完位置就已经占住 —— 列表滚动不再抖；
    *   · 图一律 object-fit: contain，竖图整张都在画面里，不裁人；
@@ -490,7 +504,7 @@ window.Campus = (function () {
   function getPostById(id) {
     if (!client) return Promise.reject(new Error(configError));
     var want = String(id == null ? "" : id);
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(want)) {
+    if (!UUID_RE.test(want)) {
       return Promise.resolve(null);
     }
     return withAnonCodeFallback(function () {
@@ -502,6 +516,30 @@ window.Campus = (function () {
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
         return (res.data && res.data[0]) || null;
+      });
+  }
+
+  /** F2：按一批 id 取帖子 ——「我的收藏」用。
+   *  本地只存 id，内容仍然走「广场那张表 + 同一套 RLS」读回来，
+   *  所以「读得到 = 还能看，读不到 = 删掉了 / 没通过审核」，
+   *  调用方据此把那几条标出来，而不是拿本地快照假装它们还在。 */
+  function listPostsByIds(ids) {
+    if (!client) return Promise.reject(new Error(configError));
+    var want = [];
+    (ids || []).forEach(function (x) {
+      var s = String(x == null ? "" : x);
+      if (UUID_RE.test(s) && want.indexOf(s) < 0) want.push(s);
+    });
+    if (!want.length) return Promise.resolve([]);
+    return withAnonCodeFallback(function () {
+      return client.from("posts")
+        .select(postColumns())
+        .in("id", want)
+        .limit(want.length);
+    })
+      .then(function (res) {
+        if (res.error) throw new Error("加载失败：" + res.error.message);
+        return res.data || [];
       });
   }
 
@@ -1265,6 +1303,23 @@ window.Campus = (function () {
       return;
     }
 
+    // F2：收藏 / 取消收藏。收藏是「以后还想看」，所以给一个直达「我的收藏」的口子；
+    // 取消收藏只回一句，不必再引导去哪儿。
+    var saveBtn = el.closest("[data-save]");
+    if (saveBtn) {
+      var saveId = saveBtn.getAttribute("data-save");
+      var nowSaved = toggleSavedPost(saveId);
+      if (nowSaved) {
+        announce("收藏了，在「我的 → 我的收藏」里", {
+          label: "去我的收藏",
+          run: function () { window.location.href = "profile.html#saves"; }
+        });
+      } else {
+        announce("已取消收藏");
+      }
+      return;
+    }
+
     // 点了菜单里的举报：照旧走下面的举报分支，但先把菜单收起来
     if (el.closest(".post-menu")) closePostMenus();
 
@@ -1448,6 +1503,24 @@ window.Campus = (function () {
       });
   }
 
+  /** F2：取「我发过的评论」（「我的」页第二格）。
+   *  和 my_posts 一个思路：过滤在服务端由 auth.uid() 推导（is_mine 是视图里的派生列），
+   *  客户端读不到任何人的 author_id —— 「我的评论」不需要新增任何读取通道。
+   *  一个诚实的限制：这个视图只放 approved 的评论，所以刚发出去、还在待审的那条
+   *  不会出现在这里（页面上要明说，否则用户会以为评论丢了）。 */
+  function listMyComments(limit) {
+    if (!client) return Promise.reject(new Error(configError));
+    return client.from("post_comments")
+      .select(COMMENT_COLUMNS)
+      .eq("is_mine", true)
+      .order("created_at", { ascending: false })
+      .limit(limit || 50)
+      .then(function (res) {
+        if (res.error) throw new Error("加载失败：" + res.error.message);
+        return res.data || [];
+      });
+  }
+
   /** 给一批帖子补上评论数（读不到就按 0，不影响列表本身） */
   function attachComments(posts) {
     if (!posts.length) return Promise.resolve(posts);
@@ -1564,13 +1637,25 @@ window.Campus = (function () {
     }
   }
 
+  /**
+   * 评论的署名
+   *
+   * 评论这条线上没有「洞号」——编号是每帖一个、挂在帖子上的，而 post_comments
+   * 视图也不带 anon_code。所以匿名评论一律显示「匿名同学」，和评论列表里一致。
+   * 页面脚本要用署名时走这里，别自己去读 display_name（那会绕过统一口径）。
+   */
+  function commentAuthorName(c) {
+    var row = c || {};
+    if (row.is_anonymous) return "匿名同学";
+    return String(row.display_name || "").trim() || "一位同学";
+  }
+
   /** 回复对象显示用的名字 */
   function replyTargetName(postId) {
     var st = commentState(postId);
     for (var i = 0; i < st.comments.length; i++) {
       if (st.comments[i].id === st.replyTo) {
-        return st.comments[i].is_anonymous ? "匿名同学" :
-          (String(st.comments[i].display_name || "").trim() || "一位同学");
+        return commentAuthorName(st.comments[i]);
       }
     }
     return "ta";
@@ -1578,7 +1663,7 @@ window.Campus = (function () {
 
   /** 一条评论（isReply = 缩进的回复） */
   function renderCommentItem(c, isReply) {
-    var name = c.is_anonymous ? "匿名同学" : (String(c.display_name || "").trim() || "一位同学");
+    var name = commentAuthorName(c);
 
     var html = '<div class="comment' + (isReply ? " is-reply" : "") + '" data-comment-id="' + escapeHtml(c.id) + '">';
 
@@ -1999,6 +2084,101 @@ window.Campus = (function () {
     return !!id && hiddenPostIds().indexOf(id) >= 0;
   }
 
+  /* ================= F2：收藏（只存本机，但功能面向「我的」） =================
+   *  存的是 id 列表，不是内容（理由见 SAVED_POSTS_KEY 上面那段）。
+   *  顺序有意义：新收藏的排在前面，「我的收藏」就按这个顺序显示 ——
+   *  也就是「最想看的在最上面」，比按时间排更符合收藏这件事的用途。
+   * ===================================================================== */
+
+  function savedPostIds() {
+    try {
+      var raw = window.localStorage.getItem(SAVED_POSTS_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Object.prototype.toString.call(arr) === "[object Array]" ? arr : [];
+    } catch (e) {
+      return [];                       // 存坏了就当没收藏过，不能因此白屏
+    }
+  }
+
+  function saveSavedPostIds(ids) {
+    try { window.localStorage.setItem(SAVED_POSTS_KEY, JSON.stringify(ids)); } catch (e) {}
+  }
+
+  function isPostSaved(id) {
+    return !!id && savedPostIds().indexOf(id) >= 0;
+  }
+
+  /** 「我的」页要显示的数字：本机存了几条（不区分还能不能看，那是另一件事） */
+  function savedPostCount() {
+    return savedPostIds().length;
+  }
+
+  /** 清掉那些在服务器上已经读不到的收藏（删了 / 下架了）。
+      只动传进来的这些 id，别的收藏一条都不能碰 —— 返回剩下几条。 */
+  function dropSavedPosts(ids) {
+    var drop = {};
+    (ids || []).forEach(function (x) { drop[x] = true; });
+    var left = savedPostIds().filter(function (x) { return !drop[x]; });
+    saveSavedPostIds(left);
+    emitSavedChange();
+    return left.length;
+  }
+
+  /* 「我的」页要把收藏列表跟着刷新，而它不该反过来被 app.js 依赖 ——
+     于是留一个极小的订阅口：谁关心谁注册，app.js 只负责在变化时喊一声。 */
+  var savedListeners = [];
+
+  function onSavedChange(fn) {
+    if (typeof fn === "function") savedListeners.push(fn);
+  }
+
+  function emitSavedChange() {
+    for (var i = 0; i < savedListeners.length; i++) {
+      try { savedListeners[i](); } catch (e) {}   // 一个听众出错不能连累别的
+    }
+  }
+
+  /** 同一页上同一条可能在多处出现（广场 / 首页预览 / 收藏列表），按钮状态要一起改 */
+  function refreshSaveButtons(id, saved) {
+    var btns = document.querySelectorAll ? document.querySelectorAll('[data-save="' + id + '"]') : [];
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].className = "save-btn" + (saved ? " saved" : "");
+      btns[i].setAttribute("aria-pressed", saved ? "true" : "false");
+      var label = btns[i].querySelector ? btns[i].querySelector(".save-label") : null;
+      if (label) label.textContent = saved ? "已收藏" : "收藏";
+    }
+  }
+
+  /** 收藏 / 取消收藏。返回操作后的状态（true = 现在收藏着）。 */
+  function toggleSavedPost(id) {
+    if (!id) return false;
+    var ids = savedPostIds();
+    var at = ids.indexOf(id);
+    var nowSaved;
+    if (at >= 0) { ids.splice(at, 1); nowSaved = false; }
+    else { ids.unshift(id); nowSaved = true; }    // 新收藏排最前：最想看的在最上面
+    saveSavedPostIds(ids);
+    refreshSaveButtons(id, nowSaved);
+    emitSavedChange();
+    return nowSaved;
+  }
+
+  /** 卡片底栏的收藏按钮。图标只有一种（🔖），状态靠 class 与文案区分 ——
+      两个图标换来换去反而更花眼，而「已收藏」是要一眼看出来的。
+      aria-pressed 报状态、aria-label 报动作：读屏听到的是「取消收藏，按下」，
+      而不是一个只有图标的按钮。 */
+  function saveButtonHtml(post) {
+    var id = escapeHtml(post && post.id);
+    var saved = isPostSaved(post && post.id);
+    return '<button class="save-btn' + (saved ? " saved" : "") + '" type="button"' +
+      ' aria-pressed="' + (saved ? "true" : "false") + '"' +
+      ' aria-label="' + (saved ? "取消收藏" : "收藏这条内容") + '"' +
+      ' data-save="' + id + '">' +
+      "<span>🔖</span>" +
+      '<span class="save-label">' + (saved ? "已收藏" : "收藏") + "</span>" +
+      "</button>";
+  }
+
   /** 站点根目录（去掉 query / hash / 文件名）。不依赖 URL 构造函数，老浏览器也认。 */
   function siteBase() {
     var href = String((window.location && window.location.href) || "");
@@ -2242,6 +2422,7 @@ window.Campus = (function () {
     html += "<span>💬</span>";
     html += '<span class="comment-count">' + countText(post.comment_count) + "</span>";
     html += "</button>";
+    html += saveButtonHtml(post);           // F2：收藏（只存本机）
     html += '<span class="post-time">' + escapeHtml(timeAgo(post.created_at)) + "</span>";
     html += "</div>";
     // 「举报」已经从底栏收进右上角的「⋯」（F1），底栏只留计数与时间
@@ -2711,6 +2892,11 @@ window.Campus = (function () {
     listCircleHotwords: listCircleHotwords,
     filterPostsByTerm: filterPostsByTerm,
     listMyPosts: listMyPosts,
+    // F2：「我的评论」与「我的收藏」——前者走公开视图的 is_mine，后者按本机存的 id 回读
+    listMyComments: listMyComments,
+    listPostsByIds: listPostsByIds,
+    // F2：评论署名统一走这里（匿名一律「匿名同学」，因为评论不编号）
+    commentAuthorName: commentAuthorName,
     // 计数与帖子分开取：调用方先画卡片，再用它补点赞数 / 评论数（见 attachEngagement）
     attachEngagement: attachEngagement,
     deletePost: deletePost,
@@ -2760,6 +2946,14 @@ window.Campus = (function () {
     isPostHidden: isPostHidden,
     hidePost: hidePost,
     unhidePost: unhidePost,
+    // F2：收藏（本机）——「我的收藏」用 savedPostIds 回读、onSavedChange 订阅刷新
+    isPostSaved: isPostSaved,
+    toggleSavedPost: toggleSavedPost,
+    savedPostIds: savedPostIds,
+    savedPostCount: savedPostCount,
+    dropSavedPosts: dropSavedPosts,
+    onSavedChange: onSavedChange,
+    SAVED_POSTS_KEY: SAVED_POSTS_KEY,
     announce: announce,
     anonCodeOf: anonCodeOf,
     anonName: anonName,

@@ -1675,6 +1675,88 @@ check("R22: card tags are real links, and the feed takes over the click",
 check("R22: the topic rows have styles of their own",
       ".post-tags {" in r22_css and ".topic-bar {" in r22_css and ".post-tags .tag:hover" in r22_css)
 print()
+print("F2) 收藏只存本机 + 「我的」三格")
+f2_app = appjs
+f2_pro = read(os.path.join(JS_DIR, "profile.js"))
+f2_html = read(os.path.join(ROOT, "profile.html"))
+f2_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
+
+_saved_write = _fn_body(f2_app, "saveSavedPostIds")
+_saved_read = _fn_body(f2_app, "savedPostIds")
+_toggle = _fn_body(f2_app, "toggleSavedPost")
+_drop = _fn_body(f2_app, "dropSavedPosts")
+_by_ids = _fn_body(f2_app, "listPostsByIds")
+_my_comments = _fn_body(f2_app, "listMyComments")
+_card = _fn_body(f2_app, "renderPostCard")
+
+check("F2: the saved list has a storage slot of its own",
+      'var SAVED_POSTS_KEY = "campus.savedPosts";' in f2_app)
+check("F2: only ids are kept - never a copy of the content",
+      "JSON.stringify(ids)" in _saved_write and "content" not in _saved_write)
+check("F2: a damaged value reads as 'nothing saved' instead of throwing",
+      "JSON.parse(raw)" in _saved_read and "return [];" in _saved_read
+      and "[object Array]" in _saved_read)
+check("F2: the newest save goes to the front of the list",
+      "ids.unshift(id)" in _toggle and "ids.splice(at, 1)" in _toggle)
+check("F2: clearing the unreadable ones only drops the ids it was handed",
+      "(ids || []).forEach" in _drop and "!drop[x]" in _drop
+      and "savedPostIds().filter" in _drop)
+check("F2: the card footer carries the bookmark",
+      "saveButtonHtml(post)" in _card)
+check("F2: the button tells both the eye and the reader which state it is in",
+      'data-save="' in f2_app and "aria-pressed=" in f2_app
+      and 'class="save-label"' in f2_app)
+check("F2: the label follows the state",
+      '? "\u5df2\u6536\u85cf" : "\u6536\u85cf"' in f2_app)
+check("F2: the click is handled on the page, not by navigating away",
+      'el.closest("[data-save]")' in f2_app
+      and "toggleSavedPost(saveId)" in f2_app)
+check("F2: saving offers the way to the collection, unsaving just confirms",
+      '"profile.html#saves"' in f2_app and "\u5df2\u53d6\u6d88\u6536\u85cf" in f2_app)
+check("F2: my comments come from the public view, filtered on the server",
+      'client.from("post_comments")' in _my_comments
+      and '.eq("is_mine", true)' in _my_comments)
+check("F2: my comments never touch author_id - no new way to link people",
+      "author_id" not in _my_comments)
+check("F2: saved posts are read back through the normal read path",
+      'client.from("posts")' in _by_ids and "postColumns()" in _by_ids)
+check("F2: anything that is not a post id is dropped before asking",
+      "UUID_RE.test(s)" in _by_ids and "want.length" in _by_ids)
+check("F2: a comment's name has exactly one path, and the page uses it",
+      "commentAuthorName: commentAuthorName" in f2_app
+      and "C.commentAuthorName(c)" in f2_pro)
+check("F2: the 我的 page is split into three tabs",
+      all(('data-mine-tab="%s"' % _t) in f2_html for _t in ("posts", "comments", "saves")))
+check("F2: three panels exist, and only the first one starts visible",
+      'id="mine-panel-posts"' in f2_html
+      and 'id="mine-panel-comments" role="tabpanel" hidden' in f2_html
+      and 'id="mine-panel-saves" role="tabpanel" hidden' in f2_html)
+check("F2: the post list keeps its old id, so nothing else had to change",
+      'id="mine-list"' in f2_html and 'id="mine-comments-list"' in f2_html
+      and 'id="mine-saves-list"' in f2_html)
+check("F2: the collection says out loud that it lives on this device",
+      "\u8fd9\u53f0\u8bbe\u5907" in f2_html)
+check("F2: the comments tab warns that pending ones are not listed yet",
+      "\u8981\u5148\u8fc7\u5ba1" in f2_html or "\u8fc7\u5ba1" in f2_html)
+check("F2: the page switches tabs and loads each one only when opened",
+      "function setMineTab(" in f2_pro and "commentsLoaded" in f2_pro
+      and "!savesLoaded || savesDirty" in f2_pro and "tabFromHash()" in f2_pro)
+check("F2: it follows the saved list when it changes somewhere else",
+      "C.onSavedChange(" in f2_pro and "paintCounts()" in f2_pro)
+check("F2: the profile page adds no query of its own (its one query is the delete flow)",
+      f2_pro.count(".from(") == 1 and 'from("post_comments")' not in f2_pro
+      and 'from("my_posts")' not in f2_pro)
+check("F2: the unreadable saves are named, and can be cleared",
+      "data-drop-saves" in f2_pro and "\u770b\u4e0d\u5230" in f2_pro)
+check("F2: the bookmark button has styles, including the saved state",
+      ".save-btn {" in f2_css and ".save-btn.saved {" in f2_css)
+check("F2: the tab strip and the comment rows have styles of their own",
+      ".mine-tabs {" in f2_css and ".my-comment {" in f2_css and ".chip-count {" in f2_css)
+check("F2: needs no migration - it reads only what is already public",
+      not [f for f in os.listdir(os.path.join(ROOT, "docs"))
+           if f.startswith("supabase-saves") or f.startswith("supabase-saved")])
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)

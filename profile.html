@@ -10,19 +10,19 @@
      crossorigin：Supabase 的请求是跨域带 CORS 的，不加这个属性浏览器不会复用这条连接。 -->
 <link rel="preconnect" href="https://gvmqmzgzwnvseubpvqdx.supabase.co" crossorigin>
 <link rel="dns-prefetch" href="https://gvmqmzgzwnvseubpvqdx.supabase.co">
-<meta name="description" content="设置昵称、看看自己发过的分享和收到的心动。">
+<meta name="description" content="设置昵称，看看自己发过的分享、评论和收藏。">
 <!-- 分享卡片：og:image / og:url 用完整网址，社交平台才能抓到（已上线 GitHub Pages）-->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="校园拾光">
 <meta property="og:url" content="https://bryanhw.github.io/my-new-programme/profile.html">
 <meta property="og:title" content="我的 · 校园拾光">
-<meta property="og:description" content="设置昵称、看看自己发过的分享和收到的心动。">
+<meta property="og:description" content="设置昵称，看看自己发过的分享、评论和收藏。">
 <meta property="og:image" content="https://bryanhw.github.io/my-new-programme/assets/img/og-cover.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <title>我的 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=2f7e13c3">
+<link rel="stylesheet" href="assets/css/style.css?v=930e33fc">
 </head>
 <body>
 
@@ -55,7 +55,7 @@
         </a>
         <a class="menu-item" data-tab="profile" href="profile.html">
           <span class="menu-icon">🙂</span>
-          <span class="menu-text"><b>我的</b><small>我发布过的内容</small></span>
+          <span class="menu-text"><b>我的</b><small>我的发布 · 评论 · 收藏</small></span>
         </a>
         <a class="menu-item" data-tab="faq" href="faq.html">
           <span class="menu-icon">❓</span>
@@ -151,13 +151,42 @@
 
   <section id="mine-card">
     <div class="section-head mt-24">
-      <h2 class="section-title">📮 我发布的</h2>
+      <h2 class="section-title">📮 我的</h2>
     </div>
-    <p class="text-sm on-gold mb-16">
-      每条分享都会先经过一次人工审核。标着「审核中」的只有你自己能看到（在广场里也带着这个标记），
-      通过之后才会出现在别人的广场里。
-    </p>
-    <div id="mine-list"></div>
+
+    <!-- F2：三格。发布 / 评论都来自服务器，收藏只存在这台设备上 ——
+         这件事在收藏那一格里明说，免得同学换设备后以为内容被删了。 -->
+    <div class="chips mine-tabs" id="mine-tabs" role="tablist" aria-label="我的内容">
+      <button class="chip chip-on" type="button" role="tab" aria-selected="true"
+        data-mine-tab="posts">我的发布<span class="chip-count" id="mine-count-posts"></span></button>
+      <button class="chip" type="button" role="tab" aria-selected="false"
+        data-mine-tab="comments">我的评论<span class="chip-count" id="mine-count-comments"></span></button>
+      <button class="chip" type="button" role="tab" aria-selected="false"
+        data-mine-tab="saves">我的收藏<span class="chip-count" id="mine-count-saves"></span></button>
+    </div>
+
+    <div id="mine-panel-posts" role="tabpanel">
+      <p class="text-sm on-gold mb-16">
+        每条分享都会先经过一次人工审核。标着「审核中」的只有你自己能看到（在广场里也带着这个标记），
+        通过之后才会出现在别人的广场里。
+      </p>
+      <div id="mine-list"></div>
+    </div>
+
+    <div id="mine-panel-comments" role="tabpanel" hidden>
+      <p class="text-sm on-gold mb-16">
+        这里是你发过的评论。评论也和分享一样要先过审，所以刚发出去的那条要等通过之后才会出现。
+      </p>
+      <div id="mine-comments-list"></div>
+    </div>
+
+    <div id="mine-panel-saves" role="tabpanel" hidden>
+      <p class="text-sm on-gold mb-16">
+        🔖 收藏只存在<strong>这台设备</strong>上：换设备、或清掉浏览器数据就没了，站里也没有人能看到你收藏了什么。
+        这里只记「哪一条」，内容仍然是每次现读 —— 所以作者删掉、或还没过审的那条，下面会告诉你它看不到了。
+      </p>
+      <div id="mine-saves-list"></div>
+    </div>
   </section>
 
   <section id="reports-card" class="hidden">
@@ -197,7 +226,7 @@
 
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/app.js?v=55b93aac"></script>
-<script src="assets/js/profile.js?v=d66b2ea6"></script>
+<script src="assets/js/app.js?v=a8c58080"></script>
+<script src="assets/js/profile.js?v=90138491"></script>
 </body>
 </html>

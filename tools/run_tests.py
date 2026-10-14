@@ -3114,6 +3114,209 @@ check("...and the hint says picking none is fine too",
 
 print()
 print("=" * 70)
+print("SCENARIO N - F2: a bookmark that lives on this device, and the three tabs")
+print("=" * 70)
+
+# 收藏里存的是 id，回读时也要按 id 去问 —— 所以测试用的帖子 id 必须是真形状的
+# uuid（posts.id 就是这样），不然回读这一步会被前端自己的守卫挡掉。
+S1 = "3f1a6c2e-1b4d-4a77-9e05-8c2d5b7a6f10"
+S2 = "aa11bb22-cc33-4d44-8e55-ff6677889900"
+S_GONE = "00000000-1111-4222-8333-444455556666"
+
+SAVED_KEY = "campus.savedPosts"
+
+
+def _J(value):
+    """和 JS 的 JSON.stringify 一样紧凑（json.dumps 会在逗号后加空格）。"""
+    return json.dumps(value, separators=(",", ":"))
+ZH_SAVED = "\u5df2\u6536\u85cf"          # 已收藏
+ZH_SAVE = "\u6536\u85cf"                 # 收藏
+ZH_CANNOT_SEE = "\u770b\u4e0d\u5230"     # 看不到
+ZH_TOAST_SAVED = "\u6536\u85cf\u4e86"    # 收藏了
+ZH_TOAST_UNSAVED = "\u5df2\u53d6\u6d88\u6536\u85cf"   # 已取消收藏
+ZH_GO_SAVES = "\u53bb\u6211\u7684\u6536\u85cf"        # 去我的收藏
+
+PRE_SAVED_POSTS = (
+    "__mockOpts.store.posts.push("
+    "{ id: '%s', author_id: 'u-1', is_anonymous: false, display_name: 'TestNick',"
+    "  school: 'Test Univ', content: 'saved one', image_path: null,"
+    "  status: 'approved', created_at: '2026-09-24T10:00:00.000Z' },"
+    "{ id: '%s', author_id: 'u-2', is_anonymous: true, display_name: 'Anonymous',"
+    "  school: null, content: 'saved two', image_path: null,"
+    "  status: 'approved', created_at: '2026-09-25T10:00:00.000Z' });" % (S1, S2))
+
+
+def __saved_raw(it):
+    return js(it, 'String(__ls["%s"] || "")' % SAVED_KEY)
+
+
+print("- saving a post keeps an id, not a copy")
+it = load("feed.html", "mock-logged", pre=PRE_SAVED_POSTS)
+check("nothing is saved to begin with", js(it, "Campus.savedPostCount()") == 0,
+      js(it, "Campus.savedPostCount()"))
+check("...and no card claims otherwise", js(it, "Campus.isPostSaved(%r)" % S1) is False)
+check("the bookmark reports the new state", js(it, "Campus.toggleSavedPost(%r)" % S1) is True)
+check("...and the id is all that gets written down",
+      __saved_raw(it) == json.dumps([S1]), __saved_raw(it))
+check("...no content, no author, no trace of the post itself",
+      "saved one" not in __saved_raw(it) and "author" not in __saved_raw(it))
+js(it, "Campus.toggleSavedPost(%r);" % S2)
+check("a second save goes in front of the first",
+      js(it, "JSON.stringify(Campus.savedPostIds())")
+      == _J([S2, S1]),
+      js(it, "JSON.stringify(Campus.savedPostIds())"))
+check("...and the count follows", js(it, "Campus.savedPostCount()") == 2)
+check("tapping the same one again takes it back out",
+      js(it, "Campus.toggleSavedPost(%r)" % S2) is False
+      and js(it, "JSON.stringify(Campus.savedPostIds())") == json.dumps([S1]))
+js(it, '__ls["%s"] = "not json at all";' % SAVED_KEY)
+check("a damaged value in storage reads as 'nothing saved'",
+      js(it, "Campus.savedPostCount()") == 0)
+js(it, "Campus.toggleSavedPost(%r);" % S1)
+check("...and it recovers on the next save",
+      js(it, "Campus.savedPostCount()") == 1)
+
+print("- the card shows it, and follows the state")
+it = load("feed.html", "mock-logged", pre=PRE_SAVED_POSTS)
+card = js(it, "Campus.renderPostCard(__mockOpts.store.posts[3])")
+check("the card footer carries a bookmark",
+      ('data-save="%s"' % S1) in card and 'class="save-btn' in card, card[:200])
+check("...it starts in the unsaved state, for the eye and for the reader",
+      ZH_SAVE in card and ZH_SAVED not in card and 'aria-pressed="false"' in card)
+js(it, "Campus.toggleSavedPost(%r);" % S1)
+card = js(it, "Campus.renderPostCard(__mockOpts.store.posts[3])")
+check("...and flips to saved once it is",
+      ZH_SAVED in card and 'aria-pressed="true"' in card, card[:200])
+
+print("- tapping the bookmark on the feed")
+it = load("feed.html", "mock-logged", pre=PRE_SAVED_POSTS)
+js(it, "__docEmit('click', { target: { closest: function (s) {"
+       "  return s === '[data-save]' ? { getAttribute: function () { return '%s'; } } : null;"
+       "}, preventDefault: function () {} } });" % S1)
+check("the post is saved without leaving the page",
+      js(it, "Campus.isPostSaved(%r)" % S1) is True)
+check("...and the toast says where to find it",
+      ZH_TOAST_SAVED in js(it, "document.getElementById('toast').textContent"),
+      js(it, "document.getElementById('toast').textContent"))
+check("...with a shortcut to the collection",
+      ZH_GO_SAVES in js(it, "document.getElementById('toast')._children[0].textContent"))
+js(it, "document.getElementById('toast')._children[0].click();")
+check("...that really goes to the collection",
+      js(it, "String(window.location.href)") == "profile.html#saves",
+      js(it, "String(window.location.href)"))
+js(it, "__docEmit('click', { target: { closest: function (s) {"
+       "  return s === '[data-save]' ? { getAttribute: function () { return '%s'; } } : null;"
+       "}, preventDefault: function () {} } });" % S1)
+check("tapping it again unsaves, and just says so",
+      js(it, "Campus.savedPostCount()") == 0
+      and ZH_TOAST_UNSAVED in js(it, "document.getElementById('toast').textContent"))
+
+print("- reading saved posts back")
+it = load("feed.html", "mock-logged", pre=PRE_SAVED_POSTS)
+js(it, "__r = {}; Campus.listPostsByIds([%r, 'not-a-post-id', %r, %r])"
+       ".then(function (rows) { __r.rows = rows; }, function (e) { __r.err = String(e.message); });"
+       % (S1, S2, S_GONE))
+ev(it, "__drain();")
+check("the ones that are still there come back",
+      js(it, "JSON.stringify(__r.rows.map(function (p) { return p.id; }).sort())")
+      == _J(sorted([S1, S2])),
+      js(it, "JSON.stringify(__r.rows.map(function (p) { return p.id; }))"))
+check("a deleted (or never approved) post is simply not among them",
+      js(it, "JSON.stringify(__r.rows).indexOf('%s')" % S_GONE) < 0)
+check("a junk id is dropped before the query, and breaks nothing", js(it, "__r.err") is None,
+      js(it, "String(__r.err)"))
+js(it, "__r2 = {}; Campus.listPostsByIds(['junk', '', null, 7])"
+       ".then(function (rows) { __r2.n = rows.length; }, function (e) { __r2.err = String(e.message); });")
+check("nothing worth asking for means no request at all",
+      js(it, "__r2.n") == 0 and js(it, "__r2.err") is None)
+
+print("- the profile page: three tabs, each one loaded when it is opened")
+it = load("profile.html", "mock-logged", pre=PRE_SAVED_POSTS)
+seed_comments(it)
+js(it, '__ls["%s"] = JSON.stringify([%r, %r, %r]);' % (SAVED_KEY, S1, S2, S_GONE))
+ev(it, read(os.path.join(ROOT, "assets", "js", "profile.js")))
+ev(it, "__drain();")
+check("the collection count is on the tab from the start (it is local)",
+      js(it, "document.getElementById('mine-count-saves').textContent") == "3",
+      js(it, "document.getElementById('mine-count-saves').textContent"))
+check("the page opens on the posts tab",
+      js(it, "document.getElementById('mine-panel-posts').hidden") is False
+      and js(it, "document.getElementById('mine-panel-comments').hidden") is True
+      and js(it, "document.getElementById('mine-panel-saves').hidden") is True)
+check("...and the other two are not read until they are opened",
+      js(it, "document.getElementById('mine-saves-list').innerHTML") == ""
+      and js(it, "document.getElementById('mine-comments-list').innerHTML") == "")
+
+js(it, "document.getElementById('mine-tabs').dispatch('click', { target: { closest: function (s) {"
+       "  return s === '[data-mine-tab]' ? { getAttribute: function () { return 'comments'; } } : null;"
+       "}, preventDefault: function () {} } });")
+ev(it, "__drain();")
+mine_comments = js(it, "document.getElementById('mine-comments-list').innerHTML")
+check("opening the comments tab swaps the panel",
+      js(it, "document.getElementById('mine-panel-comments').hidden") is False
+      and js(it, "document.getElementById('mine-panel-posts').hidden") is True)
+check("...and lists the comment I wrote", "mine" in mine_comments, mine_comments[:200])
+check("...not somebody else's comment",
+      "first comment" not in mine_comments and "a reply" not in mine_comments)
+check("...and not a comment the site already took down",
+      "taken down" not in mine_comments and "on another post" not in mine_comments)
+check("...each one points back at the post it belongs to",
+      "feed.html?post=p-1" in mine_comments)
+
+js(it, "document.getElementById('mine-tabs').dispatch('click', { target: { closest: function (s) {"
+       "  return s === '[data-mine-tab]' ? { getAttribute: function () { return 'saves'; } } : null;"
+       "}, preventDefault: function () {} } });")
+ev(it, "__drain();")
+saves_html = js(it, "document.getElementById('mine-saves-list').innerHTML")
+check("opening the saves tab swaps the panel",
+      js(it, "document.getElementById('mine-panel-saves').hidden") is False
+      and js(it, "document.getElementById('mine-panel-comments').hidden") is True)
+check("...and renders the saved posts from the server", "saved one" in saves_html
+      and "saved two" in saves_html, saves_html[:220])
+check("...the newest save first, in the order they were collected",
+      saves_html.find("saved one") < saves_html.find("saved two"))
+check("...and names the one that can no longer be read",
+      ZH_CANNOT_SEE in saves_html and "data-drop-saves" in saves_html, saves_html[:220])
+check("...without pretending it is still there",
+      saves_html.count('data-post-id="') == 2, saves_html.count('data-post-id="'))
+
+print("- unsaving from the collection, and clearing what is gone")
+js(it, "__docEmit('click', { target: { closest: function (s) {"
+       "  return s === '[data-save]' ? { getAttribute: function () { return '%s'; } } : null;"
+       "}, preventDefault: function () {} } });" % S1)
+ev(it, "__drain();")
+check("the count drops when a post is unsaved from the collection",
+      js(it, "document.getElementById('mine-count-saves').textContent") == "2",
+      js(it, "document.getElementById('mine-count-saves').textContent"))
+check("...and the list redraws without it",
+      "saved one" not in js(it, "document.getElementById('mine-saves-list').innerHTML"))
+js(it, "document.getElementById('mine-saves-list').dispatch('click', { target: { closest: function (s) {"
+       "  return s === '[data-drop-saves]' ? {} : null; }, preventDefault: function () {} } });")
+ev(it, "__drain();")
+check("clearing only removes the ones that could not be read",
+      js(it, "JSON.stringify(Campus.savedPostIds())") == json.dumps([S2]),
+      js(it, "JSON.stringify(Campus.savedPostIds())"))
+check("...and the real ones are still there",
+      js(it, "Campus.isPostSaved(%r)" % S2) is True
+      and js(it, "document.getElementById('mine-count-saves').textContent") == "1")
+
+print("- a visitor with no account still has their own collection")
+it = load("profile.html", "mock-anon", pre=PRE_SAVED_POSTS)
+js(it, '__ls["%s"] = JSON.stringify([%r]);' % (SAVED_KEY, S1))
+ev(it, read(os.path.join(ROOT, "assets", "js", "profile.js")))
+ev(it, "__drain();")
+check("the bookmark count is there without an account",
+      js(it, "document.getElementById('mine-count-saves').textContent") == "1",
+      js(it, "document.getElementById('mine-count-saves').textContent"))
+js(it, "document.getElementById('mine-tabs').dispatch('click', { target: { closest: function (s) {"
+       "  return s === '[data-mine-tab]' ? { getAttribute: function () { return 'saves'; } } : null;"
+       "}, preventDefault: function () {} } });")
+ev(it, "__drain();")
+check("...and the saved post comes back for them too",
+      "saved one" in js(it, "document.getElementById('mine-saves-list').innerHTML"))
+
+print()
+print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 print("=" * 70)
 for f in failures:

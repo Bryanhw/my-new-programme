@@ -28,6 +28,23 @@
   var reportsCard = document.getElementById("reports-card");
   var reportsEl   = document.getElementById("reports-list");
 
+  /* F2：三格（我的发布 / 我的评论 / 我的收藏） */
+  var mineTabs    = document.getElementById("mine-tabs");
+  var countPosts  = document.getElementById("mine-count-posts");
+  var countComments = document.getElementById("mine-count-comments");
+  var countSaves  = document.getElementById("mine-count-saves");
+  var panelPosts  = document.getElementById("mine-panel-posts");
+  var panelComments = document.getElementById("mine-panel-comments");
+  var panelSaves  = document.getElementById("mine-panel-saves");
+  var commentsEl  = document.getElementById("mine-comments-list");
+  var savesEl     = document.getElementById("mine-saves-list");
+
+  var mineTab        = "posts";   // 当前在哪一格
+  var commentsLoaded = false;     // 我的评论：第一次点开才去读（省一次请求）
+  var savesLoaded    = false;     // 我的收藏：同上，收藏变了要重新读
+  var savesDirty     = false;     // 期间收藏有变化（比如在别处点了 🔖）
+  var lastMissing    = [];        // 上一次渲染时「读不到」的收藏 id（清掉按钮只认这些）
+
   var signOutBtn = document.getElementById("signout");
   var anonTip    = document.getElementById("anon-tip");
 
@@ -112,6 +129,10 @@
       loadMyPosts();
       loadMyReports();
       loadSecurity();
+
+      // F2：收藏只存本机，数字立刻就能显示；地址里带 #saves / #comments 就直接停在那格
+      paintCounts();
+      setMineTab(tabFromHash());
     });
   }
 
@@ -167,6 +188,7 @@
       mineTouched = false;
 
       statPosts.textContent = rows.length;
+      if (countPosts) countPosts.textContent = rows.length ? String(rows.length) : "";
 
       var anonCount = 0;
       rows.forEach(function (p) { if (p.is_anonymous) anonCount++; });
@@ -182,6 +204,190 @@
       });
     }).catch(function (err) {
       mineEl.innerHTML = '<div class="notice notice-error">加载失败：' + C.escapeHtml(err.message) + "</div>";
+    });
+  }
+
+  /* ---------------------------------------------------------------
+   * F2：三格：我的发布 / 我的评论 / 我的收藏
+   *
+   *  发布与评论来自服务器（前者走 my_posts 视图、后者走 post_comments 视图的 is_mine），
+   *  收藏只存在本机 —— 所以收藏这一格不需要登录也能用，但页面上要说明它只在这台设备上。
+   * --------------------------------------------------------------- */
+
+  /** 空态块：三格共用一套写法（图标 + 一句 + 一个出路） */
+  function emptyBlock(icon, title, text, ctaHtml) {
+    return '<div class="empty">' +
+      '<div class="empty-icon">' + icon + "</div>" +
+      '<div class="empty-title">' + title + "</div>" +
+      '<div class="empty-text">' + text + "</div>" +
+      "</div>" + (ctaHtml || "");
+  }
+
+  /** 数字挂在格子上（拿不到就留空，不印 0 —— 和卡片计数的道理一样） */
+  function paintCounts() {
+    if (!countSaves) return;
+    var n = C.savedPostCount ? C.savedPostCount() : 0;
+    countSaves.textContent = n ? String(n) : "";
+    // 读屏听到的是一句完整的话，而不是一个光秃秃的数字
+    if (countSaves.parentNode && countSaves.parentNode.setAttribute) {
+      countSaves.parentNode.setAttribute("aria-label", "我的收藏" + (n ? "，" + n + " 条" : ""));
+    }
+  }
+
+  function setMineTab(name) {
+    var want = (name === "comments" || name === "saves") ? name : "posts";
+    mineTab = want;
+
+    var chips = (mineTabs && mineTabs.querySelectorAll) ? mineTabs.querySelectorAll("[data-mine-tab]") : [];
+    for (var i = 0; i < chips.length; i++) {
+      var on = chips[i].getAttribute("data-mine-tab") === want;
+      chips[i].className = "chip" + (on ? " chip-on" : "");
+      chips[i].setAttribute("aria-selected", on ? "true" : "false");
+    }
+
+    if (panelPosts)    panelPosts.hidden    = (want !== "posts");
+    if (panelComments) panelComments.hidden = (want !== "comments");
+    if (panelSaves)    panelSaves.hidden    = (want !== "saves");
+
+    if (want === "comments" && !commentsLoaded) loadMyComments();
+    if (want === "saves" && (!savesLoaded || savesDirty)) loadMySaves();
+
+    // 顺手把地址记下来：刷新之后还停在这一格（分享链接 profile.html#saves 也认）
+    try {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, "", want === "posts" ? "#" : "#" + want);
+      }
+    } catch (e) {}
+  }
+
+  /** 地址栏里的 #saves / #comments（只在进入页面时读一次） */
+  function tabFromHash() {
+    var raw = "";
+    try { raw = String((window.location && window.location.hash) || ""); } catch (e) { raw = ""; }
+    raw = raw.replace(/^#/, "").toLowerCase();
+    return (raw === "saves" || raw === "comments") ? raw : "posts";
+  }
+
+  /** 我的评论：读公开视图 post_comments，服务端按 auth.uid() 标出 is_mine */
+  function loadMyComments() {
+    commentsEl.innerHTML = '<p class="text-sm on-gold mb-16">正在读取…</p>';
+    C.listMyComments().then(function (rows) {
+      commentsLoaded = true;
+      if (countComments) countComments.textContent = rows.length ? String(rows.length) : "";
+      if (!rows.length) {
+        commentsEl.innerHTML = emptyBlock("💬", "还没有评论过",
+          "在广场里点开一条分享下面的「💬」，就能在下面说两句。",
+          '<a class="btn btn-primary btn-block mt-16" href="feed.html">去广场看看</a>');
+        return;
+      }
+      commentsEl.innerHTML = rows.map(renderMyComment).join("");
+    }).catch(function () {
+      // 评论迁移还没跑、或这个库还没有评论区：给一句人话，不报红
+      commentsEl.innerHTML = '<p class="receipt-empty">' +
+        "暂时读不到你的评论（这个站点可能还没开启评论区）。" +
+        "</p>";
+    });
+  }
+
+  function renderMyComment(c) {
+    // 署名走 app.js 的统一口径：匿名评论一律「匿名同学」（评论没有洞号）
+    var parts = [C.escapeHtml(C.commentAuthorName(c)), C.escapeHtml(C.timeAgo(c.created_at))];
+    if (c.school) parts.splice(1, 0, C.escapeHtml(c.school));
+    return '<div class="my-comment">' +
+      '<div class="my-comment-top">' +
+        parts.map(function (t) { return "<span>" + t + "</span>"; }).join("<span>·</span>") +
+        '<a class="my-comment-go" href="feed.html?post=' + encodeURIComponent(String(c.post_id)) +
+          '">去看这条 →</a>' +
+      "</div>" +
+      '<div class="my-comment-text">' + C.escapeHtml(c.content) + "</div>" +
+      "</div>";
+  }
+
+  /** 我的收藏：本地只有 id，内容按 id 回读 —— 读不到的就是删了 / 没过审 */
+  function loadMySaves() {
+    var ids = C.savedPostIds ? C.savedPostIds() : [];
+    paintCounts();
+    savesLoaded = true;
+    savesDirty = false;
+
+    if (!ids.length) {
+      savesEl.innerHTML = emptyBlock("🔖", "还没有收藏",
+        "卡片右下角的 🔖 点一下，那条就会存到这台设备上，方便以后回来找。",
+        '<a class="btn btn-primary btn-block mt-16" href="feed.html">去广场看看</a>');
+      return;
+    }
+
+    savesEl.innerHTML = '<p class="text-sm on-gold mb-16">正在读取…</p>';
+    C.listPostsByIds(ids).then(function (posts) {
+      var byId = {};
+      (posts || []).forEach(function (p) { byId[p.id] = p; });
+      // 按「收藏的先后」显示（新存的在最前），而不是服务器返回的顺序
+      var ordered = ids.map(function (id) { return byId[id]; }).filter(Boolean);
+      var missing = ids.filter(function (id) { return !byId[id]; });
+
+      paintSaves(ordered, missing);
+
+      if (!ordered.length || !C.attachEngagement) return;
+      C.attachEngagement(ordered).then(function () {
+        if (mineTab !== "saves") return;      // 人已经走开了就别再动 DOM
+        paintSaves(ordered, missing);
+      });
+    }).catch(function (err) {
+      savesEl.innerHTML = '<div class="notice notice-error">加载失败：' +
+        C.escapeHtml(err.message) + "</div>";
+    });
+  }
+
+  function paintSaves(posts, missing) {
+    var html = "";
+    lastMissing = missing.slice();     // 记住是哪几条读不到，供「清掉」按钮用
+
+    // 读不到的那几条：明说，不假装还在；也给一个一键清掉的口子
+    if (missing.length) {
+      html += '<div class="saves-missing">' +
+        "有 <b>" + missing.length + "</b> 条收藏现在看不到了 —— 多半是作者删掉了、或者没过审核。" +
+        "<br>" +
+        '<button class="link-plain" type="button" data-drop-saves="1">' +
+        "把这些看不见的清掉</button>" +
+        "</div>";
+    }
+
+    html += posts.map(function (p) { return C.renderPostCard(p); }).join("");
+
+    if (!posts.length && missing.length) {
+      html += '<p class="receipt-empty">收藏里剩下的都还在，只是暂时读不到那 ' +
+        missing.length + " 条。</p>";
+    }
+
+    savesEl.innerHTML = html;
+  }
+
+  /** 收藏变了（在任何地方点了 🔖）就跟着刷新数字；正停在收藏格就顺手重画 */
+  if (C.onSavedChange) {
+    C.onSavedChange(function () {
+      savesDirty = true;
+      paintCounts();
+      if (mineTab === "saves") loadMySaves();
+    });
+  }
+
+  if (mineTabs) {
+    mineTabs.addEventListener("click", function (e) {
+      var btn = (e.target && e.target.closest) ? e.target.closest("[data-mine-tab]") : null;
+      if (btn) setMineTab(btn.getAttribute("data-mine-tab"));
+    });
+  }
+
+  // 「把这些看不见的清掉」：只清读不到的那几条，别的收藏一条都不能动
+  if (savesEl) {
+    savesEl.addEventListener("click", function (e) {
+      var btn = (e.target && e.target.closest) ? e.target.closest("[data-drop-saves]") : null;
+      if (!btn) return;
+      if (!lastMissing.length) return;
+      C.hideNotice(noticeEl);
+      C.dropSavedPosts(lastMissing);      // 变化会经由 onSavedChange 触发本格重画
+      C.showNotice(noticeEl, "ok", "已清掉 " + lastMissing.length + " 条看不见的收藏");
+      setTimeout(function () { C.hideNotice(noticeEl); }, 2500);
     });
   }
 
