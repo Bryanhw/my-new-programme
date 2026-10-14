@@ -616,11 +616,32 @@ python tools\feedback_probe.py --clean
 `sb_publishable_` 的公开 key 传进来，它都直接退出码 2、一个字节都不删 —— 访客本来也删不掉
 自己的反馈（探针第 6 节就是证明这件事），所以这里不假装 anon key 也能删。
 
-站主日常读反馈还有一个更省事的入口：仓库之外的本地审核台
-（`D:\myprogramcstai\tools\review-console\review_console.py`，持 `service_role`）
-第三个页签「反馈」会按时间倒序列出 设备类型 / 正文 / 联系方式，并能在本机标「已处理」。
-这个标记只写本机的 `feedback_marks.json`，**不回写数据库** —— 所以 `public.feedback`
-依然是「只进不出」，不需要为了「已处理」再加一列，也不会因为误点按钮改坏线上数据。
+站主日常还有两个更省事的入口。两者都碰 `service_role`，所以**审核台刻意不随站点发布**
+（它躺在站主本机，说明也在它自己旁边；`feedback_probe.py` 例外，它在仓库 `tools/` 里）：
+
+| 工具 | 干什么 | 怎么跑 |
+| --- | --- | --- |
+| `feedback_probe.py`（在仓库里，`tools/`） | 从接口层验收反馈通道、清理探针留下的测试行 | 见上一节：`--no-write` / `--clean` |
+| **审核台** `review_console.py`（仓库之外） | 本机网页面板：三个页签 **分享 / 评论 / 反馈**，一键「通过 / 驳回 / 下架回审」、下架或恢复被举报的评论、处理举报、读反馈 | 先试玩 `python review_console.py --demo`（不联网、不碰真实数据）；真用则设好 `SUPABASE_SERVICE_ROLE_KEY` 或 `--key-file` 再启动 |
+
+审核台的两条边界值得写在这里，因为它们是**隐私契约的一部分**：
+
+- 第三个页签「反馈」**只读**线上表：标记「已处理」只写本机的 `feedback_marks.json`，
+  **不回写数据库** —— 所以 `public.feedback` 依然是「只进不出」，不需要为了「已处理」再加一列，
+  也不会因为误点按钮改坏线上数据。（仓库的 `.gitignore` 也把这份标记文件挡住了，
+  免得哪次 `git add -A` 把它带进来。）
+- 它只监听 `127.0.0.1`、页面要靠一次性随机 token 才能打开，`service_role` key **只从本机环境变量或
+  本机文件读**，不写进代码、日志、仓库或聊天记录；排错时只打印 key 的**指纹**（长度 / 前缀 / 角色），
+  不打印 key 本身。`tools/static_checks.py` 第 20 节把这两条钉成了永久护栏：**发到浏览器的每个
+  key 都必须是 anon / publishable**（把页面与 `assets/` 里的 JWT 逐个解出来看 `role`，不是只查
+  「service_role」这个词 —— 页面上写「千万不要把 service_role key 放进前端」是好事，不该被判失败），
+  以及**审核台本体与它的密钥 / 标记文件都不在仓库里**。
+
+审核台自己带一份可重复的自检（同样离线、永远 demo、不会碰到真实数据与本机标记文件）：
+
+```powershell
+python D:\myprogramcstai\tools\review-console\_selftest.py   # 期望：RESULT: 67 passed, 0 failed
+```
 
 ### 关于匿名的边界
 

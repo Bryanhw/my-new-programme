@@ -1,0 +1,15 @@
+# 本机私物：绝不进版本库（也绝不进 GitHub Pages）
+#
+# 审核台的「反馈已处理」标记。线上 public.feedback 保持只进不出，
+# 标记只落在站主本机 —— 万一哪次 git add -A 顺手带上，这条规则兜住它。
+feedback_marks.json
+
+# 密钥：service_role key 只放本机环境变量或本机文件，永远不进仓库
+*.service_role*
+*service_role*.txt
+secrets/
+
+# 本地临时件
+.deepworks/tmp/
+*.log
+__pycache__/

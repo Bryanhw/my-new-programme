@@ -3,6 +3,8 @@
 Campus.* API cross-check and element-id cross-check. ASCII-only output."""
 import io
 import os
+import base64
+import json
 import re
 import struct
 import sys
@@ -1755,6 +1757,104 @@ check("F2: the tab strip and the comment rows have styles of their own",
 check("F2: needs no migration - it reads only what is already public",
       not [f for f in os.listdir(os.path.join(ROOT, "docs"))
            if f.startswith("supabase-saves") or f.startswith("supabase-saved")])
+
+print("20) D6: the service_role key never reaches the site or the repo")
+
+# 站点真正发出去的那些文件：页面 + assets/ 下的 js/css/图片说明。
+# 审核台要用 service_role，但它刻意留在公开仓库之外 —— 这里守住「不进网页、不进仓库」。
+site_files = []
+for _p in PAGES + ["reset.html", "faq.html", "feedback.html"]:
+    if os.path.isfile(os.path.join(ROOT, _p)):
+        site_files.append(_p)
+for _dir, _dirs, _files in os.walk(os.path.join(ROOT, "assets")):
+    _dirs[:] = [d for d in _dirs if d != "img"]
+    for _f in _files:
+        if _f.endswith((".js", ".css", ".html")):
+            site_files.append(
+                os.path.relpath(os.path.join(_dir, _f), ROOT).replace("\\", "/")
+            )
+site_files = sorted(set(site_files))
+site_text = {p: read(os.path.join(ROOT, p)) for p in site_files}
+
+# 真的会漏的是「key 本体」，不是「service_role」这个词 —— 页面注释里写
+# 「千万不要把 service_role key 放到这里」是好事，不该判失败。所以这里解 JWT：
+_ANON_ROLES = ("anon", "authenticated")
+
+
+def jwt_roles(text):
+    """把文件里出现的 JWT 逐个解码，返回 [(role, ref)]（解不开就跳过）。"""
+    out = []
+    for m in re.finditer(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+", text):
+        parts = m.group(0).split(".")
+        try:
+            pad = "=" * (-len(parts[1]) % 4)
+            payload = json.loads(base64.urlsafe_b64decode((parts[1] + pad).encode()).decode("utf-8"))
+        except Exception:
+            continue
+        out.append((payload.get("role") or "", payload.get("ref") or ""))
+    return out
+
+
+_shipped_jwts = {}
+for _p, _t in site_text.items():
+    for _role, _ref in jwt_roles(_t):
+        _shipped_jwts.setdefault(_p, []).append(_role)
+_bad_jwts = sorted(p for p, roles in _shipped_jwts.items()
+                   if any(r not in _ANON_ROLES for r in roles))
+check("D6: every key shipped to the browser is an anon key",
+      not _bad_jwts, _bad_jwts)
+check("D6: the site only ever carries the anon (publishable) key",
+      "ANON_KEY" in site_text.get("assets/js/config.js", "")
+      and "SUPABASE_URL" in site_text.get("assets/js/config.js", ""))
+_cfg = site_text.get("assets/js/config.js", "")
+_key_m = re.search(r'SUPABASE_ANON_KEY:\s*"([^"]*)"', _cfg)
+_key_val = _key_m.group(1) if _key_m else ""
+_anon_roles = _shipped_jwts.get("assets/js/config.js", [])
+check("D6: config.js ships exactly one key and it is a browser-safe one",
+      bool(_key_val) and _key_val.startswith("sb_publishable_") or _anon_roles == ["anon"],
+      "prefix=%r roles=%r" % (_key_val[:14], _anon_roles))
+check("D6: that key is never a secret/service_role key",
+      bool(_key_val) and not _key_val.startswith("sb_secret_")
+      and "service_role" not in _key_val,
+      _key_val[:14])
+
+# 第一方文件（我们写的页面/脚本/样式）里不许出现「新式密钥」前缀，也不许出现
+# 读 service_role 环境变量的代码。第三方 SDK 自带一条密钥类型检查，单独放行。
+_first_party = sorted(p for p in site_files if not p.startswith("assets/vendor/"))
+_fp_leaky = sorted(p for p in _first_party
+                   if "sb_secret_" in site_text[p]
+                   or re.search(r"env\W{0,4}\w*SERVICE_ROLE", site_text[p]))
+check("D6: no first-party page or asset touches a secret/ service_role key",
+      not _fp_leaky, _fp_leaky)
+_vendor_hits = sorted(p for p in site_files if "sb_secret_" in site_text[p])
+check("D6: no shipped file outside the vendored SDK mentions sb_secret_",
+      all(p.startswith("assets/vendor/") for p in _vendor_hits), _vendor_hits)
+
+# 审核台本体（脚本、自检、它写下的标记文件、密钥目录）一律不许出现在仓库里。
+_forbidden_names = {
+    "review_console.py", "_selftest.py", "feedback_marks.json",
+    "supabase_service_role.txt", ".secrets",
+}
+_found = []
+for _dir, _dirs, _files in os.walk(ROOT):
+    _dirs[:] = [d for d in _dirs if d not in (".git", "node_modules")]
+    for _f in _files:
+        if _f in _forbidden_names:
+            _found.append(os.path.relpath(os.path.join(_dir, _f), ROOT).replace("\\", "/"))
+check("D6: the review console (and its key/mark files) stay outside the repo",
+      not _found, _found)
+check("D6: nothing in the repo carries a service_role key file",
+      not [p for p in os.listdir(ROOT) if "service_role" in p.lower()])
+
+# 忽略规则得在，否则哪次 git add -A 就可能把本机私物带进来。
+_gitignore = os.path.join(ROOT, ".gitignore")
+check("D6: .gitignore exists and keeps the local mark file out of git",
+      os.path.isfile(_gitignore) and "feedback_marks.json" in read(_gitignore))
+
+# 文档里必须能查到审核台的说明（D6 的「文档收尾」那半）。
+_readme = read(os.path.join(ROOT, "README.md"))
+check("D6: README says where the review console lives and that it is not published",
+      "\u5ba1\u6838\u53f0" in _readme and "--demo" in _readme)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
