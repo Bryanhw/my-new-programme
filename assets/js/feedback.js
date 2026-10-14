@@ -54,6 +54,28 @@
   pickDevice(C.guessDevice());
 
   /* ---------------------------------------------------------------
+   * 话题提案：从发布页的「告诉站主加一个」跳进来时（?from=topic），
+   * 先把前缀写上 —— 这些提案和别的反馈躺在同一张表里，
+   * 站主那边认的就是这个前缀，一眼能把「想要的话题」和别的问题分开。
+   * --------------------------------------------------------------- */
+  var TOPIC_IDEA_PREFIX = C.TOPIC_IDEA_PREFIX || "【话题建议】";
+  var fromTopic = /(^|[?&])from=topic(&|$)/.test(String(window.location.search || ""));
+
+  function ensureTopicIdeaPrefix() {
+    var v = contentEl.value.replace(/^\s+/, "");
+    if (v.indexOf(TOPIC_IDEA_PREFIX) !== 0) v = TOPIC_IDEA_PREFIX + " " + v;
+    contentEl.value = v;
+  }
+
+  if (fromTopic) {
+    contentEl.value = TOPIC_IDEA_PREFIX + " ";
+    updateCounter();
+    if (contentEl.focus) contentEl.focus();
+    C.showNotice(noticeEl, "info",
+      "写清楚你想要个什么话题（比如「失物招领」）。站主采纳了，它就会出现在发布页的话题里。");
+  }
+
+  /* ---------------------------------------------------------------
    * 字数统计：和发布页同一套做法（超过九成就变黄）
    * --------------------------------------------------------------- */
   function updateCounter() {
@@ -81,6 +103,17 @@
     }
 
     var content = contentEl.value.trim();
+    if (fromTopic) {
+      ensureTopicIdeaPrefix();
+      content = contentEl.value.trim();
+      if (content === TOPIC_IDEA_PREFIX) {
+        C.showNotice(noticeEl, "warn",
+          "写一句你想要的话题吧（比如失物招领），站主才知道该加哪个");
+        contentEl.focus();
+        return;
+      }
+    }
+
     if (!content) {
       C.showNotice(noticeEl, "warn", "写点什么再提交吧 —— 一句话也很有用");
       contentEl.focus();

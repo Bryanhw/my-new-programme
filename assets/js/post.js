@@ -96,9 +96,39 @@
   var topicHintEl   = document.getElementById("topic-hint");
   var pickedTopics  = [];
 
+  /* 最近点过的话题存在这台设备上（跟收藏一样，只是本机的便利），
+     让常用的几个排在前面；站里那份清单的顺序不动。 */
+  var RECENT_TOPICS_KEY = "campus.recentTopics";
+  var RECENT_TOPICS_MAX = 4;
+
+  function readRecentTopics() {
+    try {
+      var list = JSON.parse(window.localStorage.getItem(RECENT_TOPICS_KEY) || "[]");
+      return (list && list.length) ? list : [];
+    } catch (e) { return []; }
+  }
+
+  function noteRecentTopic(name) {
+    var list = readRecentTopics().filter(function (t) { return t !== name; });
+    list.unshift(name);
+    if (list.length > RECENT_TOPICS_MAX) list = list.slice(0, RECENT_TOPICS_MAX);
+    try { window.localStorage.setItem(RECENT_TOPICS_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+
+  /** 最近用过的排前面（只认还在清单里的词），其余保持站里那份顺序 */
+  function orderTopics(all) {
+    var recent = readRecentTopics();
+    var head = [];
+    for (var i = 0; i < recent.length && head.length < RECENT_TOPICS_MAX; i++) {
+      if (all.indexOf(recent[i]) >= 0 && head.indexOf(recent[i]) < 0) head.push(recent[i]);
+    }
+    return head.concat(all.filter(function (t) { return head.indexOf(t) < 0; }));
+  }
+
   function renderTopicPicker() {
     if (!topicPickerEl) return;
     var all = C.TOPICS || [];
+    all = orderTopics(all);   /* 常用的排前面，清单本身还是站里那一份 */
     var html = "";
     for (var i = 0; i < all.length; i++) {
       var on = pickedTopics.indexOf(all[i]) >= 0 ? " chip-on" : "";
@@ -112,7 +142,8 @@
     if (!topicHintEl) return;
     topicHintEl.textContent = pickedTopics.length
       ? "已选：" + pickedTopics.join("、") + "（再点一下取消）"
-      : "话题是站里约定好的几个，方便同学按兴趣翻。不加也照样能发。";
+      : "话题是站里约定好的 " + (C.TOPICS || []).length +
+        " 个 —— 打上它，别的同学按话题就能翻到你这条。不加也照样能发。";
   }
 
   /** 点一下选中、再点一下取消；满了就直说，不静默丢掉 */
@@ -126,6 +157,7 @@
       return;
     } else {
       pickedTopics.push(name);
+      noteRecentTopic(name);
     }
     renderTopicPicker();
     renderTopicHint();

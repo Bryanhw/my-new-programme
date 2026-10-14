@@ -383,8 +383,21 @@ window.Campus = (function () {
      这份列表是**唯一**的样本 —— 发布页的 chips、广场的筛选条、卡片上的 #标签
      都从它来；数据库那边还有一层 CHECK 兜底（见 docs/supabase-topics.sql）。
      写死而不是让同学自己造词，是为了不让标签长成一片没人看得懂的碎片。 */
-  var TOPICS = ["食堂", "图书馆", "晚霞", "emo", "求组队", "学习", "运动", "随手拍"];
+  /* 2026-10 从 8 个扩到 18 个：原来那份全是「氛围」类（晚霞、emo、随手拍……），
+     缺事务型的场景（失物招领、二手、拼单……），同学挑不到就只能不打。
+     以后每学期用 tools/topic_stats.py 看一眼谁在用、谁没用过，把没人用的换掉；
+     同学想要新话题走发布页的「告诉站主加一个」（反馈表 + 前缀），站主采纳了才加进来 ——
+     不开放自由造词（理由见 docs/PLAN_phase2.md）。 加词要同时改库里的 CHECK：
+     docs/supabase-topics-more.sql。 */
+  var TOPICS = ["食堂", "图书馆", "晚霞", "emo", "求组队", "学习", "运动", "随手拍",
+                "失物招领", "二手闲置", "拼单拼车", "兼职信息", "社团招新",
+                "选课考试", "找室友", "求助提问", "通知吐槽", "毕业季"];
   var TOPIC_LIMIT = 3;
+
+  /** 话题提案：同学想要一个没有的话题时走反馈表。内容以这个前缀开头的，
+   *  就是「想要的话题」而不是普通反馈 —— 审核台按它打标签，
+   *  发布页的话题区也有一个入口直接跳到 feedback.html?from=topic。 */
+  var TOPIC_IDEA_PREFIX = "【话题建议】";
 
   /** 只认约定的那几个话题：去掉不认识的、去重、最多 3 个。
    *  库里万一有脏数据（或以后改了列表），渲染时也不会冒出乱七八糟的标签。 */
@@ -429,6 +442,10 @@ window.Campus = (function () {
     if (String(err.code || "") === "42703" ||
         String(err.code || "") === "PGRST204") return true;
     var msg = String(err.message || "");
+    /* 页面先上、迁移后跑的另一半：词表里有、库里的 CHECK 名单里还没有（
+       23514，消息里会点名 posts_topics_allowed 这个约束）。这不算「列不存在」，
+       但处理办法一样 —— 把话题摘掉重发，内容先落地，别让一条标签弄丢整篇分享。 */
+    if (String(err.code || "") === "23514" && msg.indexOf(TOPICS_COLUMN) >= 0) return true;
     return msg.indexOf(ANON_CODE_COLUMN) >= 0 || msg.indexOf(TOPICS_COLUMN) >= 0;
   }
 
@@ -2962,6 +2979,7 @@ window.Campus = (function () {
     anonCodeSupported: function () { return anonCodeColumnOk; },
     // C3：约定的话题清单（发布页 / 广场筛选 / 卡片标签的唯一来源）
     TOPICS: TOPICS,
+    TOPIC_IDEA_PREFIX: TOPIC_IDEA_PREFIX,
     TOPIC_LIMIT: TOPIC_LIMIT,
     normalizeTopics: normalizeTopics,
     // C3：这个库迁移过没有（发帖后用它判断「话题是不是没带上」）

@@ -51,10 +51,15 @@ BASE = re.search(r'SUPABASE_URL:\s*"([^"]+)"', src).group(1)
 KEY = re.search(r'SUPABASE_ANON_KEY:\s*"([^"]+)"', src).group(1)
 CTX = ssl.create_default_context()
 
-# The same eight names the site ships (app.js TOPICS) and the same list the
-# CHECK constraint enforces. Written as code points to keep this file ASCII.
+# The same names the site ships (app.js TOPICS) and the same list the CHECK
+# constraint allows. Written as code points to keep this file ASCII, so
+# adding a word means three edits together: app.js TOPICS, the CHECK in
+# docs/supabase-topics-more.sql, and this list (static_checks compares them).
 TOPICS = ["\u98df\u5802", "\u56fe\u4e66\u9986", "\u665a\u971e", "emo",
-          "\u6c42\u7ec4\u961f", "\u5b66\u4e60", "\u8fd0\u52a8", "\u968f\u624b\u62cd"]
+          "\u6c42\u7ec4\u961f", "\u5b66\u4e60", "\u8fd0\u52a8", "\u968f\u624b\u62cd",
+          "\u5931\u7269\u62db\u9886", "\u4e8c\u624b\u95f2\u7f6e", "\u62fc\u5355\u62fc\u8f66", "\u517c\u804c\u4fe1\u606f",
+          "\u793e\u56e2\u62db\u65b0", "\u9009\u8bfe\u8003\u8bd5", "\u627e\u5ba4\u53cb", "\u6c42\u52a9\u63d0\u95ee",
+          "\u901a\u77e5\u5410\u69fd", "\u6bd5\u4e1a\u5b63"]
 
 fails = []
 n = [0]

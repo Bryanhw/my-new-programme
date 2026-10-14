@@ -592,6 +592,20 @@ function __resolveQuery(st, store, uid, clientOpts) {
           error: { code: '42501', message: 'permission denied for column author_id' }
         };
       }
+      /* 模拟「页面先上了新的话题词、库里的 CHECK 名单还没换」：
+         这一条会被 CHECK 挡回来（Postgres 23514，消息里点名约束）。
+         期望前端把话题摘掉重发 —— 内容先落地，别让一条标签弄丢整篇分享。 */
+      if (__mockOpts && __mockOpts.topicCheckReject && row.topics && row.topics.length) {
+        __calls.push(['insert', st.table, 'check:topics']);
+        return {
+          data: null,
+          error: {
+            code: '23514',
+            message: 'new row for relation "posts" violates check constraint "posts_topics_allowed"'
+          }
+        };
+      }
+
       if (!row.id) row.id = 'p-' + (store.posts.length + 1);
       if (!row.created_at) row.created_at = new Date().toISOString();
       store.posts.push(row);

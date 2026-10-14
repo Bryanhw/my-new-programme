@@ -1629,14 +1629,16 @@ r22_html_feed = read(os.path.join(ROOT, "feed.html"))
 r22_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
 r22_sql = read(os.path.join(ROOT, "docs", "supabase-topics.sql"))
 r22_sql_flat = read(os.path.join(ROOT, "docs", "supabase-topics-flat.sql"))
+r22_sql_more = read(os.path.join(ROOT, "docs", "supabase-topics-more.sql"))
+r22_sql_more_flat = read(os.path.join(ROOT, "docs", "supabase-topics-more-flat.sql"))
 
 _m = re.search(r'var TOPICS = \[(.*?)\];', r22_app, re.S)
 _r22_topics = re.findall(r'"([^"]+)"', _m.group(1)) if _m else []
 
 check("R22: the fixed topic list lives in one place in the front-end",
       len(_r22_topics) >= 5, len(_r22_topics))
-check("R22: ...and the migration allows the very same words",
-      bool(_r22_topics) and all(t in r22_sql for t in _r22_topics))
+check("R22: the first migration lists the eight words it shipped with",
+      len(_r22_topics) >= 8 and all(t in r22_sql for t in _r22_topics[:8]))
 check("R22: the CHECK caps it at the same number the page enforces",
       "cardinality(topics) <= 3" in r22_sql and "var TOPIC_LIMIT = 3;" in r22_app
       and "posts_topics_allowed" in r22_sql and "using gin (topics)" in r22_sql)
@@ -1677,6 +1679,76 @@ check("R22: the feed reads ?topic= and hides the bar when nobody has tagged anyt
       'topic: ""' in r22_feed and "function renderTopics()" in r22_feed
       and "topicBarEl.hidden = true;" in r22_feed
       and 'id="topic-bar"' in r22_html_feed and 'id="topic-chips"' in r22_html_feed)
+
+# --- 第 27 轮：话题清单扩到 18 + 提案通道
+_mm = re.search(r"add constraint posts_topics_allowed check \(\s*"
+                r"cardinality\(topics\) <= 3\s*and topics <@ array\[(.*?)\]::text\[\]",
+                r22_sql_more, re.S)
+_r22_more_topics = re.findall(r"'([^']+)'", _mm.group(1)) if _mm else []
+check("R22: the widen migration lists exactly the words the page ships",
+      _r22_more_topics == _r22_topics,
+      "%d in sql vs %d in page" % (len(_r22_more_topics), len(_r22_topics)))
+check("R22: the list grew to 18 and keeps the original eight",
+      len(_r22_topics) == 18
+      and all(t in _r22_topics for t in ["食堂", "随手拍"]),
+      len(_r22_topics))
+check("R22: ...and the ten new ones are the transactional scenes people asked for",
+      all(t in _r22_topics for t in [
+          "失物招领", "二手闲置", "拼单拼车",
+          "兼职信息", "社团招新", "选课考试",
+          "找室友", "求助提问", "通知吐槽",
+          "毕业季"]))
+check("R22: the widen migration is idempotent and pokes PostgREST",
+      "drop constraint if exists posts_topics_allowed;" in r22_sql_more
+      and "add constraint posts_topics_allowed check (" in r22_sql_more
+      and "cardinality(topics) <= 3" in r22_sql_more
+      and "notify pgrst, 'reload schema';" in r22_sql_more)
+check("R22: ...it only swaps the constraint (no column, grant or view in sight)",
+      "add column" not in r22_sql_more
+      and "grant select" not in r22_sql_more
+      and "create or replace view" not in r22_sql_more)
+check("R22: the widen migration has a paste-ready twin with the same words",
+      bool(_r22_more_topics)
+      and all(t in r22_sql_more_flat for t in _r22_more_topics)
+      and "notify pgrst, 'reload schema';" in r22_sql_more_flat)
+check("R22: the publish page keeps the shared list and only reorders it",
+      "var all = C.TOPICS || [];" in r22_post and "all = orderTopics(all);" in r22_post)
+check("R22: lately used topics are remembered on this device only",
+      'var RECENT_TOPICS_KEY = "campus.recentTopics";' in r22_post
+      and "window.localStorage.setItem(RECENT_TOPICS_KEY" in r22_post
+      and "noteRecentTopic(name);" in r22_post)
+check("R22: the proposal entry sits under the picker and points at the feedback form",
+      'id="topic-idea"' in r22_html_post and "feedback.html?from=topic" in r22_html_post)
+check("R22: the feedback page recognises that entry and keeps the prefix on submit",
+      "C.TOPIC_IDEA_PREFIX" in fb_js and "from=topic" in fb_js
+      and "ensureTopicIdeaPrefix();" in fb_js
+      and "content === TOPIC_IDEA_PREFIX" in fb_js)
+check("R22: app.js exports the idea prefix, so both sides spell it the same way",
+      "TOPIC_IDEA_PREFIX: TOPIC_IDEA_PREFIX," in r22_app)
+check("R22: a CHECK bounce on topics is recoverable, not a lost post",
+      'if (String(err.code || "") === "23514" && msg.indexOf(TOPICS_COLUMN) >= 0) return true;'
+      in r22_app)
+
+_probe = read(os.path.join(ROOT, "tools", "topics_probe.py"))
+_pm = re.search(r"TOPICS = \[(.*?)\]", _probe, re.S)
+_probe_topics = [t.encode("ascii", "backslashreplace").decode("unicode_escape")
+                 for t in re.findall(r'"([^"]*)"', _pm.group(1))] if _pm else []
+check("R22: the live probe still carries the page list, word for word",
+      _probe_topics == _r22_topics,
+      "%d in probe vs %d in page" % (len(_probe_topics), len(_r22_topics)))
+
+_ts_path = os.path.join(ROOT, "tools", "topic_stats.py")
+_ts = read(_ts_path) if os.path.exists(_ts_path) else ""
+check("R22: the usage stats tool exists", bool(_ts))
+check("R22: ...it reads the list from the page instead of keeping a second copy",
+      "app.js" in _ts and r"var TOPICS = \[(.*?)\];" in _ts)
+check("R22: ...it is ascii-only, so a Windows console can print its report",
+      bool(_ts) and _ts.isascii())
+check("R22: ...and it only ever reads", "urlopen" in _ts and "method" not in _ts)
+check("R22: the readme points at the widen migration and the stats tool",
+      "supabase-topics-more.sql" in readme_src
+      and ("tools/topic_stats.py" in readme_src or "tools\\topic_stats.py" in readme_src))
+
 check("R22: untagged posts stay in 全部 - no filter unless one is picked",
       "function filterByTopic(posts)" in r22_feed and "if (!topic) return posts;" in r22_feed)
 check("R22: the topic filter adds no query of its own (it narrows the loaded batch)",

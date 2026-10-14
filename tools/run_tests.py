@@ -3360,6 +3360,80 @@ check("...and the saved post comes back for them too",
       "saved one" in js(it, "document.getElementById('mine-saves-list').innerHTML"))
 
 print()
+print("- C3: the topic list grew to 18, and the picker keeps lately used ones up front")
+ZT_SCENES = ["\u5931\u7269\u62db\u9886", "\u4e8c\u624b\u95f2\u7f6e",
+             "\u62fc\u5355\u62fc\u8f66", "\u517c\u804c\u4fe1\u606f",
+             "\u793e\u56e2\u62db\u65b0", "\u9009\u8bfe\u8003\u8bd5",
+             "\u627e\u5ba4\u53cb", "\u6c42\u52a9\u63d0\u95ee",
+             "\u901a\u77e5\u5410\u69fd", "\u6bd5\u4e1a\u5b63"]
+
+it = load("post.html", "mock-logged")
+picker = js(it, "document.getElementById('topic-picker').innerHTML")
+n_topics = js(it, "Campus.TOPICS.length")
+check("the shared list is the widened one, and the whole list is rendered",
+      n_topics == 18 and picker.count("data-pick=") == 18, n_topics)
+check("...and the transactional scenes are offered too",
+      all(('data-pick="' + t + '"') in picker for t in ZT_SCENES),
+      [t for t in ZT_SCENES if ('data-pick="' + t + '"') not in picker])
+
+it = load("post.html", "mock-logged",
+          pre="window.localStorage.setItem('campus.recentTopics',"
+              " JSON.stringify(['" + ZT_SCENES[9] + "']));")
+html = js(it, "document.getElementById('topic-picker').innerHTML")
+check("a topic used lately is pulled to the front for this device",
+      html.index(ZT_SCENES[9]) < html.index(TOPIC_A) and html.count("data-pick=") == 18,
+      html[:120])
+js(it, "document.getElementById('topic-picker').dispatch('click',"
+       " { target: { closest: function (s) { return s === '[data-pick]'"
+       " ? { getAttribute: function () { return '" + TOPIC_B + "'; } } : null; } },"
+       "   preventDefault: function () {} });")
+check("...and picking one is remembered on this device",
+      js(it, "String(window.localStorage.getItem('campus.recentTopics'))").find(TOPIC_B) >= 0,
+      js(it, "String(window.localStorage.getItem('campus.recentTopics'))"))
+
+print("- C3: a word the database's CHECK does not know yet must not eat the post")
+it = load("post.html", "mock-logged",
+          pre="__mockOpts.topicsColumn = true; __mockOpts.topicCheckReject = true;")
+js(it, "__r = {}; Campus.createPost({ content: 'tagged three', isAnonymous: false,"
+       " topics: ['" + TOPIC_A + "'] })"
+       ".then(function(){ __r.ok = true; }, function(e){ __r.err = String(e.message); });")
+check("the post is published even though the CHECK bounced it",
+      js(it, "__r.ok") is True, js(it, "__r.err"))
+check("...the bounce really happened, and the retry went out without topics",
+      len(json.loads(js(it, "JSON.stringify(__calls.filter(function(c){"
+                           " return c[2] === 'check:topics'; }))"))) == 1
+      and js(it, "String('topics' in __mockOpts.store.posts[3])") == "false")
+check("...and topics are switched off for the rest of this session",
+      js(it, "Campus.topicsSupported()") is False)
+
+print("- C3: asking the owner for a topic that does not exist yet")
+_post_html = read(os.path.join(ROOT, "post.html"))
+check("the suggestion channel sits right below the picker, on the same page",
+      'id="topic-idea"' in _post_html and "feedback.html?from=topic" in _post_html
+      and _post_html.index('id="topic-picker"') < _post_html.index('id="topic-idea"'))
+
+IDEA = "\u3010\u8bdd\u9898\u5efa\u8bae\u3011"
+it = load("feedback.html", "mock-login", pre="window.location.search = '?from=topic';")
+check("opening that link prefills the prefix, so the owner can spot it",
+      js(it, "document.getElementById('content').value").find(IDEA) == 0,
+      js(it, "document.getElementById('content').value"))
+fb_submit(it, "\u5931\u7269\u62db\u9886")
+_rows = json.loads(js(it, "JSON.stringify(__mockOpts.store.feedback)"))
+check("the suggestion is filed with its prefix intact",
+      len(_rows) == 1 and _rows[0]["content"].find(IDEA) == 0, _rows[:1])
+check("...and the prefix is not doubled",
+      len(_rows) == 1 and _rows[0]["content"].count(IDEA) == 1, _rows[:1])
+
+it = load("feedback.html", "mock-login", pre="window.location.search = '?from=topic';")
+fb_submit(it, "")
+check("a bare prefix is refused instead of filed as a suggestion",
+      len(fb_calls(it)) == 0, fb_calls(it))
+
+it = load("feedback.html", "mock-login")
+check("plain feedback still starts empty, with no prefix anywhere",
+      js(it, "document.getElementById('content').value") == "")
+
+print()
 print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 print("=" * 70)
