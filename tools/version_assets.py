@@ -49,9 +49,16 @@ def write(path, text):
 
 
 def asset_hash(rel):
-    """First 8 hex chars of the asset's content hash (sha256)."""
+    """First 8 hex chars of the asset's content hash (sha256).
+
+    Line endings are normalised to LF first: on Windows a `git checkout`
+    can hand us a CRLF working copy while the repository (and therefore CI,
+    and GitHub Pages) stores LF, and the two would otherwise hash
+    differently -- the version string would then be "stale" in CI only.
+    """
     with open(os.path.join(ROOT, rel.replace("/", os.sep)), "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()[:8]
+        data = f.read().replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()[:8]
 
 
 def process(check_only):

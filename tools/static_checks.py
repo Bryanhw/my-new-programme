@@ -1749,6 +1749,11 @@ check("R22: the readme points at the widen migration and the stats tool",
       "supabase-topics-more.sql" in readme_src
       and ("tools/topic_stats.py" in readme_src or "tools\\topic_stats.py" in readme_src))
 
+_va_path = os.path.join(ROOT, "tools", "version_assets.py")
+_va = read(_va_path) if os.path.exists(_va_path) else ""
+check("R18: the version tool hashes content with line endings normalised",
+      _va != "" and 'replace(b"\\r\\n", b"\\n")' in _va)
+
 check("R22: untagged posts stay in 全部 - no filter unless one is picked",
       "function filterByTopic(posts)" in r22_feed and "if (!topic) return posts;" in r22_feed)
 check("R22: the topic filter adds no query of its own (it narrows the loaded batch)",
