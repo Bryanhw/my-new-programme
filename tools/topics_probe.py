@@ -160,4 +160,9 @@ if not tagged:
     print("      are request-level and do not depend on anyone having tagged.")
 else:
     print("note: %d of %d sampled posts already carry a topic" % (tagged, len(rows)))
+print()
+print("note: the allowed-topic CHECK is not readable through PostgREST, so a widened")
+print("      list (docs/supabase-topics-more.sql) cannot be confirmed from here:")
+print("      reads answer 200 before and after. Post one sharing with one of the new")
+print("      topics to confirm it -- that write path is the only observable difference.")
 finish()
