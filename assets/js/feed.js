@@ -159,9 +159,48 @@
     }
   }
 
-  /** 切换话题：就地重画，不重新加载（地址栏那份数据不动，免得来回改历史记录） */
+  /** 当前地址（去掉来源与主机）：只有 path + query + hash 三截，够用来拼新地址 */
+  function nowUrl() {
+    var loc = window.location || {};
+    return String(loc.pathname || "") + String(loc.search || "") + String(loc.hash || "");
+  }
+
+  /** 「换成话题 next 之后地址栏该长什么样」：其余参数（圈子、词、分享进来的那条）
+      原样留着，只重写 topic 这一项；next 为空就把这一项摘掉。 */
+  function topicUrl(next) {
+    var href = nowUrl();
+    var hash = "";
+    var cut = href.indexOf("#");
+    if (cut >= 0) { hash = href.slice(cut); href = href.slice(0, cut); }
+    cut = href.indexOf("?");
+    var path = cut >= 0 ? href.slice(0, cut) : href;
+    var pairs = cut >= 0 ? href.slice(cut + 1).split("&") : [];
+    var out = [];
+    for (var i = 0; i < pairs.length; i++) {
+      var k = "";
+      try { k = decodeURIComponent(pairs[i].split("=")[0] || ""); } catch (e) { k = ""; }
+      if (!k || k === "topic") continue;
+      out.push(pairs[i]);
+    }
+    if (next) out.push("topic=" + encodeURIComponent(next));
+    return path + (out.length ? "?" + out.join("&") : "") + hash;
+  }
+
+  /** 切话题时把地址栏同步上：这条链能分享出去，刷新 / 收藏后还筛着同一个话题。
+      用 replaceState 而不是 pushState —— 返回键该用来离开这一页，不该被
+      「点过几个话题」一层层拦住。改不动地址栏时（file:// 直接打开、或被嵌在
+      别的页面里）安静跳过：筛选本身不能因为地址栏写不了就坏掉。 */
+  function syncTopicUrl(next) {
+    if (!window.history || !window.history.replaceState) return;
+    var url = topicUrl(next);
+    if (!url || url === nowUrl()) return;
+    try { window.history.replaceState(null, "", url); } catch (e) {}
+  }
+
+  /** 切换话题：就地重画，不重新加载；地址栏跟着走（见 syncTopicUrl） */
   function setTopic(next) {
     topic = next || "";
+    syncTopicUrl(topic);
     renderTopics();
     renderAll();
   }
@@ -423,8 +462,9 @@
     touched = true;
 
     // 卡片上的 #话题：在广场里就地切换筛选，不重新加载页面（其它页面上它就是个
-    // 普通链接，跳到 feed.html?topic=…）。只接管普通的左键单击，
-    // 中键 / Ctrl+点击该开新标签页就让它开。
+    // 普通链接，跳到 feed.html?topic=…）。切完地址栏也换成同一个样子，
+    // 所以「就地切」和「点链接跳进来」最后停在同一个地址上。
+    // 只接管普通的左键单击，中键 / Ctrl+点击该开新标签页就让它开。
     var tag = (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.target.closest)
       ? e.target.closest("[data-topic]") : null;
     if (tag && e.preventDefault) {

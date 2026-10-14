@@ -1487,6 +1487,16 @@ check("R18/F1+B4: a shared id that is not in the batch is reported, not faked",
 check("R18/F1+B4: it scrolls to that card once, and only once",
       "if (targetScrolled) return;" in r18_feed
       and 'scrollIntoView({ block: "center" })' in r18_feed)
+check("C3: picking a topic keeps the address bar in step, without stacking history",
+       # 锚点带换行与缩进：把整行注释掉时这些条件必须失效（裸词匹配会被注释骗过去）
+       "\n  function topicUrl(next)" in r18_feed
+       and "\n  function syncTopicUrl(next)" in r18_feed
+       and "\n    syncTopicUrl(topic);" in r18_feed
+       and "history.replaceState" in r18_feed
+       and "history.pushState" not in r18_feed)
+check("C3: a browser that refuses to rewrite the address bar cannot break filtering",
+       "try { window.history.replaceState" in r18_feed
+       and "catch (e) {}" in r18_feed)
 
 # ---- F6：不感兴趣 = 本机隐藏，可撤销 --------------------------------------
 _hide_body = _fn_body(r18_app, "hidePost")

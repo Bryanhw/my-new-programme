@@ -3058,6 +3058,50 @@ html = js(it, "document.getElementById('feed').innerHTML")
 check("a topic nobody has used says so, and offers the way back",
       ZH_NONE_YET in html and "data-clear-topic" in html, html)
 
+print("- C3: the address bar follows the picked topic (shareable, survives a reload)")
+# 站主 2026-10-14 验收时按清单 A4 找「地址栏变成 feed.html?topic=…」没找到：
+# 原设计是有意不写地址栏。既然点筛选时地址栏不跟着走，分享出去的链接就带不上话题，
+# 刷新也会回到「全部」—— 这一轮改成跟着走。用 replaceState 不用 pushState：
+# 返回键该用来离开这一页，不该被「点过几个话题」一层层拦住。
+# 假 history 要跟真浏览器一样：写完之后 location 也跟着变，否则第二次点击
+# 会拿「还没更新过的旧地址」去比，测出来的行为反而跟真机不一样。
+URL_SPY = ("window.__url = null;"
+           "window.location.pathname = '/feed.html';"
+           "window.history = { replaceState: function (a, b, url) {"
+           "  window.__url = url;"
+           "  var q = url.indexOf('?');"
+           "  window.location.search = q >= 0 ? url.slice(q) : '';"
+           "} };")
+PICK = ("document.getElementById('topic-chips').dispatch('click', { target: { closest: function (s) {"
+        "  return s === '[data-topic-pick]' ? { getAttribute: function () { return %s; } } : null;"
+        "} } });")
+
+it = load("feed.html", "mock-logged", pre=TAGGED + URL_SPY)
+check("C3: nothing touches the address bar before a topic is picked",
+      js(it, "window.__url") is None, js(it, "String(window.__url)"))
+js(it, PICK % ("'" + TOPIC_A + "'"))
+check("C3: picking a topic writes it into the address bar (so the link can be shared)",
+      "topic=" in str(js(it, "String(window.__url)"))
+      and js(it, "decodeURIComponent(String(window.__url).split('topic=')[1])") == TOPIC_A,
+      js(it, "String(window.__url)"))
+js(it, PICK % "''")
+check("C3: picking 全部 takes the topic back out of the address bar",
+      "topic=" not in str(js(it, "String(window.__url)"))
+      and str(js(it, "String(window.__url)")).startswith("/feed.html"),
+      js(it, "String(window.__url)"))
+
+it = load("feed.html", "mock-logged", pre=TAGGED + URL_SPY + "window.location.search = '?q=hello';")
+js(it, PICK % ("'" + TOPIC_B + "'"))
+url = str(js(it, "String(window.__url)"))
+check("C3: ...and the other query params (the keyword) are kept as they were",
+      "q=hello" in url and "topic=" in url, url)
+
+it = load("feed.html", "mock-logged",
+          pre=TAGGED + URL_SPY + "window.location.search = '?topic=' + encodeURIComponent('" + TOPIC_A + "');")
+js(it, PICK % ("'" + TOPIC_A + "'"))
+check("C3: it does not rewrite the address bar when it already says that topic",
+      js(it, "window.__url") is None, js(it, "String(window.__url)"))
+
 it = load("feed.html", "mock-logged",
           pre="__mockOpts.store.posts[0].topics = ['not-a-topic', '" + TOPIC_A + "'];")
 check("a stray word in the database is not rendered as a tag",
