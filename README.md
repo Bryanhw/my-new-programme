@@ -674,7 +674,7 @@ python tools\feedback_probe.py --clean
 | 工具 | 干什么 | 怎么跑 |
 | --- | --- | --- |
 | `feedback_probe.py`（在仓库里，`tools/`） | 从接口层验收反馈通道、清理探针留下的测试行 | 见上一节：`--no-write` / `--clean` |
-| **审核台** `review_console.py`（仓库之外） | 本机网页面板：三个页签 **分享 / 评论 / 反馈**，一键「通过 / 驳回 / 下架回审」、下架或恢复被举报的评论、处理举报、读反馈 | **最省事：双击同目录的 `open-console.cmd`** —— 第一次让你粘一次 key（存本机、按当前 Windows 账户加密），以后每次双击直接开页面；已经在跑就把页面再开一次，不会报端口占用。命令行等价写法：先试玩 `python review_console.py --demo`（不联网、不碰真实数据），真用则 `--save-key` 存一次 key 再启动（也可以用 `SUPABASE_SERVICE_ROLE_KEY` 或 `--key-file`） |
+| **审核台** `review_console.py`（仓库之外） | 本机网页面板：三个页签 **分享 / 评论 / 反馈**，一键「通过 / 驳回 / 下架回审」、下架或恢复被举报的评论、处理举报、读反馈 | **最省事：双击同目录的 `open-console.cmd`** —— 第一次只要先在浏览器复制好 key、回窗口按一下回车（它**从剪贴板读**，不在窗口里粘、也不显示；存本机、按当前 Windows 账户加密），以后每次双击直接开页面；已经在跑就把页面再开一次；端口上那个窗口若是老方式起的、交不出链接，就自动换到下一个空端口。命令行等价写法：先试玩 `python review_console.py --demo`（不联网、不碰真实数据），真用则 `--save-key` 存一次 key 再启动（也可以用 `SUPABASE_SERVICE_ROLE_KEY` 或 `--key-file`） |
 
 审核台的两条边界值得写在这里，因为它们是**隐私契约的一部分**：
 
@@ -690,10 +690,11 @@ python tools\feedback_probe.py --clean
   「service_role」这个词 —— 页面上写「千万不要把 service_role key 放进前端」是好事，不该被判失败），
   以及**审核台本体与它的密钥 / 标记文件都不在仓库里**。
 
-审核台自己带一份可重复的自检（同样离线、永远 demo、不会碰到真实数据与本机标记文件）：
+审核台自己带一份可重复的自检（同样离线、永远 demo、不会碰到真实数据与本机标记文件）。
+它还会钉住一件事：key 录入**不许再用 `getpass`**（那东西一个字符一个字符读键盘，粘不进去，而 `service_role` key 这么长只能粘）：
 
 ```powershell
-python D:\myprogramcstai\tools\review-console\_selftest.py   # 期望：RESULT: 109 passed, 0 failed
+python D:\myprogramcstai\tools\review-console\_selftest.py   # 期望：RESULT: 115 passed, 0 failed
 ```
 
 ### 关于匿名的边界
