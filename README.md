@@ -674,7 +674,7 @@ python tools\feedback_probe.py --clean
 | 工具 | 干什么 | 怎么跑 |
 | --- | --- | --- |
 | `feedback_probe.py`（在仓库里，`tools/`） | 从接口层验收反馈通道、清理探针留下的测试行 | 见上一节：`--no-write` / `--clean` |
-| **审核台** `review_console.py`（仓库之外） | 本机网页面板：三个页签 **分享 / 评论 / 反馈**，一键「通过 / 驳回 / 下架回审」、下架或恢复被举报的评论、处理举报、读反馈 | 先试玩 `python review_console.py --demo`（不联网、不碰真实数据）；真用则设好 `SUPABASE_SERVICE_ROLE_KEY` 或 `--key-file` 再启动 |
+| **审核台** `review_console.py`（仓库之外） | 本机网页面板：三个页签 **分享 / 评论 / 反馈**，一键「通过 / 驳回 / 下架回审」、下架或恢复被举报的评论、处理举报、读反馈 | **最省事：双击同目录的 `open-console.cmd`** —— 第一次让你粘一次 key（存本机、按当前 Windows 账户加密），以后每次双击直接开页面；已经在跑就把页面再开一次，不会报端口占用。命令行等价写法：先试玩 `python review_console.py --demo`（不联网、不碰真实数据），真用则 `--save-key` 存一次 key 再启动（也可以用 `SUPABASE_SERVICE_ROLE_KEY` 或 `--key-file`） |
 
 审核台的两条边界值得写在这里，因为它们是**隐私契约的一部分**：
 
@@ -682,8 +682,9 @@ python tools\feedback_probe.py --clean
   **不回写数据库** —— 所以 `public.feedback` 依然是「只进不出」，不需要为了「已处理」再加一列，
   也不会因为误点按钮改坏线上数据。（仓库的 `.gitignore` 也把这份标记文件挡住了，
   免得哪次 `git add -A` 把它带进来。）
-- 它只监听 `127.0.0.1`、页面要靠一次性随机 token 才能打开，`service_role` key **只从本机环境变量或
-  本机文件读**，不写进代码、日志、仓库或聊天记录；排错时只打印 key 的**指纹**（长度 / 前缀 / 角色），
+- 它只监听 `127.0.0.1`、页面要靠一次性随机 token 才能打开，`service_role` key **只从本机这三处读** —— `--key-file`（明文文件）、`SUPABASE_SERVICE_ROLE_KEY`
+  （环境变量）、或**本机密钥库**（Windows DPAPI 按当前账户加密，落盘只有密文、换机器换账户都解不开），
+  不写进代码、日志、仓库或聊天记录；排错时只打印 key 的**指纹**（长度 / 前缀 / 角色），
   不打印 key 本身。`tools/static_checks.py` 第 20 节把这两条钉成了永久护栏：**发到浏览器的每个
   key 都必须是 anon / publishable**（把页面与 `assets/` 里的 JWT 逐个解出来看 `role`，不是只查
   「service_role」这个词 —— 页面上写「千万不要把 service_role key 放进前端」是好事，不该被判失败），
@@ -692,7 +693,7 @@ python tools\feedback_probe.py --clean
 审核台自己带一份可重复的自检（同样离线、永远 demo、不会碰到真实数据与本机标记文件）：
 
 ```powershell
-python D:\myprogramcstai\tools\review-console\_selftest.py   # 期望：RESULT: 67 passed, 0 failed
+python D:\myprogramcstai\tools\review-console\_selftest.py   # 期望：RESULT: 109 passed, 0 failed
 ```
 
 ### 关于匿名的边界
