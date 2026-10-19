@@ -268,7 +268,8 @@ my-new-programme/
 > 新上传的图片从这一轮起走 `u/<16 位随机>/…`，路径里不再有账号 uuid；
 > **历史图片**要用仓库外的一次性工具
 > `py -3.14 tools\image-path-migration\migrate_image_paths.py` 换路径（先 `--dry-run` 看清单）。
-> 跑完前，`tools/privacy_probe.py` 第 10 节会如实报红两条，见上面「隐私边界探针」。
+> **已于 2026-10-19 执行完毕**：迁移 SQL 已跑、19 条历史图片已搬（旧 uuid 路径剩 0 条，抽查取图 200），
+> 匿名列举接口现回 `200 + []`（列不出任何东西）。详见上面「隐私边界探针」。
 
 ### 第 2 步：开启两项认证设置
 
@@ -421,12 +422,11 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 第 10 节查的是**图片路径**（第 29 轮加的 P0）：它匿名打一次 `POST /storage/v1/object/list/post-images`
 （列目录）并要求**被拒**，再确认一张真实图片的公开地址与 resize 端点**照常 200**，
 最后检查可见的 `image_path` 里**没有以账号 uuid 开头**、且新路径都是 `u/<16 位十六进制>/…` 的形状。
+（这一节和 6–9 节一样**需要先设 `E2E_PASSWORD`**，否则脚本跑完前 17 项就停下，第 10 节不会被跑到。）
 
-> ⚠️ **这一节有一条会「如实报红」的中间状态**：删策略那条迁移（
-> [`docs/supabase-image-path-privacy.sql`](docs/supabase-image-path-privacy.sql)）+ 历史图片搬迁
-> 由站主执行；**在它们跑完之前**，第 ① 条（列目录）与第 ③ 条（无 uuid 前缀）会是红的 ——
-> 那是「洞还在」的诚实读数，不是回归失败。跑完迁移与搬迁（
-> `py -3.14 tools\image-path-migration\migrate_image_paths.py`，先 `--dry-run`）就会变绿。
+> ✅ **2026-10-19 已全部变绿**：删策略那条迁移（
+> [`docs/supabase-image-path-privacy.sql`](docs/supabase-image-path-privacy.sql)）与历史图片搬迁都已由站主执行完毕
+> （19 条 → `u/<16 位随机>/…`，旧 uuid 路径剩 0 条；匿名列举现回 `200 + []`，公开取图与 resize 仍 200）。
 
 本站 2026-09-29 已执行 D1 迁移，所以第 9 节现在走的是「已迁移」那一支；`43/0`（只读）与
 `52/0`（`--write`）都全绿。
