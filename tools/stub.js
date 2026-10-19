@@ -134,6 +134,17 @@ function __el(id) {
   el.focus = function () {};
   el.click = function () { el.dispatch('click', { target: el, preventDefault: function () {} }); };
   el.appendChild = function (child) { el._children.push(child); return child; };
+  /* 追加渲染（第 30 轮翻页）：真浏览器里 insertAdjacentHTML('beforeend', …)
+     只解析新增的那段，**不动**已有的节点（用户点开的评论框还在）。
+     这里的替身等价成「接到 innerHTML 尾巴上」，测试直接读 innerHTML 断言。 */
+  el.insertAdjacentHTML = function (pos, html) {
+    if (String(pos).indexOf("beforeend") >= 0) {
+      el.innerHTML = String(el.innerHTML || '') + String(html);
+    } else {
+      el.innerHTML = String(html) + String(el.innerHTML || '');
+    }
+    return el;
+  };
   el.firstElementChild = null;
   el.lastElementChild = null;
 
@@ -227,7 +238,10 @@ function __clone(o) {
 function __match(row, filters) {
   for (var i = 0; i < filters.length; i++) {
     var f = filters[i];
-    if (f[2]) { if (f[1].indexOf(row[f[0]]) < 0) return false; }
+    /* 比较型过滤（lt）：created_at 是 ISO 字符串，字典序就是时间序。
+       广场翻页用的是 .lt("created_at", 游标) —— 这里得照实模拟。 */
+    if (f[3] === 'lt') { if (!(String(row[f[0]]) < String(f[1]))) return false; }
+    else if (f[2]) { if (f[1].indexOf(row[f[0]]) < 0) return false; }
     else { if (row[f[0]] !== f[1]) return false; }
   }
   return true;
@@ -708,6 +722,7 @@ function __q(table, store, clientOpts, getUid) {
   b.update = function (row) { st.op = 'update'; st.payload = row; return b; };
   b['delete'] = function () { st.op = 'delete'; return b; };
   b.eq = function (col, val) { st.filters.push([col, val]); return b; };
+  b.lt = function (col, val) { st.filters.push([col, val, false, 'lt']); return b; };
   b['in'] = function (col, vals) { st.filters.push([col, vals, true]); return b; };
   b.order = function (col, o) {
     st.orderCol = col;

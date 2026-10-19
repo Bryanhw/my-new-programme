@@ -24,6 +24,9 @@
   var topicBarEl = document.getElementById("topic-bar");
   var topicChipsEl = document.getElementById("topic-chips");
   var topicNoteEl = document.getElementById("topic-note");
+  var moreWrapEl = document.getElementById("load-more-wrap");
+  var moreBtn = document.getElementById("load-more");
+  var moreNoteEl = document.getElementById("load-more-note");
 
   document.title = "同学们的分享 · " + C.SITE_NAME;
   C.markTabbar("feed");
@@ -35,6 +38,17 @@
   var topic = "";      // 当前筛的话题（空 = 全部；不带话题的分享也在「全部」里）
   var seq = 0;         // 每次 load 自增：晚到的计数不许回填到新的一轮里
   var touched = false; // 这批卡片用户已经动过（点赞/展开评论）：不再整体重画
+
+  /* 翻页（1-1）：一屏 50 条，更早的按 created_at 游标一批批往下取。
+     用游标、不用 offset —— offset 在「翻页期间有人发新帖」时会重复行 / 漏行。 */
+  var FEED_PAGE = 50;     // 一批 50 条（和第 15 轮起的取数量一致，首屏不变）
+  var cursor = "";        // 已加载里最旧那条的 created_at（空 = 没有更早的了）
+  var hasMore = false;    // 上一批是「满的」才认为后面还有
+  var loadingMore = false;
+  var reachedEnd = false; // 试过往下取、确实没有了 —— 只有这时候才敢说这句话
+  var shownCount = 0;     // 现在真正画出来的卡片数（筛过词 / 话题之后）
+  var appendedPages = 0;  // 追加过几批（决定「本圈的在前面」那句还成不成立）
+  var seen = {};          // 已经在列表里的帖子 id：翻页时同一条不许画两遍
 
   /* 地址栏带来的圈子、词与「分享过来的那一条」：首页的热词 chips 和
      卡片上的「复制链接」就是这么跳过来的 */
@@ -88,6 +102,29 @@
 
   function circleId() { return C.getCircle(); }
   function onlyCircle() { return !!(onlyEl && onlyEl.checked); }
+
+  /** 翻页游标 = 这批里最旧那条的 created_at。
+   *
+   *  只有一个陷阱：选了圈、又没勾「只看本圈」时，这批是「本圈 + 全站」合并的，
+   *  本圈那部分被提到了最前面；本圈帖子少的时候，它们可能比全站那批旧得多。
+   *  拿合并之后的最小值当游标，就会把卡在两者之间的帖子**整段跳过**
+   *  （页面不报错，但那批内容谁也看不见了）。所以只用「全站那批」
+   *  （in_circle 不为 true 的）算游标：全站那批本来就一路排到它最旧的一条。 */
+  function oldestCursor(posts) {
+    var min = "", i, p;
+    for (i = 0; i < (posts || []).length; i++) {
+      p = posts[i];
+      if (!p || !p.created_at || p.in_circle === true) continue;
+      if (!min || String(p.created_at) < min) min = String(p.created_at);
+    }
+    return min;
+  }
+
+  function markSeen(posts) {
+    for (var i = 0; i < (posts || []).length; i++) {
+      if (posts[i] && posts[i].id) seen[posts[i].id] = 1;
+    }
+  }
 
   /** 分享链接那条不在这批里（更早、或被圈子挡住）时：按 id 单独问一次服务端，
    *  取到就补进这批的最前面，跟正常卡片一起画 —— 这样高亮、滚动、计数都走同一条路。
@@ -239,7 +276,8 @@
     noteEl.hidden = false;
     noteEl.textContent = onlyCircle()
       ? "只看「" + C.circleName(id) + "」：其他片区的内容暂时藏起来了。"
-      : "已经是全站内容，只是把「" + C.circleName(id) + "」的分享排在了前面。";
+      : "已经是全站内容，只是把「" + C.circleName(id) + "」的分享排在了前面。" +
+        (appendedPages ? "更早的部分按时间顺序接在后面。" : "");
   }
 
   function renderHot() {
@@ -293,6 +331,7 @@
    * 列表
    * --------------------------------------------------------------- */
   function renderList(posts) {
+    shownCount = posts.length;
     if (!posts.length) {
       if (countEl) countEl.textContent = "";
       if (keyword) {
@@ -352,12 +391,19 @@
       return markTarget(card);
     }).join("");
     if (targetId) noteTarget(hit);
-    if (countEl) {
-      var id = circleId();
-      countEl.textContent = "共 " + posts.length + " 条分享" +
-        (topic ? "（#" + topic + "）" : "") +
-        (id && !onlyCircle() ? "（" + C.circleName(id) + "的在前面）" : "");
-    }
+    renderCount();
+  }
+
+  /** 计数条：现在看得到多少条。
+   *  后面还有没加载出来的（hasMore）就不能写「共 N 条」—— 那是句谎话，
+   *  会让人以为整个广场就这么点内容。拉到底、或确实没有更早的了，再换回「共 N 条」。 */
+  function renderCount() {
+    if (!countEl) return;
+    if (!shownCount) { countEl.textContent = ""; return; }
+    var id = circleId();
+    countEl.textContent = (hasMore ? "已显示 " : "共 ") + shownCount + " 条分享" +
+      (topic ? "（#" + topic + "）" : "") +
+      (id && !onlyCircle() && !appendedPages ? "（" + C.circleName(id) + "的在前面）" : "");
   }
 
   function renderAll() {
@@ -369,24 +415,38 @@
     if (loading) return;
     loading = true;
     touched = false;
+    cursor = "";
+    hasMore = false;
+    loadingMore = false;
+    reachedEnd = false;
+    appendedPages = 0;
+    seen = {};
     var mySeq = ++seq;
     setRefreshLoading(true);
     feedEl.innerHTML = skeletonList();
+    renderMore();
 
     var id = circleId();
     var load$ = (id && C.listFeedPosts)
-      ? C.listFeedPosts({ limit: 50, circleId: id, onlyCircle: onlyCircle() })
-      : C.listPosts(50);
+      ? C.listFeedPosts({ limit: FEED_PAGE, circleId: id, onlyCircle: onlyCircle() })
+      : C.listPosts(FEED_PAGE);
 
     // 第一步：只等帖子本身，先让卡片出现。
     load$.then(function (posts) {
       loaded = posts || [];
+      // 游标要在「补进来的那条」之前算：分享直链补进来的那条可能很旧，
+      // 拿它当游标会让翻页直接跳过中间一大段。
+      cursor = oldestCursor(loaded);
+      seen = {};
+      markSeen(loaded);
+      hasMore = loaded.length >= FEED_PAGE && !!cursor;
       // 分享直链：那条可能不在这批里 → 先补进来再画，省得先画一遍再插一条
       return ensureTargetLoaded();
     }).then(function () {
       renderBar();
       renderTopics();
       renderAll();
+      renderMore();
 
       // 第二步（不挡渲染）：点赞数 / 评论数回来后再补一次。
       //   体检实测：三个请求串行约 0.9 秒，帖子本身只占 ~0.25 秒 ——
@@ -409,6 +469,99 @@
       // 注意：这里只等「帖子」那一步 —— 统计请求还在路上不该让刷新按钮一直转圈
       loading = false;
       setRefreshLoading(false);
+    });
+  }
+
+  /* ---------------------------------------------------------------
+   * 翻页（1-1）：底部「看更早的分享」
+   * --------------------------------------------------------------- */
+
+  /** 底部按钮 / 尾注：还有更早就显示按钮；试过、确实没有了才说「没有更早的」。 */
+  function renderMore() {
+    if (moreWrapEl) moreWrapEl.hidden = !hasMore;
+    if (moreBtn) {
+      moreBtn.disabled = !!loadingMore;
+      moreBtn.textContent = loadingMore ? "正在加载更早的…" : "看更早的分享";
+    }
+    if (moreNoteEl) {
+      var done = reachedEnd && shownCount > 0;
+      moreNoteEl.hidden = !done;
+      moreNoteEl.textContent = done ? "没有更早的分享了 —— 已经看到最后一条。" : "";
+    }
+  }
+
+  /** 把新一批接到列表末尾：**只追加、不重画**。
+   *  整体重画会把用户刚点开的评论框收回去（touched 那条规矩就是为这个立的），
+   *  所以翻页只往后接。 */
+  function appendCards(posts) {
+    if (!posts.length) return;
+    var html = posts.map(function (p) { return C.renderPostCard(p); }).join("");
+    if (feedEl.insertAdjacentHTML) feedEl.insertAdjacentHTML("beforeend", html);
+    else feedEl.innerHTML += html;
+  }
+
+  /** 「看更早的分享」：按游标再取一批，接在下面。 */
+  function loadMore() {
+    if (loading || loadingMore || !hasMore || !cursor) return;
+    loadingMore = true;
+    reachedEnd = false;
+    renderMore();
+
+    var mySeq = seq;
+    var id = circleId();
+    /* 第 2 页起一律按「全站时间线」往下取：
+         · 只看本圈 → 取本圈那一股（别把圈外内容混进来）；
+         · 选了圈但没勾「只看本圈」→ 走普通时间线（见 listFeedPosts 的 plainOnly），
+           圈名照旧标上。 */
+    var load$ = (id && C.listFeedPosts)
+      ? C.listFeedPosts({
+          limit: FEED_PAGE, circleId: id, onlyCircle: onlyCircle(),
+          before: cursor, plainOnly: !onlyCircle()
+        })
+      : C.listPosts(FEED_PAGE, cursor);
+
+    load$.then(function (posts) {
+      var batch = posts || [];
+      var fresh = [], i;
+      for (i = 0; i < batch.length; i++) {
+        var p = batch[i];
+        if (!p || !p.id || seen[p.id]) continue;
+        seen[p.id] = 1;
+        fresh.push(p);
+      }
+      if (mySeq !== seq) return;             // 期间刷新过：这一批作废
+      if (!fresh.length) {                   // 整批都是已经在列表里的：别在这儿空转
+        hasMore = false;
+        reachedEnd = true;
+        renderMore();
+        return;
+      }
+      // 计数一起到位再画：新卡片一次就画成，不会先挂着「–」
+      var ready = C.attachEngagement ? C.attachEngagement(fresh)
+        : { then: function (fn) { return fn(fresh); } };
+      return ready.then(function () {
+        if (mySeq !== seq) return;
+        var next = oldestCursor(batch);
+        if (next) cursor = next;             // 游标只往更旧的方向走
+        for (var j = 0; j < fresh.length; j++) loaded.push(fresh[j]);
+        var show = filterByTopic(C.filterPostsByTerm(fresh, keyword));
+        appendCards(show);
+        shownCount += show.length;
+        appendedPages++;
+        hasMore = batch.length >= FEED_PAGE;
+        reachedEnd = !hasMore;
+        renderCount();
+        renderTopics();
+        renderFilter();
+        renderMore();
+      });
+    }).catch(function (err) {
+      if (mySeq !== seq) return;
+      C.showNotice(noticeEl, "warn", "更早的没拉到：" + err.message);
+      setTimeout(function () { C.hideNotice(noticeEl); }, 5000);
+    }).then(function () {
+      loadingMore = false;
+      renderMore();
     });
   }
 
@@ -491,7 +644,8 @@
     C.toggleLike(id, liked).then(function (nowLiked) {
       btn.classList.toggle("liked", nowLiked);
       btn.firstElementChild.textContent = nowLiked ? "🧡" : "🤍";
-      countEl.textContent = Math.max(0, parseInt(countEl.textContent, 10) + (nowLiked ? 1 : -1));
+      var n = parseInt(countEl.textContent, 10);
+      countEl.textContent = Math.max(0, (isNaN(n) ? 0 : n) + (nowLiked ? 1 : -1));
     }).catch(function (err) {
       C.showNotice(noticeEl, "warn", err.message + "（可以先匿名进入或注册）");
       setTimeout(function () { C.hideNotice(noticeEl); }, 5000);
@@ -501,6 +655,7 @@
   });
 
   if (refreshBtn) refreshBtn.addEventListener("click", load);
+  if (moreBtn) moreBtn.addEventListener("click", loadMore);
 
   if (!C.isReady()) {
     feedEl.innerHTML = C.setupCard();

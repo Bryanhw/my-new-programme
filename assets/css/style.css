@@ -1773,6 +1773,16 @@ body.modal-open { overflow: hidden; }
   padding: 0;
 }
 
+/* 翻页（1-1）：底部「看更早的分享」+ 到底之后的那句话 */
+#load-more-wrap { margin: 14px 0 4px; }
+.load-more-note {
+  margin: 10px 0 4px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
 /* 卡片元信息里的圈名 */
 .post-circle {
   color: var(--brand-strong);

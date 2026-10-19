@@ -1200,7 +1200,7 @@ check("the faq explains the circles and the loaded-only filter",
 check("the feed script says out loud that it filters what it already has",
       "\u5df2\u52a0\u8f7d" in feedjs and "filterPostsByTerm" in feedjs)
 check("both pages fall back to the plain list without the circle api",
-      "C.listPosts(50)" in feedjs and "C.listPosts(3)" in homejs)
+      "C.listPosts(FEED_PAGE" in feedjs and "C.listPosts(3)" in homejs)
 check("a card shows which circle the post came from",
       "post-circle" in appjs and "circle_name" in appjs)
 check("the stylesheet styles the new pieces",
@@ -1877,6 +1877,53 @@ check("F2: the tab strip and the comment rows have styles of their own",
 check("F2: needs no migration - it reads only what is already public",
       not [f for f in os.listdir(os.path.join(ROOT, "docs"))
            if f.startswith("supabase-saves") or f.startswith("supabase-saved")])
+
+print()
+print("R30) \u7ffb\u9875\uff1a\u5e95\u90e8\u6309\u94ae\u6309 created_at \u6e38\u6807\u5f80\u4e0b\u53d6\uff0c\u4e00\u5c4f 50 \u6761")
+
+r30_feed = read(os.path.join(ROOT, "feed.html"))
+ZH_MORE = "\u770b\u66f4\u65e9\u7684\u5206\u4eab"
+ZH_SHOWN = "\u5df2\u663e\u793a "
+ZH_TOTAL = "\u5171 "
+
+check("R30: the feed page still asks for 50 a screen (no quiet shrinking)",
+      "var FEED_PAGE = 50;" in feedjs and "C.listPosts(FEED_PAGE)" in feedjs
+      and "limit: FEED_PAGE" in feedjs)
+check("R30: both streams take a 'before' cursor and it is created_at",
+      appjs.count('.lt("created_at", before)') == 2
+      and 'if (before) q = q.lt("created_at", before);' in appjs)
+check("R30: no offset anywhere - offset repeats or drops rows when someone posts meanwhile",
+      ".range(" not in appjs and ".range(" not in feedjs and "offset:" not in feedjs)
+check("R30: the merged screen takes its cursor from the plain half only",
+      "function oldestCursor(" in feedjs and "p.in_circle === true) continue;" in feedjs
+      and "cursor = oldestCursor(loaded);" in feedjs)
+check("R30: paging from page two only walks the plain timeline when a circle is picked",
+      "plainOnly" in feedjs and "plainOnly" in appjs
+      and "plainOnly: !onlyCircle()" in feedjs)
+check("R30: new rows are appended, not re-rendered (an open comment box survives)",
+      "function appendCards(" in feedjs and 'insertAdjacentHTML("beforeend"' in feedjs
+      and "innerHTML += html" in feedjs)
+check("R30: the same post is never printed twice while paging",
+      "function markSeen(" in feedjs and "if (!p || !p.id || seen[p.id]) continue;" in feedjs)
+check("R30: the count line only claims a total once there is nothing more to load",
+      'hasMore ? "' + ZH_SHOWN + '" : "' + ZH_TOTAL + '"' in feedjs
+      and "function renderCount()" in feedjs)
+check("R30: 'no earlier ones' is only said after a fetch really came back empty",
+      "reachedEnd = true;" in feedjs and "reachedEnd && shownCount > 0" in feedjs
+      and "\u6ca1\u6709\u66f4\u65e9\u7684\u5206\u4eab" in feedjs)
+check("R30: a failed fetch is said out loud and the button stays for a retry",
+      'C.showNotice(noticeEl, "warn", "\u66f4\u65e9\u7684\u6ca1\u62c9\u5230\uff1a"' in feedjs
+      and "C.hideNotice(noticeEl)" in feedjs)
+check("R30: the button and the end-note live outside #feed, which every render rewrites",
+      ZH_MORE in r30_feed and 'id="load-more-wrap"' in r30_feed
+      and 'id="load-more"' in r30_feed and 'id="load-more-note"' in r30_feed
+      and r30_feed.index('id="feed"></div>') < r30_feed.index('id="load-more-wrap"'))
+check("R30: the new pieces are styled",
+      "#load-more-wrap {" in css_src and ".load-more-note {" in css_src)
+check("R30: paging needs no new table, no migration and no new read surface",
+      not [f for f in os.listdir(os.path.join(ROOT, "docs"))
+           if f.startswith("supabase-feed-page")]
+      and feedjs.count('.from("') == 0)
 
 print("20) D6: the service_role key never reaches the site or the repo")
 

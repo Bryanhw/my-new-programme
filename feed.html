@@ -22,7 +22,7 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <title>同学们的分享 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=930e33fc">
+<link rel="stylesheet" href="assets/css/style.css?v=fb50f207">
 </head>
 <body>
 
@@ -123,6 +123,14 @@
 
   <div id="feed"></div>
 
+  <!-- 翻页（1-1）：一屏 50 条，更早的按 created_at 游标往下取。
+       按钮必须放在 #feed 外面 —— 列表每次重画都会重写 #feed 的 innerHTML，
+       放在里面会被一起擦掉。 -->
+  <div id="load-more-wrap" hidden>
+    <button class="btn btn-soft btn-block" type="button" id="load-more">看更早的分享</button>
+  </div>
+  <p class="load-more-note" id="load-more-note" hidden></p>
+
 </main>
 
 <nav class="tabbar">
@@ -153,7 +161,7 @@
 <script src="assets/js/campuses.js?v=43cddca3"></script>
 <script src="assets/js/circles.js?v=f6e3aaf5"></script>
 <script src="assets/js/hotwords.js?v=631fd476"></script>
-<script src="assets/js/app.js?v=19b366ec"></script>
-<script src="assets/js/feed.js?v=2a9e768e"></script>
+<script src="assets/js/app.js?v=3f309ee6"></script>
+<script src="assets/js/feed.js?v=22e071af"></script>
 </body>
 </html>

@@ -3443,6 +3443,164 @@ check("plain feedback still starts empty, with no prefix anywhere",
       js(it, "document.getElementById('content').value") == "")
 
 print()
+print("- R30: the feed pages backwards by created_at (button, 50 a page)")
+
+ZH_SHOWN = "\u5df2\u663e\u793a "
+ZH_TOTAL = "\u5171 "
+ZH_NO_EARLIER = "\u6ca1\u6709\u66f4\u65e9\u7684"
+
+# 120 older posts, one a minute, so every page boundary is a known timestamp.
+BULK = ("""(function () {
+  function p2(n) { return n < 10 ? '0' + n : String(n); }
+  for (var i = 1; i <= 120; i++) {
+    __mockOpts.store.posts.push({
+      id: 'p-b' + i, author_id: 'u-b' + i, is_anonymous: false,
+      display_name: 'Bulk' + i, school: 'Nowhere College',
+      content: 'bulk-' + i + '-content', image_path: null, status: 'approved',
+      created_at: '2026-08-01T' + p2(Math.floor(i / 60)) + ':' + p2(i % 60) + ':00.000Z'
+    });
+  }
+})();""")
+
+SPY_LIST = ("__seen = []; __lp = Campus.listPosts;"
+            " Campus.listPosts = function (n, before) {"
+            " __seen.push([n, before]); return __lp(n, before); };")
+SPY_FEED = ("__seen = []; __lf = Campus.listFeedPosts;"
+            " Campus.listFeedPosts = function (o) {"
+            " __seen.push([o.limit, o.before, !!o.onlyCircle, !!o.plainOnly]);"
+            " return __lf(o); };")
+CLICK_MORE = "document.getElementById('load-more').click();"
+REFRESH = ("document.getElementById('refresh').dispatch("
+           "'click', { preventDefault: function () {} });")
+
+# ---- the plain timeline: 50 / 50 / 23
+it = load("feed.html", "mock-logged", pre=BULK)
+html = js(it, "document.getElementById('feed').innerHTML")
+count = js(it, "document.getElementById('feed-count').textContent")
+check("the first screen is still the newest 50, with the seed's three on top",
+      html.count("data-post-id=") == 50 and html.index("p-3") < html.index("p-b120"),
+      html.count("data-post-id="))
+check("the count line says what is shown instead of a total it cannot know",
+      count.startswith(ZH_SHOWN + "50") and ZH_TOTAL not in count, count)
+check("the button is offered while there may be more below",
+      js(it, "document.getElementById('load-more-wrap').hidden") is False)
+check("the next page is not on screen yet", "bulk-73-content" not in html)
+
+js(it, SPY_LIST)
+_calls_before = js(it, "__calls.length")
+js(it, CLICK_MORE)
+# 一次「往下取一批」到底发出几个请求：后面的场景拿它当尺子。
+PLAIN_PAGE2_CALLS = js(it, "__calls.length") - _calls_before
+seen = js(it, "__seen")
+check("the second page asks for 50 more, older than the oldest one on screen",
+      seen == [[50, "2026-08-01T01:14:00.000Z"]], seen)
+html2 = js(it, "document.getElementById('feed').innerHTML")
+check("...and it is appended to the first screen rather than re-rendered",
+      html2.startswith(html) and "bulk-73-content" in html2
+      and "bulk-24-content" in html2, html2.count("data-post-id="))
+check("...the count line keeps up",
+      js(it, "document.getElementById('feed-count').textContent").startswith(
+          ZH_SHOWN + "100"),
+      js(it, "document.getElementById('feed-count').textContent"))
+
+js(it, CLICK_MORE)
+html3 = js(it, "document.getElementById('feed').innerHTML")
+check("the third, short page is appended too and nothing was printed twice",
+      "bulk-1-content" in html3 and html3.count("data-post-id=") == 123
+      and html3.count('data-post-id="p-b120"') == 1
+      and html3.count('data-post-id="p-3"') == 1, html3.count("data-post-id="))
+check("...now the count line can honestly say 'in total'",
+      js(it, "document.getElementById('feed-count').textContent").startswith(
+          ZH_TOTAL + "123"),
+      js(it, "document.getElementById('feed-count').textContent"))
+check("...the button goes away and the end is stated once",
+      js(it, "document.getElementById('load-more-wrap').hidden") is True
+      and ZH_NO_EARLIER in js(it, "document.getElementById('load-more-note').textContent")
+      and js(it, "document.getElementById('load-more-note').hidden") is False)
+js(it, CLICK_MORE)
+check("clicking again once there is nothing left asks the server nothing",
+      js(it, "__seen.length") == 2, js(it, "__seen.length"))
+js(it, REFRESH)
+check("a refresh starts over: one screen, a button, no leftover cursor",
+      js(it, "document.getElementById('feed').innerHTML").count("data-post-id=") == 50
+      and js(it, "document.getElementById('load-more-wrap').hidden") is False
+      and js(it, "document.getElementById('load-more-note').hidden") is True)
+
+# ---- a circle picked but not "just this circle": the merged screen must not
+#      take its cursor from the hoisted (much older) circle posts.
+CIRCLE_SEED = ("""window.localStorage.setItem('campus.circle', 'southwest');
+__mockOpts.store.posts.push({
+  id: 'p-old1', author_id: 'u-o1', is_anonymous: false, display_name: 'OldOne',
+  school: %r, content: 'old-circle-1', image_path: null, status: 'approved',
+  created_at: '2020-01-01T00:00:00.000Z' });
+__mockOpts.store.posts.push({
+  id: 'p-old2', author_id: 'u-o2', is_anonymous: false, display_name: 'OldTwo',
+  school: %r, content: 'old-circle-2', image_path: null, status: 'approved',
+  created_at: '2020-01-02T00:00:00.000Z' });
+""" % (SC_SICHUAN, SC_SICHUAN))
+
+it = load("feed.html", "mock-logged", pre=CIRCLE_SEED + BULK, modules=True)
+html = js(it, "document.getElementById('feed').innerHTML")
+check("with a circle picked, its two very old posts ride on top of the newest 50",
+      html.count("data-post-id=") == 52
+      and html.index("old-circle-1") < html.index("p-b120"),
+      html.count("data-post-id="))
+js(it, SPY_FEED)
+_calls_before = js(it, "__calls.length")
+js(it, CLICK_MORE)
+_delta = js(it, "__calls.length") - _calls_before
+seen = js(it, "__seen")
+check("paging past that screen goes by the plain timeline's own oldest row",
+      seen == [[50, "2026-08-01T01:14:00.000Z", False, True]], seen)
+html2 = js(it, "document.getElementById('feed').innerHTML")
+check("...so nothing between the hoisted old posts and that row gets skipped",
+      "bulk-24-content" in html2 and html2.count("data-post-id=") == 102,
+      html2.count("data-post-id="))
+check("...and the hoisted ones are not printed a second time",
+      html2.count('data-post-id="p-old1"') == 1)
+check("...and it costs one timeline query, not a second circle query",
+      _delta == PLAIN_PAGE2_CALLS, (_delta, PLAIN_PAGE2_CALLS))
+_cname = js(it, "Campus.circleName('southwest')")
+check("...and the count line drops the 'up front' claim it can no longer make",
+      bool(_cname) and _cname not in js(it, "document.getElementById('feed-count').textContent"),
+      js(it, "document.getElementById('feed-count').textContent"))
+
+# ---- "just this circle": paging has to stay inside that one stream.
+ONLY_SEED = ("""window.localStorage.setItem('campus.circle', 'southwest');
+(function () {
+  function p2(n) { return n < 10 ? '0' + n : String(n); }
+  for (var i = 1; i <= 60; i++) {
+    __mockOpts.store.posts.push({
+      id: 'p-c' + i, author_id: 'u-c' + i, is_anonymous: false,
+      display_name: 'Circle' + i, school: %r, content: 'circle-' + i + '-content',
+      image_path: null, status: 'approved',
+      created_at: '2026-07-01T' + p2(Math.floor(i / 60)) + ':' + p2(i %% 60) + ':00.000Z'
+    });
+  }
+})();
+document.getElementById('circle-only').checked = true;
+""" % SC_SICHUAN)
+
+it = load("feed.html", "mock-logged", pre=ONLY_SEED + BULK, modules=True)
+html = js(it, "document.getElementById('feed').innerHTML")
+check("'just this circle' starts from that circle's own stream",
+      "circle-60-content" in html and "bulk-120-content" not in html
+      and html.count("data-post-id=") == 50, html.count("data-post-id="))
+js(it, SPY_FEED)
+_calls_before = js(it, "__calls.length")
+js(it, CLICK_MORE)
+_delta = js(it, "__calls.length") - _calls_before
+seen = js(it, "__seen")
+check("...paging inside that circle costs one query, like any other page",
+      _delta == PLAIN_PAGE2_CALLS, (_delta, PLAIN_PAGE2_CALLS))
+check("...and paging stays in that stream instead of the plain timeline",
+      seen == [[50, "2026-07-01T00:11:00.000Z", True, False]], seen)
+html2 = js(it, "document.getElementById('feed').innerHTML")
+check("...the last 10 of that circle arrive, and nothing outside sneaks in",
+      "circle-1-content" in html2 and html2.count("data-post-id=") == 60
+      and "bulk-120-content" not in html2, html2.count("data-post-id="))
+
+print()
 print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 print("=" * 70)

@@ -500,14 +500,19 @@ window.Campus = (function () {
 
   /** 取内容流（最新在前）。
    *  只取帖子本身：点赞数 / 评论数由调用方拿到数据后调 attachEngagement 补 ——
-   *  两个统计请求不再挡住第一张卡片（实测三个请求串行约 0.9 秒，分开能省掉三分之二）。 */
-  function listPosts(limit) {
+   *  两个统计请求不再挡住第一张卡片（实测三个请求串行约 0.9 秒，分开能省掉三分之二）。
+   *
+   *  第二个参数是**翻页游标**（上一批最旧那条的 created_at）：带了它就只取更早的。
+   *  往下翻按 created_at 走，不用 offset/range —— 用 offset 的话，翻页期间有人发新帖，
+   *  同一条会重复出现、或者整整一条被跳过（谁也没看见，还不报错）。 */
+  function listPosts(limit, before) {
     if (!client) return Promise.reject(new Error(configError));
     return withAnonCodeFallback(function () {
-      return client.from("posts")
+      var q = client.from("posts")
         .select(postColumns())
-        .order("created_at", { ascending: false })
-        .limit(limit || 30);
+        .order("created_at", { ascending: false });
+      if (before) q = q.lt("created_at", before);
+      return q.limit(limit || 30);
     })
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
@@ -637,17 +642,20 @@ window.Campus = (function () {
    * 本圈帖子（只走 school 集合筛选）。
    * 不额外加 status 条件：和广场一样交给 RLS —— 加了就会把「自己的待审核帖」
    * 从本圈列表里挤掉，同一条内容在两个列表里表现不一致更让人困惑。
+   *
+   * 第三个参数是翻页游标，含义同 listPosts：带了它只取更早的那一段。
    */
-  function listCirclePosts(circleId, limit) {
+  function listCirclePosts(circleId, limit, before) {
     if (!client) return Promise.reject(new Error(configError));
     var schools = circleList ? circleList.schoolsIn(circleId) : [];
     if (!schools.length) return Promise.resolve([]);
     return withAnonCodeFallback(function () {
-      return client.from("posts")
+      var q = client.from("posts")
         .select(postColumns())
         .in("school", schools)
-        .order("created_at", { ascending: false })
-        .limit(limit || 30);
+        .order("created_at", { ascending: false });
+      if (before) q = q.lt("created_at", before);
+      return q.limit(limit || 30);
     })
       .then(function (res) {
         if (res.error) throw new Error("加载失败：" + res.error.message);
@@ -659,6 +667,8 @@ window.Campus = (function () {
    * 广场数据流（本圈优先）。
    *   opts.circleId  已选圈子（空 = 没选，走原来的单请求）
    *   opts.onlyCircle 只看本圈（不再拉全量）
+   *   opts.before     翻页游标（见 listPosts）：只看更早的那一段
+   *   opts.plainOnly  翻页用：只按全站时间线取，不再把本圈提到前面
    * 返回的帖子会带上 circle_id / circle_name（本圈批次在前），卡片据此标圈名。
    * 和 listPosts 一样只给帖子本身：计数由调用方拿到数据后补（attachEngagement），
    * 这样第一张卡片不用等两个统计请求。
@@ -666,16 +676,26 @@ window.Campus = (function () {
   function listFeedPosts(opts) {
     opts = opts || {};
     var limit = opts.limit || 30;
+    var before = opts.before || "";
     var circleId = circleList && circleList.exists(opts.circleId) ? opts.circleId : "";
 
     if (!circleId) {
-      return listPosts(limit);
+      return listPosts(limit, before);
     }
     if (opts.onlyCircle) {
-      return listCirclePosts(circleId, limit);
+      return listCirclePosts(circleId, limit, before);
     }
-    return listCirclePosts(circleId, limit).then(function (mine) {
-      return listPosts(limit).then(function (all) {
+    /* 翻第 2 页起只走全站时间线（plainOnly）：本圈那部分第一页已经带出来了，
+       再合并一遍会让整页都变成「已经在列表里的」重复项 —— 轻则翻不动，
+       重则把夹在中间、更旧的那批帖子整段挤掉。圈名照旧按校名标上，界面不变。 */
+    if (opts.plainOnly) {
+      return listPosts(limit, before).then(function (all) {
+        for (var i = 0; i < (all || []).length; i++) tagCircle(all[i], false);
+        return all;
+      });
+    }
+    return listCirclePosts(circleId, limit, before).then(function (mine) {
+      return listPosts(limit, before).then(function (all) {
         // 合并后只返回一份（本圈那批的对象在前）：换了排序方式不该让内容重复，
         // 计数同样交给调用方补。
         return mergeFeedPosts(mine, all);
