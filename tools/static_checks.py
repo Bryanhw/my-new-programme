@@ -8,6 +8,7 @@ import json
 import re
 import struct
 import sys
+import zlib
 
 import esprima
 
@@ -1964,8 +1965,11 @@ check("R31: on a narrow screen the pills sit closer together",
 check("R31: ...and give back horizontal padding, so the row fits at 360px wide",
       "padding: 6px 10px" in _r31_foot and ".post-foot .like-btn" in _r31_foot
       and ".post-foot .save-btn" in _r31_foot)
-check("R31: ...and the timestamp is a notch smaller, not the first thing to jump lines",
-      "font-size: 12px" in _r31_foot)
+# 第 32 轮把这一处的字号并进了阶梯：窄屏底栏的时间戳和胶囊都用 --fs-xs。
+# 所以「这一行放得下」不再靠某条规则里那几个像素，而是由令牌统一保证；
+# 断言也从字面量换成令牌 —— 顺带把「--fs-xs 到底是多少」交给下面 R32 那节去守。
+check("R31/R32: on a narrow screen the timestamp and the pills are both --fs-xs",
+      _r31_foot.count("font-size: var(--fs-xs)") == 2, _r31_foot.strip()[:140])
 check("R31: wrapping stays as a last resort instead of overflowing the card",
       "flex-wrap: wrap" in _r31_foot)
 
@@ -1988,6 +1992,154 @@ check("R31: the grid's 'three' still matches the page: three tabs, each with ari
       r31_profile.count('role="tab"') == 3 and r31_profile.count('aria-selected=') == 3)
 check("R31: no new page, no new dependency, no new file was needed for this",
       not [f for f in os.listdir(os.path.join(ROOT, "assets", "css")) if f != "style.css"])
+
+
+print()
+print("R32) \u5b57\u53f7\u9636\u68af\uff1a\u4e00\u4e2a\u7cfb\u7edf\uff0c\u4e14\u90fd\u8d70\u4ee4\u724c")
+
+r32_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
+r32_root = _a1_block(r32_css, ":root")
+r32_tokens = re.findall(r"--fs-([a-z0-9-]+):\s*([^;]+);", r32_root)
+r32_names = [n for n, _ in r32_tokens]
+r32_val = dict((n, v.strip()) for n, v in r32_tokens)
+R32_LADDER = ["xs", "sm", "base", "md", "lg", "xl", "2xl", "display", "icon-xl",
+              "brand", "brand-sm"]
+
+
+def _r32_px(v):
+    m = re.match(r"^([\d.]+)px$", v or "")
+    return float(m.group(1)) if m else None
+
+
+r32_px = [(n, _r32_px(r32_val.get(n))) for n in R32_LADDER]
+r32_px = [(n, v) for n, v in r32_px if v is not None]
+
+check("R32: :root \u91cc\u6070\u597d\u5b9a\u4e49\u4e86 11 \u6863\u5b57\u53f7", len(r32_tokens) == 11, r32_names)
+check("R32: \u58f0\u660e\u987a\u5e8f\u5c31\u662f\u9636\u68af\u987a\u5e8f",
+      r32_names == R32_LADDER, r32_names)
+check("R32: \u9664 clamp \u90a3\u4e00\u6863\u5916\u90fd\u662f\u7eaf px\uff0c\u4e00\u6863\u4e0d\u7f3a", len(r32_px) == 10, r32_px)
+check("R32: \u76f8\u90bb\u4e24\u6863\u81f3\u5c11\u5dee 1px\uff08\u5dee\u534a\u50cf\u7d20\u7684\u5e76\u5217\u5c31\u662f\u8ba9\u4eba\u51ed\u624b\u611f\u6311\uff09",
+      all(b[1] - a[1] >= 1.0 for a, b in zip(r32_px, r32_px[1:])), r32_px)
+
+check("R32: \u6700\u5c0f\u4e00\u6863 12px", r32_val.get("xs") == "12px", r32_val.get("xs"))
+check("R32: \u5c0f\u5b57\u6b63\u6587 13.5px\u2014\u2014FAQ \u6b63\u6587\u4e0e\u8bc4\u8bba\u6ca1\u88ab\u7f29\u5230 13",
+      r32_val.get("sm") == "13.5px", r32_val.get("sm"))
+check("R32: \u6b63\u6587 / \u5e16\u5b50\u6b63\u6587 15.5px\u2014\u2014\u6ca1\u6709\u4e3a\u4e86\u300c\u51d1\u6574\u300d\u628a\u5b83\u7f29\u5c0f",
+      r32_val.get("base") == "15.5px", r32_val.get("base"))
+check("R32: \u9875\u811a\u54c1\u724c\u5b57\u4ecd\u662f\u539f\u6765\u7684 clamp\uff0c\u5916\u89c2\u6ca1\u88ab\u6539\u6389",
+      r32_val.get("brand") == "clamp(40px, 12vw, 74px)", r32_val.get("brand"))
+
+r32_decls = re.findall(r"font-size:\s*([^;}]+)", r32_css)
+r32_used = sorted(set(re.match(r"var\(--fs-([a-z0-9-]+)\)", v.strip()).group(1)
+                      for v in r32_decls if v.strip().startswith("var(--fs-")))
+r32_naked = sorted(set(v.strip() for v in r32_decls
+                       if not v.strip().startswith("var(--fs-") and v.strip() != "inherit"))
+check("R32: style.css \u91cc\u4e00\u5f8b\u8d70\u4ee4\u724c\uff08\u6ca1\u6709\u5199\u6b7b\u7684 font-size\uff09",
+      not r32_naked, r32_naked)
+check("R32: \u7528\u5230\u7684\u6bcf\u4e00\u6863\u90fd\u5728 :root \u91cc\u5b9a\u4e49\u8fc7",
+      all(u in r32_names for u in r32_used), [u for u in r32_used if u not in r32_names])
+check("R32: \u5b9e\u9645\u7528\u5230\u7684\u6863\u4f4d\u4e0d\u8d85\u8fc7 11 \u4e2a\uff08\u6536\u655b\u524d\u662f 25 \u4e2a\u6563\u503c\uff09",
+      len(r32_used) <= 11, len(r32_used))
+for page in PAGES:
+    check("R32: " + page + " \u91cc\u4e5f\u4e0d\u5199\u6b7b font-size",
+          "font-size" not in read(os.path.join(ROOT, page)))
+
+print()
+print("R32) \u7ad9\u70b9\u56fe\u6807\uff1a\u516b\u4e2a\u9875\u9762\u90fd\u6302\u4e0a\uff0c\u4e14\u6302\u5728\u771f\u6587\u4ef6\u4e0a")
+
+r32_img = os.path.join(ROOT, "assets", "img")
+r32_svg = os.path.join(r32_img, "favicon.svg")
+r32_p32 = os.path.join(r32_img, "favicon-32.png")
+r32_touch = os.path.join(r32_img, "apple-touch-icon.png")
+for _p in (r32_svg, r32_p32, r32_touch):
+    check("R32: \u56fe\u6807\u6587\u4ef6\u5728\u4ed3\u5e93\u91cc \u2014\u2014 " + os.path.basename(_p), os.path.isfile(_p))
+check("R32: \u56fe\u6807\u7531 tools/make_icons.py \u751f\u6210\uff08\u6539\u5f62\u72b6\u6539\u811a\u672c\uff0c\u4e0d\u624b\u5de5\u5bfc\u51fa\uff09",
+      os.path.isfile(os.path.join(ROOT, "tools", "make_icons.py")))
+r32_svg_text = read(r32_svg) if os.path.isfile(r32_svg) else ""
+check("R32: favicon.svg \u662f SVG \u4e14\u5e26 viewBox",
+      r32_svg_text.startswith("<svg") and "viewBox=" in r32_svg_text)
+check("R32: SVG \u7528\u7684\u6b63\u662f\u7ad9\u70b9\u7684\u91d1\u8272\uff08\u548c --bg \u540c\u4e00\u652f\uff09",
+      "#CB9243" in r32_svg_text)
+check("R32: SVG \u91cc\u6ca1\u6709\u811a\u672c\u3001\u4e5f\u6ca1\u6709\u5916\u90e8\u5f15\u7528\uff08\u56fe\u6807\u8981\u80fd\u5b89\u5168\u5730\u957f\u671f\u7f13\u5b58\uff09",
+      "<script" not in r32_svg_text.lower()
+      and "href=" not in r32_svg_text
+      # xmlns 就是 "http://www.w3.org/2000/svg"，它是 SVG 的身份证，不是外链；
+      # 把它摘掉之后再找 http，找得到的才真的是外链
+      and "http" not in r32_svg_text.replace('xmlns="http://www.w3.org/2000/svg"', ""))
+
+
+def _r32_png(path):
+    """\u6309 PNG \u81ea\u5df1\u7684\u5934\u90e8\u628a\u50cf\u7d20\u89e3\u51fa\u6765\u3002
+
+    \u5934\u90e8\u5199 RGB\u3001\u6570\u636e\u5199 RGBA \u8fd9\u7c7b\u9519\u6cd5\uff0c\u6587\u4ef6\u672c\u8eab\u5408\u6cd5\u3001CRC \u4e5f\u8fc7\uff0c
+    \u53ea\u6709\u771f\u89e3\u4e00\u904d\u624d\u770b\u5f97\u89c1\uff08\u7b2c 32 \u8f6e\u5c31\u8fd9\u4e48\u8e29\u8fc7\u4e00\u6b21\uff09\u3002
+    """
+    if not os.path.isfile(path):
+        return None
+    data = open(path, "rb").read()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    pos, idat, hdr = 8, b"", None
+    while pos < len(data):
+        ln = struct.unpack(">I", data[pos:pos + 4])[0]
+        tag = data[pos + 4:pos + 8]
+        if tag == b"IHDR":
+            hdr = struct.unpack(">IIBBBBB", data[pos + 8:pos + 8 + ln])
+        elif tag == b"IDAT":
+            idat += data[pos + 8:pos + 8 + ln]
+        pos += 12 + ln
+    if not hdr or hdr[2] != 8 or hdr[3] not in (2, 6):
+        return None
+    w, h, bpp = hdr[0], hdr[1], 3 if hdr[3] == 2 else 4
+    raw = zlib.decompress(idat)
+    if len(raw) != h * (w * bpp + 1):
+        return None
+    if any(raw[i] for i in range(0, len(raw), w * bpp + 1)):
+        return None          # \u53ea\u5199\u8fc7\u6ee4\u5668 0\uff1b\u51fa\u73b0\u522b\u7684\u5c31\u662f\u54ea\u513f\u4e0d\u5bf9
+    return (w, h, bpp,
+            [raw[y * (w * bpp + 1) + 1:(y + 1) * (w * bpp + 1)] for y in range(h)])
+
+
+def _r32_at(png, x, y):
+    w, h, bpp, rows = png
+    return tuple(rows[y][x * bpp:x * bpp + bpp])
+
+
+r32_a = _r32_png(r32_p32)
+check("R32: favicon-32.png \u89e3\u51fa\u6765\u662f 32x32 \u5e26\u900f\u660e\u901a\u9053",
+      r32_a is not None and (r32_a[0], r32_a[1], r32_a[2]) == (32, 32, 4),
+      None if r32_a is None else r32_a[:3])
+check("R32: 32px \u56fe\u7684\u5706\u89d2\u662f\u900f\u660e\u7684\uff08\u4e0d\u662f\u4e00\u5757\u9ed1\u65b9\u5757\uff09",
+      r32_a is not None and _r32_at(r32_a, 0, 0)[3] == 0,
+      None if r32_a is None else _r32_at(r32_a, 0, 0))
+check("R32: 32px \u56fe\u6b63\u4e2d\u662f\u5976\u6cb9\u8272\u7684\u592a\u9633",
+      r32_a is not None and _r32_at(r32_a, 16, 17) == (255, 246, 239, 255),
+      None if r32_a is None else _r32_at(r32_a, 16, 17))
+r32_t = _r32_png(r32_touch)
+check("R32: apple-touch-icon.png \u89e3\u51fa\u6765\u662f 180x180 \u4e0d\u900f\u660e RGB",
+      r32_t is not None and (r32_t[0], r32_t[1], r32_t[2]) == (180, 180, 3),
+      None if r32_t is None else r32_t[:3])
+check("R32: \u4e3b\u5c4f\u56fe\u56db\u89d2\u662f\u91d1\u8272\u5e95\u3001\u4e0d\u662f\u900f\u660e\uff08\u900f\u660e\u4f1a\u88ab iOS \u586b\u9ed1\uff09",
+      r32_t is not None and _r32_at(r32_t, 0, 0) == (203, 146, 67),
+      None if r32_t is None else _r32_at(r32_t, 0, 0))
+check("R32: \u4e3b\u5c4f\u56fe\u6b63\u4e2d\u4e5f\u662f\u90a3\u679a\u592a\u9633",
+      r32_t is not None and _r32_at(r32_t, 90, 98) == (255, 246, 239),
+      None if r32_t is None else _r32_at(r32_t, 90, 98))
+check("R32: \u4e09\u5f20\u56fe\u52a0\u8d77\u6765\u4e0d\u5230 8KB\uff08\u56fe\u6807\u4e0d\u8be5\u62d6\u6162\u9996\u5c4f\uff09",
+      all(os.path.isfile(p) for p in (r32_svg, r32_p32, r32_touch))
+      and sum(os.path.getsize(p) for p in (r32_svg, r32_p32, r32_touch)) < 8192,
+      sum(os.path.getsize(p) for p in (r32_svg, r32_p32, r32_touch)
+          if os.path.isfile(p)))
+for page in PAGES:
+    _html = read(os.path.join(ROOT, page))
+    check("R32: " + page + " \u6302\u4e86\u77e2\u91cf\u56fe\u6807",
+          'rel="icon" type="image/svg+xml" href="assets/img/favicon.svg"' in _html)
+    check("R32: " + page + " \u6709 32px \u4f4d\u56fe\u515c\u5e95",
+          'rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png"' in _html)
+    check("R32: " + page + " \u6709\u52a0\u5230\u4e3b\u5c4f\u7684\u56fe\u6807",
+          'rel="apple-touch-icon" href="assets/img/apple-touch-icon.png"' in _html)
+    check("R32: " + page + " \u7684\u56fe\u6807\u94fe\u63a5\u4e0d\u5e26 ?v=\uff08\u56fe\u7247\u6709\u610f\u4e0d\u505a\u7248\u672c\u5316\uff09",
+          "favicon.svg?v=" not in _html and "favicon-32.png?v=" not in _html)
 
 print("20) D6: the service_role key never reaches the site or the repo")
 

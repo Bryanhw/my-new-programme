@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="校园拾光">
+  <title>校园拾光</title>
+  <rect width="64" height="64" rx="14.1" fill="#CB9243"/>
+  <g fill="#FFF6EF">
+    <circle cx="32.0" cy="34.9" r="13.1"/>
+    <polygon points="47.040,34.880 58.448,28.530 58.448,41.230"/>
+    <polygon points="42.635,45.515 55.192,49.092 46.212,58.072"/>
+    <polygon points="32.000,49.920 38.350,61.328 25.650,61.328"/>
+    <polygon points="21.365,45.515 17.788,58.072 8.808,49.092"/>
+    <polygon points="16.960,34.880 5.552,41.230 5.552,28.530"/>
+    <polygon points="21.365,24.245 8.808,20.668 17.788,11.688"/>
+    <polygon points="32.000,19.840 25.650,8.432 38.350,8.432"/>
+    <polygon points="42.635,24.245 46.212,11.688 55.192,20.668"/>
+  </g>
+</svg>
