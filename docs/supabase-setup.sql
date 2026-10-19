@@ -233,15 +233,20 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- ---------------------------------------------------------------------
--- 11. 图片存储桶（公开读取，登录身份可上传）
+-- 11. 图片存储桶（公开桶，登录身份可上传）
+--     取图走 /storage/v1/object/public/... 与 /render/image/public/...，这两条路
+--     不经过 RLS（靠下面 public = true 直接放行），所以**不需要** select 策略。
+--     第 29 轮 P0：这里原来有一条 `for select using (bucket_id = 'post-images')`
+--     的策略，它没有限定角色 → 匿名访客也能列举目录、枚举全站图片；而历史图片
+--     路径的第一段是上传者账号 uuid，等于把匿名帖作者递出去。已删除。
+--     详见 docs/supabase-image-path-privacy.sql。
 -- ---------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('post-images', 'post-images', true)
 on conflict (id) do nothing;
 
+-- 显式删掉旧策略：新项目本来就不会创建它，老项目重跑本文件即可收紧。
 drop policy if exists "post_images_public_read" on storage.objects;
-create policy "post_images_public_read" on storage.objects
-  for select using (bucket_id = 'post-images');
 
 drop policy if exists "post_images_auth_insert" on storage.objects;
 create policy "post_images_auth_insert" on storage.objects

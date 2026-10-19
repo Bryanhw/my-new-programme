@@ -32,6 +32,7 @@ import re
 import ssl
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -320,5 +321,71 @@ check("every code we can see is 6 hex characters or null (never a uuid, never a 
 st, body = req("GET", "/rest/v1/posts?select=anon_code,author_id&limit=1")
 check("asking for the code together with the author id is still refused",
       code_of(body) in ("42703", "42501", "PGRST204"), (st, code_of(body), msg_of(body)))
+
+# ------------------------------------------------- image paths (round 29, P0)
+print()
+print("10) image paths: no bucket listing, no uuid, pictures still load")
+# Three separate claims; they do not turn green at the same time.
+#   ① a visitor cannot LIST the bucket      -> green after supabase-image-path-privacy.sql
+#   ② a real image is still served          -> green already; must never regress
+#   ③ the paths we can see carry no uuid    -> stays RED until the historical objects
+#      are migrated by tools/image-path-migration/migrate_image_paths.py. That red is
+#      the expected mid-state (it means "the bucket still holds old paths"), not a
+#      fresh leak: the frontend stopped writing uuid paths in this round.
+
+
+def status_only(method, path):
+    # req() parses every answer as JSON, which explodes on image bytes; this
+    # variant keeps only the status code and the content type.
+    h = {"apikey": KEY, "Authorization": "Bearer " + KEY}
+    r = urllib.request.Request(BASE + path, headers=h, method=method)
+    try:
+        with urllib.request.urlopen(r, timeout=45, context=CTX) as resp:
+            return resp.status, resp.headers.get("Content-Type", "")
+    except urllib.error.HTTPError as e:
+        return e.code, ""
+    except Exception as e:  # noqa: BLE001
+        return 0, str(e)[:80]
+
+
+# ① listing: the storage API needs a select policy for this, so once the policy is
+#    gone it answers 400 for everyone. An empty 200 would also be fine (nothing to
+#    harvest), but 200 *with rows* is exactly the leak we are closing.
+st, body = req("POST", "/storage/v1/object/list/post-images", {"prefix": "", "limit": 10})
+listed = body if isinstance(body, list) else []
+check("a visitor cannot list the image bucket",
+      st >= 400 or listed == [], (st, code_of(body), str(body)[:120]))
+
+st, body = req("GET", "/rest/v1/posts?select=id,image_path&image_path=not.is.null&limit=50")
+rows = body if isinstance(body, list) else []
+check("posts still expose image_path to a visitor (unchanged contract)",
+      st == 200, (st, code_of(body), msg_of(body)))
+paths = [str(r["image_path"]) for r in rows if r.get("image_path")]
+
+# ② the pictures themselves must keep loading: public reads bypass RLS entirely,
+#    which is the whole reason dropping the select policy is safe.
+if paths:
+    quoted = urllib.parse.quote(paths[0], safe="/")
+    st, ctype = status_only("GET", "/storage/v1/object/public/post-images/" + quoted)
+    check("a real image is still served to a signed-out visitor",
+          st == 200 and ctype.startswith("image/"), (st, ctype, paths[0]))
+    st2, _ = status_only(
+        "GET", "/storage/v1/render/image/public/post-images/" + quoted
+        + "?width=64&resize=contain&quality=75")
+    check("the resized-image endpoint still answers too", st2 == 200, (st2, paths[0]))
+else:
+    print("   (skip the image fetch: no post carries an image right now)")
+
+# ③ identity in the path. Old objects are named <author uuid>/<timestamp>-<rand>.<ext>,
+#    and that uuid is readable by anyone - which is how an anonymous post gets
+#    de-anonymised. New uploads use u/<16 hex>/... instead.
+uuidish = [p for p in paths if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-", p)]
+check("no visible image path starts with an account uuid"
+      + ("" if not uuidish else "  <- %d old object(s) left; run the migration tool" % len(uuidish)),
+      not uuidish, uuidish[:3])
+newish = [p for p in paths if p.startswith("u/")]
+check("new-style paths are u/<16 hex>/... and carry no uuid",
+      all(re.match(r"^u/[0-9a-f]{16}/", p) for p in newish)
+      and all(re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-", p) is None for p in newish), newish[:3])
 
 finish()

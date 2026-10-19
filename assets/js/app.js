@@ -339,8 +339,9 @@ window.Campus = (function () {
         // 非匿名 → 走统一署名算法（和评论一致）
         var displayName = isAnonymous ? "匿名同学" : buildDisplayName(profile, id);
 
+        // P0（第 29 轮）：uploadImage 不再接收账号 id —— 图片路径由随机串打头。
         var upload = o.file
-          ? uploadImage(o.file, id.user.id)
+          ? uploadImage(o.file)
           : Promise.resolve(null);
 
         return upload.then(function (imagePath) {
@@ -912,7 +913,43 @@ window.Campus = (function () {
     });
   }
 
-  function uploadImage(file, userId) {
+  /**
+   * P0（第 29 轮）：上传路径的第一段必须是**随机串**，绝不能是登录账号 id。
+   *
+   * 为什么：图片本身是公开可读的，`posts.image_path` 又对匿名访客开放，所以路径里
+   * 一旦带上 author uuid，任何人点开一张**匿名帖**的图片地址就能拿到作者账号，
+   * 再和他署名帖的图片前缀一对照，匿名就当场没了（这就是 D1 红线的图片版）。
+   * 随机段顺带让图片名不可枚举：知道一个地址推不出同一个人（或任何人）的其他图。
+   *
+   * 优先用 crypto.getRandomValues；duktape（测试）或老浏览器没有它时退回
+   * Math.random —— 这里的随机性只用来「去标识 + 防枚举」，不参与任何鉴权判断。
+   */
+  function randomPathToken() {
+    var bytes = null;
+    try {
+      if (typeof crypto !== "undefined" && crypto && crypto.getRandomValues) {
+        bytes = new Uint8Array(8);
+        crypto.getRandomValues(bytes);
+      }
+    } catch (e) {
+      bytes = null;
+    }
+    if (bytes) {
+      var hex = "";
+      for (var i = 0; i < bytes.length; i++) {
+        hex += (bytes[i] + 256).toString(16).slice(1);
+      }
+      return hex;
+    }
+    // 兜底：每轮固定补 8 位，随机源再糟糕也不会死循环（Math.random 是有可能返回 0 的）
+    var out = "";
+    for (var k = 0; k < 2; k++) {
+      out += ("00000000" + Math.floor(Math.random() * 0x100000000).toString(16)).slice(-8);
+    }
+    return out;
+  }
+
+  function uploadImage(file) {
     if (!client) return Promise.reject(new Error(configError));
     if (!file) return Promise.resolve(null);
 
@@ -928,7 +965,9 @@ window.Campus = (function () {
     return compressImage(file).then(function (payload) {
       var compressed = payload !== file;
       var ext = compressed ? extOf("", payload.type) : extOf(file.name, file.type);
-      var path = userId + "/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "." + ext;
+      // u/<随机段>/<时间戳>-<随机段>.<扩展名>：第一段与账号无关（见 randomPathToken）
+      var path = "u/" + randomPathToken() + "/" + Date.now() + "-" +
+        Math.random().toString(36).slice(2, 8) + "." + ext;
 
       return client.storage.from(BUCKET).upload(path, payload, {
         cacheControl: "3600",

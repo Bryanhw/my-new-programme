@@ -1,0 +1,103 @@
+-- =====================================================================
+--  校园拾光 · 图片路径隐私：关掉「匿名列举图片目录」这条通道（第 29 轮 P0）
+--  使用方法：Supabase Dashboard -> SQL Editor -> 新建查询 -> 整段粘贴执行
+--  执行顺序：先 docs/supabase-setup.sql（必）；本文件独立，可随时执行，幂等。
+--  文末附「验证查询」与「回滚语句」。
+-- =====================================================================
+--
+--  为什么需要这一步
+--  ---------------------------------------------------------------------
+--  改之前，storage.objects 上有一条 post-images 的读取策略：
+--      "post_images_public_read": for select using (bucket_id = 'post-images')
+--  它没有写 `to authenticated`，所以**匿名访客**也能列举这个桶：
+--      POST /storage/v1/object/list/post-images   {"prefix": "", "limit": 1000}
+--
+--  桶是 public，所以「图片地址人人可打开」本身没问题，取图也不靠这条策略。
+--  真正的麻烦有两个：
+--    1) 历史图片路径的第一段是**上传者的账号 uuid**（.../<uuid>/1699xxxx-photo.jpg）。
+--       前端本轮已改成随机串 u/<16 位随机>/...，但库里那些老图片还留着旧路径，
+--       于是「列举目录 -> 拿到一批 <uuid>/... -> 直接读出匿名帖作者的账号」，
+--       再和他署名帖的图片前缀一对照，匿名就没了 —— 这就是 D1 红线的图片版。
+--    2) 就算路径全随机，能列举目录也等于能枚举全站图片、拿到完整文件清单，
+--       对一个校园小站没有任何必要用途。
+--
+--  解决思路
+--  ---------------------------------------------------------------------
+--  删掉这条 for select 策略。公开桶的**取图**走 /object/public/... 与
+--  /render/image/public/...，这两条路不经过 RLS（bucket 的 public 标记直接放行），
+--  所以删掉之后广场、卡片、头像、og 封面全都照常显示；而 list / download /
+--  createSignedUrl 这类要过 RLS 的接口对 anon / authenticated 一律拒绝。
+--  前端已确认只用 public 取图：app.js 里只有 upload / getPublicUrl / remove，
+--  没有任何 list / download / createSignedUrl 调用。
+--
+--  改完之后
+--  ---------------------------------------------------------------------
+--  * 访客 / 学生：POST /storage/v1/object/list/post-images -> 400/403；图片照常能看。
+--  * 上传：insert 策略保持原样（to authenticated），发帖不受影响。
+--  * 删除自己的图：delete 策略保持原样（owner = auth.uid()），不受影响。
+--  * 站点主人：service_role 绕过 RLS，后台与 SQL Editor 照旧。
+--
+--  注意：这一步只关掉「列目录」，不会让**历史**图片路径里的 uuid 消失 ——
+--  那是另一个动作：tools/image-path-migration/migrate_image_paths.py
+--  （刻意留在公开仓库之外，用 service_role 跑；先把旧对象复制到新随机路径、
+--  改库、再删旧对象。先 --dry-run、再 --limit 20 小批量）。
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 1. 删掉「匿名可列举目录」的策略
+--    drop policy if exists：重复执行不报错。
+-- ---------------------------------------------------------------------
+drop policy if exists "post_images_public_read" on storage.objects;
+
+-- ---------------------------------------------------------------------
+-- 2. 复核：桶本身必须仍然是 public —— 取图不走 RLS，靠的就是这个标记。
+--    哪天它被关掉，全站图片会一起消失，所以这里显式重新声明一次。
+-- ---------------------------------------------------------------------
+update storage.buckets set public = true where id = 'post-images';
+
+-- 让 PostgREST 立刻拾取变更（正常会自动生效，显式做一次更稳）。
+notify pgrst, 'reload schema';
+
+-- =====================================================================
+--  验证查询（执行完请各跑一遍，期望值写在注释里）
+-- =====================================================================
+-- 验证 1：post-images 上不再有「对 anon 生效的 select 策略」
+--   select policyname, cmd, roles from pg_policies
+--   where schemaname = 'storage' and tablename = 'objects'
+--     and cmd = 'SELECT' and 'anon' = any(roles);
+--   -- 期望：结果里没有 post_images_public_read
+--
+-- 验证 2：另外两条策略还在
+--   select policyname, cmd, roles from pg_policies
+--   where schemaname = 'storage' and tablename = 'objects'
+--     and policyname like 'post_images%';
+--   -- 期望：只剩 post_images_auth_insert（INSERT）与 post_images_owner_delete（DELETE）
+--
+-- 验证 3：桶仍是公开桶
+--   select id, public from storage.buckets where id = 'post-images';   -- public = true
+--
+-- 验证 4（命令行，用发布密钥）：列目录应当被拒
+--   curl -X POST "https://<项目>.supabase.co/storage/v1/object/list/post-images" \
+--        -H "apikey: <发布密钥>" -H "Content-Type: application/json" \
+--        -d '{"prefix":"","limit":5}'
+--   -- 期望：400 / 403，没有文件清单
+--   （也可以直接跑 tools/privacy_probe.py 的第 10 节，它会自动断言这一条）
+--
+-- 验证 5（浏览器）：随便打开一张广场图片，应当照常显示
+--   首页 -> 任意带图帖子；或直接访问
+--   .../storage/v1/object/public/post-images/u/<随机段>/xxxx.jpg   -- 期望 200
+
+-- =====================================================================
+--  回滚（仅在线上验收不通过时使用）
+-- =====================================================================
+-- create policy "post_images_public_read" on storage.objects
+--   for select using (bucket_id = 'post-images');
+
+-- =====================================================================
+--  遗留提示（本轮未改，属于已知的次一级项）
+--  1) 历史图片路径里的 uuid：要靠 tools/image-path-migration 迁移一次才算干净。
+--     在迁移跑完之前，tools/privacy_probe.py 第 10 节的第 3 条会一直报红 —— 这是
+--     预期中的中期状态（它报的是「库里还有老路径」，不是「页面又漏了」）。
+--  2) 上传策略只校验 bucket_id，没有对路径 / MIME / 体积设限（PLAN 第 29 轮 P2-9）。
+--  3) 图片不进 ?v= 版本化（P3-16），换图后旧缓存可能还挂着。
+-- =====================================================================

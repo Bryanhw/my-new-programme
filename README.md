@@ -126,6 +126,8 @@ my-new-programme/
     ├── supabase-topics-flat.sql      上面那份的粘贴版
     ├── supabase-topics-more.sql      话题扩容：只换那条 CHECK，把名单从 8 个扩到 18 个
     ├── supabase-topics-more-flat.sql 上面那份的粘贴版
+    ├── supabase-image-path-privacy.sql  图片路径去标识：删掉「匿名可列图片目录」的那条读策略
+    ├── supabase-image-path-privacy-flat.sql  上面那份的粘贴版
     └── edge-functions/
         └── reset-password/        Edge Function：手机号 + 答案 → 改密码（service_role 只在这里）
             ├── index.ts
@@ -252,8 +254,21 @@ my-new-programme/
 > （所以没有「新列忘了授权」那种坑）。想知道谁在被用、谁一次没被用过：
 >
 > ```powershell
-> python tools	opic_stats.py      # 只读；每学期跑一次，把没人用的换成同学在提的
+> python tools\topic_stats.py      # 只读；每学期跑一次，把没人用的换成同学在提的
 > ```
+
+> 🔒 **图片路径去标识（2026-10-19，第 29 轮 P0）**：
+> [`docs/supabase-image-path-privacy.sql`](docs/supabase-image-path-privacy.sql)
+> （或 [`-flat`](docs/supabase-image-path-privacy-flat.sql) 粘贴版）。它只做一件事：
+> **删掉 `storage.objects` 上那条 `post_images_public_read` 策略** —— 那条策略没写 `to`，
+> 等于对所有人（含匿名访客）生效，于是**不用登录就能列出整个 `post-images` 桶**，
+> 清单里直接带着 `账号uuid/文件名`；配合「匿名帖的图片地址可读」，点开一张匿名帖的图
+> 就等于拿到作者账号。**为什么删了图还能看**：公开桶取图走 `/object/public/…` 与
+> `/render/image/public/…`，**不经过 RLS**；前端也从来不用 list / download / createSignedUrl。
+> 新上传的图片从这一轮起走 `u/<16 位随机>/…`，路径里不再有账号 uuid；
+> **历史图片**要用仓库外的一次性工具
+> `py -3.14 tools\image-path-migration\migrate_image_paths.py` 换路径（先 `--dry-run` 看清单）。
+> 跑完前，`tools/privacy_probe.py` 第 10 节会如实报红两条，见上面「隐私边界探针」。
 
 ### 第 2 步：开启两项认证设置
 
@@ -375,11 +390,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-og-cover.ps1
 
 ```powershell
 $env:E2E_PASSWORD = "<测试账号密码>"
-python tools\privacy_probe.py             # 只读，37 项检查
-python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只有自己可见 → 删除」，46 项
+python tools\privacy_probe.py             # 只读，43 项检查
+python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只有自己可见 → 删除」，52 项
 ```
 
-正常结果最后一行是 `checks run: 37   failures: 0`（加 `--write` 是 `46`），退出码 0。
+正常结果最后一行是 `checks run: 43   failures: 0`（加 `--write` 是 `52`），退出码 0。
 没设 `E2E_PASSWORD` 时它只跑访客部分（前 17 项）然后停下，退出码 2 ——
 所以**退出码 2 不是失败**，含义是「没给我密码，登录相关的检查没跑」。
 
@@ -403,8 +418,18 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 `null`」以及「同时要 `anon_code` 和 `author_id` 的请求照旧被拒」。
 没执行的话那 12 项会**全红**——这是它应有的表现：迁移没跑，通道就是敞着的。
 
-本站 2026-09-29 已执行 D1 迁移，所以第 9 节现在走的是「已迁移」那一支；`37/0`（只读）与
-`46/0`（`--write`）都全绿。
+第 10 节查的是**图片路径**（第 29 轮加的 P0）：它匿名打一次 `POST /storage/v1/object/list/post-images`
+（列目录）并要求**被拒**，再确认一张真实图片的公开地址与 resize 端点**照常 200**，
+最后检查可见的 `image_path` 里**没有以账号 uuid 开头**、且新路径都是 `u/<16 位十六进制>/…` 的形状。
+
+> ⚠️ **这一节有一条会「如实报红」的中间状态**：删策略那条迁移（
+> [`docs/supabase-image-path-privacy.sql`](docs/supabase-image-path-privacy.sql)）+ 历史图片搬迁
+> 由站主执行；**在它们跑完之前**，第 ① 条（列目录）与第 ③ 条（无 uuid 前缀）会是红的 ——
+> 那是「洞还在」的诚实读数，不是回归失败。跑完迁移与搬迁（
+> `py -3.14 tools\image-path-migration\migrate_image_paths.py`，先 `--dry-run`）就会变绿。
+
+本站 2026-09-29 已执行 D1 迁移，所以第 9 节现在走的是「已迁移」那一支；`43/0`（只读）与
+`52/0`（`--write`）都全绿。
 
 可选环境变量：`E2E_PHONE_A` / `E2E_PHONE_B` 换测试账号，
 `APP_CONFIG_JS` 指定 `config.js` 的路径（默认自动取仓库里的那一份）。
@@ -415,8 +440,8 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），805 项
-python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），850 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），846 项
+python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），865 项
 ```
 
 > **用哪个 Python**：这两套工具依赖 `dukpy` / `esprima`，目前是在 **Python 3.14** 上跑通的
@@ -531,7 +556,7 @@ python tools\version_assets.py --check    # 只检查、不改；有漂移就退
 | `likes` | 不再直接开放：`user_id` 属隐私，只留 `post_id` 一列给「取消点赞」过滤用 | 仅本人可增删自己的点赞；删除只按 `post_id` 过滤，由 `likes_delete_self` 策略保证删不到别人的 |
 | `post_likes`（视图） | 每帖点赞数 + 当前用户是否点过（不含 `user_id`） | 只读视图，不承接写入 |
 | `feedback` | **谁也不给读**：只有 `insert` 策略，没有 `select` 策略（站主用 `service_role` 读） | 任何人（登录 / 未登录）都能提交一条，按列授权只能写 `device, content, contact`；没有更新和删除策略 |
-| `storage.objects` | `post-images` 桶公开读 | 登录身份可上传；文件所有者可删除 |
+| `storage.objects` | `post-images` 桶公开读（**只走 `/object/public` 与 resize 端点，不经 RLS；匿名访客不能列目录** —— 第 29 轮删掉了原来的读策略，见 [D7](docs/PLAN_phase2.md)） | 登录身份可上传（**路径为 `u/<16 位随机>/…`，不含账号 uuid**）；文件所有者可删除 |
 
 ### 内容审核：一条分享怎么才会出现在广场
 
@@ -870,7 +895,10 @@ D1 把编号换成了**数据库的生成列** `posts.anon_code`：
 去 **Authentication → Sign In / Providers** 打开 `Anonymous sign-ins`。
 
 **发图片报错**
-确认已经完整执行 `docs/supabase-setup.sql`，即 `post-images` 桶和它的三条策略都已创建。
+确认已经完整执行 `docs/supabase-setup.sql`，即 `post-images` 桶和它的两条策略都已创建
+（上传与删除；**读策略第 29 轮起已被移除** —— 公开桶取图不走 RLS，所以没有它图片照常能看，
+而匿名访客再也列不出目录）。如果你的库是第 29 轮之前建的，补跑一次
+[`docs/supabase-image-path-privacy.sql`](docs/supabase-image-path-privacy.sql) 即可收紧。
 
 **发布成功了，但广场里看不到自己的分享？**
 这是正常的：新分享默认是「审核中」，只有你自己看得到（「我的」页面也能看到它）。

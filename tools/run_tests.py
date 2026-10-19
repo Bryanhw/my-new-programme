@@ -1543,11 +1543,17 @@ print("- uploadImage ships the compressed payload")
 it = load("post.html", "mock-logged")
 ev(it, IMG_HARNESS)
 js(it, "__useBlob(200000); __useBitmap(3000, 2000);")
-js(it, "__r = {}; Campus.uploadImage(__mkFile('photo.png', 4194304, 'image/png', 3000, 2000), 'u-1')"
+js(it, "__r = {}; Campus.uploadImage(__mkFile('photo.png', 4194304, 'image/png', 3000, 2000))"
        ".then(function (p) { __r.path = p; }, function (e) { __r.err = String(e.message); });")
 ups = [c for c in json.loads(js(it, "JSON.stringify(__calls)")) if c[0] == "upload"]
-check("upload lands in the bucket under the user folder",
-      bool(ups) and ups[0][1] == "post-images" and ups[0][2].startswith("u-1/"), ups)
+# P0 round 29: the first path segment is a random token, never the account id.
+# Anyone may open an anonymous post's image, so a uuid in the path would hand out
+# exactly the "who wrote this" link the anonymity promise exists to deny.
+UPLOAD_PATH = re.compile(r"^u/[0-9a-f]{16}/[0-9]+-[0-9a-z]{1,8}\.[a-z0-9]+$")
+check("upload lands in the bucket under a random folder (never the account id)",
+      bool(ups) and ups[0][1] == "post-images" and UPLOAD_PATH.match(ups[0][2]) is not None, ups)
+check("the upload path carries no uuid",
+      bool(ups) and re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-", ups[0][2]) is None, ups)
 check("path extension follows the payload", bool(ups) and ups[0][2].endswith(".jpg"), ups)
 check("stored content type follows the payload",
       bool(ups) and ups[0][3] == "image/jpeg" and ups[0][4] == 200000, ups)
@@ -1557,11 +1563,14 @@ check("uploadImage resolves with the path",
 it = load("post.html", "mock-logged")
 ev(it, IMG_HARNESS)
 js(it, "__useBlob(1000); __useBitmap(3000, 2000);")
-js(it, "__r = {}; Campus.uploadImage(__mkFile('a.png', 1000, 'image/png', 300, 200), 'u-2')"
+js(it, "__r = {}; Campus.uploadImage(__mkFile('a.png', 1000, 'image/png', 300, 200))"
+       ".then(function () { return Campus.uploadImage(__mkFile('b.png', 1000, 'image/png', 300, 200)); })"
        ".then(function (p) { __r.path = p; }, function (e) { __r.err = String(e.message); });")
 ups = [c for c in json.loads(js(it, "JSON.stringify(__calls)")) if c[0] == "upload"]
 check("small files keep their own extension", bool(ups) and ups[0][2].endswith(".png"), ups)
 check("small files keep their own content type", bool(ups) and ups[0][3] == "image/png", ups)
+check("two uploads never share the same random folder",
+      len(ups) == 2 and ups[0][2].split("/")[1] != ups[1][2].split("/")[1], ups)
 
 print()
 print("=" * 70)

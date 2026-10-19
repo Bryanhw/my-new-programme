@@ -570,6 +570,39 @@ check("faq explains the compression", "自动压缩到最长边 1600px" in faq)
 check("readme documents the rule",
       "最长边 1600px" in read(os.path.join(ROOT, "README.md")))
 
+print("15b) upload paths carry no identity (round 29, P0)")
+# 图片是公开可读的、posts.image_path 又对匿名访客开放，所以路径里一旦带上
+# author uuid，点开一张**匿名帖**的图就等于拿到作者账号 —— 这是 D1 红线的图片版。
+# 这里永久钉住：路径第一段是随机串，且 uploadImage 不再接收任何调用方 id。
+_ui = appjs.split("function uploadImage(file)")[1].split("\n  }", 1)[0] \
+    if "function uploadImage(file)" in appjs else ""
+check("uploadImage takes no user id", bool(_ui) and "userId" not in _ui, _ui[:60])
+check("the call site passes no user id",
+      re.search(r"uploadImage\(o\.file,\s*id\.user\.id\)", appjs) is None)
+check("the path starts with a random token, not the account id",
+      re.search(r'var path = "u/" \+ randomPathToken\(\) \+ "/"', appjs) is not None)
+check("randomPathToken prefers crypto.getRandomValues",
+      "function randomPathToken()" in appjs and "crypto.getRandomValues(bytes)" in appjs)
+check("randomPathToken falls back without spinning forever",
+      '("00000000" + Math.floor(Math.random() * 0x100000000).toString(16)).slice(-8)' in appjs)
+# 只把前端改随机还不够：库里那条「匿名可列目录」的策略必须一起关掉。
+# 注意 setup.sql 也会重建它（新装 / 重跑即复现），所以那份文件也必须改成「只删不建」。
+_mig = os.path.join(ROOT, "docs", "supabase-image-path-privacy.sql")
+_mig_flat = os.path.join(ROOT, "docs", "supabase-image-path-privacy-flat.sql")
+_mig_src = read(_mig) if os.path.exists(_mig) else ""
+_mig_flat_src = read(_mig_flat) if os.path.exists(_mig_flat) else ""
+check("the list-policy migration ships (full + paste-only twin)",
+      os.path.exists(_mig) and os.path.exists(_mig_flat))
+check("it drops the anonymous list policy",
+      'drop policy if exists "post_images_public_read" on storage.objects;' in _mig_src)
+check("it keeps the bucket itself public (otherwise every image 404s)",
+      "set public = true" in _mig_src and "set public = false" not in _mig_src)
+check("setup.sql stops creating the list policy, and drops it on re-run",
+      'create policy "post_images_public_read"' not in setup
+      and 'drop policy if exists "post_images_public_read" on storage.objects;' in setup)
+check("the paste-only twin carries the same one-line drop",
+      'drop policy if exists "post_images_public_read" on storage.objects;' in _mig_flat_src)
+
 print("16) comments, replies and nickname sync")
 cmt_path = os.path.join(ROOT, "docs", "supabase-comments.sql")
 cmt_flat = os.path.join(ROOT, "docs", "supabase-comments-flat.sql")
