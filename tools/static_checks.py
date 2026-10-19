@@ -1925,6 +1925,70 @@ check("R30: paging needs no new table, no migration and no new read surface",
            if f.startswith("supabase-feed-page")]
       and feedjs.count('.from("') == 0)
 
+print()
+print("R31) \u5e95\u680f\u7a84\u5c4f\u6536\u7d27 + \u300c\u6211\u7684\u300d\u4e09\u683c\u5206\u6bb5\u63a7\u4ef6")
+
+
+def _media_block(src, cond):
+    """取出一段 @media 的完整花括号内容（要能装下嵌套规则，所以数括号）。"""
+    out = []
+    for m in re.finditer(r"@media\s*\(([^)]*)\)\s*\{", src):
+        if cond not in m.group(1):
+            continue
+        start = m.end() - 1
+        depth = 0
+        for j in range(start, len(src)):
+            if src[j] == "{":
+                depth += 1
+            elif src[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    out.append(src[start + 1:j])
+                    break
+    return out
+
+
+r31_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
+
+# 1.1 卡片底栏：窄屏那一行要真的收紧，而不是只靠换行躲开
+r31_foot = [b for b in _media_block(r31_css, "max-width: 420px") if ".post-foot" in b]
+check("R31: the card footer has a narrow-screen rule",
+      len(r31_foot) == 1, len(r31_foot))
+_r31_foot = r31_foot[0] if r31_foot else ""
+# 只看 .post-foot 那一条规则里的 gap，别让同一条规则里的 row-gap 混过去
+_r31_foot_rule = _a1_block(_r31_foot, ".post-foot")
+_r31_gap = re.search(r"(?<![\w-])gap:\s*([^;]+);", _r31_foot_rule)
+check("R31: on a narrow screen the pills sit closer together",
+      _r31_gap is not None and _r31_gap.group(1).strip() == "8px",
+      _r31_foot_rule.strip()[:80])
+check("R31: ...and give back horizontal padding, so the row fits at 360px wide",
+      "padding: 6px 10px" in _r31_foot and ".post-foot .like-btn" in _r31_foot
+      and ".post-foot .save-btn" in _r31_foot)
+check("R31: ...and the timestamp is a notch smaller, not the first thing to jump lines",
+      "font-size: 12px" in _r31_foot)
+check("R31: wrapping stays as a last resort instead of overflowing the card",
+      "flex-wrap: wrap" in _r31_foot)
+
+# 1.2 三格：列数写死成 3，结构上就没有换行这回事
+r31_tabs = _a1_block(r31_css, ".mine-tabs")
+check("R31: the three tabs are a fixed three-column grid",
+      "display: grid" in r31_tabs and "grid-template-columns: repeat(3, 1fr)" in r31_tabs,
+      r31_tabs)
+check("R31: the flex wrapping that caused the second line is gone from this strip",
+      "flex-wrap" not in r31_tabs and "display: flex" not in r31_tabs, r31_tabs)
+r31_chip = _a1_block(r31_css, ".mine-tabs .chip")
+check("R31: each cell centres its own label",
+      "justify-content: center" in r31_chip and "display: flex" in r31_chip, r31_chip)
+check("R31: a long count cannot push a cell open",
+      "min-width: 0" in r31_chip and "white-space: nowrap" in r31_chip, r31_chip)
+check("R31: the plaza topic bar keeps its own wrapping behaviour (the change is scoped)",
+      "flex-wrap: wrap" in _a1_block(r31_css, ".chips"))
+r31_profile = read(os.path.join(ROOT, "profile.html"))
+check("R31: the grid's 'three' still matches the page: three tabs, each with aria-selected",
+      r31_profile.count('role="tab"') == 3 and r31_profile.count('aria-selected=') == 3)
+check("R31: no new page, no new dependency, no new file was needed for this",
+      not [f for f in os.listdir(os.path.join(ROOT, "assets", "css")) if f != "style.css"])
+
 print("20) D6: the service_role key never reaches the site or the repo")
 
 # 站点真正发出去的那些文件：页面 + assets/ 下的 js/css/图片说明。

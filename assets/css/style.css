@@ -642,8 +642,15 @@ button, input, textarea, select {
 .save-btn.saved:hover { background: var(--brand-strong); color: #FFFFFF; }
 
 /* 底栏在窄屏上要能换行：多了一个「收藏」之后，四个元素挤在一行会互相压 */
+/* 第 31 轮 1.1：窄屏上不再只靠「换行」躲挤，而是先把这一行收紧。
+   算给 360px 的机器看：视口 360 - 容器 36 - 卡片内边距 40 = 卡片可用 284px，
+   三个胶囊（🤍 计数 / 💬 计数 / 🔖 收藏）加时间要 300px 上下，所以必然折行。
+   把胶囊的横向内边距、元素间距与时间字号各收一点，一行就放得下了
+   —— 换行仍然留着当兜底：真挤不下时优雅退化，而不是把时间挤出卡片。 */
 @media (max-width: 420px) {
-  .post-foot { flex-wrap: wrap; row-gap: 8px; }
+  .post-foot { gap: 8px; flex-wrap: wrap; row-gap: 8px; }
+  .post-foot .like-btn, .post-foot .save-btn { padding: 6px 10px; font-size: 13px; gap: 4px; }
+  .post-foot .post-time { font-size: 12px; }
 }
 
 .post-time {
@@ -2005,13 +2012,34 @@ body.modal-open { overflow: hidden; }
 /* --------------------- F2：「我的」三格 + 我的评论 --------------------- */
 /* 三格沿用广场那套 chips（同一套 .chip / .chip-on），只补排布与计数。
    选中态靠 chip-on 之外，还带 aria-selected —— 读屏也要能听出在哪一格。 */
+/* 第 31 轮 1.2：三格在窄屏上会折成两行 —— .chips 本体是 flex-wrap: wrap
+   （广场的话题条靠它换行，那一处不动）。这里只把「我的」三格换成等宽三列：
+   列数写死成 3，就没有「换行」这件事了。每格 min-width: 0，
+   计数再长也撑不破格子；格子比原来高一点（9px 内边距），手指也更好点。 */
 .mine-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
   margin-bottom: 16px;
 }
-.mine-tabs .chip { cursor: pointer; }
+.mine-tabs .chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 6px;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.mine-tabs .chip-count { margin-left: 0; }
+
+/* 320-360px 的小屏再让一点横向空间：四字标签 + 两位数计数仍然一行放得下 */
+@media (max-width: 360px) {
+  .mine-tabs { gap: 4px; }
+  .mine-tabs .chip { padding: 9px 4px; font-size: 12.5px; gap: 2px; }
+}
 .mine-tabs .chip:focus-visible { outline: 2px solid var(--brand-strong); outline-offset: 2px; }
 .chip-count {
   margin-left: 6px;
