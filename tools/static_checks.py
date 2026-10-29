@@ -2479,6 +2479,64 @@ check("R37: 雾最浓处 >= 0.55，山脚不能成为页面最黑的地方（页
 check("R37: 画布底边压了一点暖，山不是悬在纯金色上",
       "rgba(120, 88, 48, 0.10) 0%" in _r37_body and "rgba(251, 242, 227, 0) 58%" in _r37_body)
 
+
+print()
+print("R38) 蓝天换成暖黄的天：窗仍是窗（靠明度分层），蓝一枚不剩")
+
+import colorsys as _r38_colorsys
+
+
+def _r38_rgb(hexstr):
+    h = hexstr.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _r38_hue(hexstr):
+    r, g, b = [c / 255.0 for c in _r38_rgb(hexstr)]
+    return _r38_colorsys.rgb_to_hsv(r, g, b)[0] * 360.0
+
+
+r38_css = r37_css
+_r38_root = _a1_block(r38_css, ":root")
+_r38_hero = _a1_block(r38_css, ".hero")
+_r38_hl = _a1_block(r38_css, ".hero-title .hl")
+
+
+def _r38_tok(name):
+    m = re.search(r"--%s:\s*(#[0-9A-Fa-f]{6})" % name, _r38_root)
+    return m.group(1) if m else ""
+
+
+_r38_high, _r38_mid, _r38_low = _r38_tok("sky-high"), _r38_tok("sky-mid"), _r38_tok("sky-low")
+_r38_canvas = _r38_tok("bg")
+# 黄天 + 金色画布最容易糊成一坨：分层只能靠明度，所以天顶必须比画布亮将近一倍
+check("R38: 天顶比金色画布亮一倍（亮度比 >= 1.9），窗还是窗不是一片黄",
+      all([_r38_high, _r38_canvas])
+      and _r37_lum(_r38_high) / _r37_lum(_r38_canvas) >= 1.9,
+      (_r38_high, round(_r37_lum(_r38_high), 3) if _r38_high else None,
+       _r38_canvas, round(_r37_lum(_r38_canvas), 3) if _r38_canvas else None))
+# 站主要的是「黄色」，那就不能留一半蓝；旧的三个蓝值 + 旧的冷光晕都不许回来
+check("R38: 蓝天三档与冷光晕一枚不剩（#A5DAF3 / #C3E9FA / #E3F5FE / rgba(165,218,243)）",
+      not any(x in r38_css for x in ["#A5DAF3", "#C3E9FA", "#E3F5FE", "165, 218, 243"])
+      and "background-color: var(--sky-mid)" in _r38_hero,
+      [x for x in ["#A5DAF3", "#C3E9FA", "#E3F5FE", "165, 218, 243"] if x in r38_css])
+# 「黄」得是暖黄：色相落在橙到金（25-65 度），而且 r > g > b
+check("R38: 三档天都是暖黄（色相 25-65 度、r > g > b），不是发绿的土黄",
+      all([_r38_high, _r38_mid, _r38_low])
+      and all(25 <= _r38_hue(h) <= 65 for h in [_r38_high, _r38_mid, _r38_low])
+      and all(_r38_rgb(h)[0] > _r38_rgb(h)[1] > _r38_rgb(h)[2] for h in [_r38_high, _r38_mid, _r38_low]),
+      [(h, round(_r38_hue(h), 1)) for h in [_r38_high, _r38_mid, _r38_low] if h])
+# 标题高亮条原来是奶白压在蓝天上；天变暖黄后它必须比天更亮，否则高亮条直接消失
+check("R38: 标题高亮条仍比地平线更亮，深棕字压上去 >= 7:1（不然高亮条会被黄天吃掉）",
+      "var(--sky-warm) 54%" in _r38_hl
+      and _r37_lum(_r38_low) < _r37_lum("#FFFCF0") * 1.0
+      and (_r37_lum("#FFFCF0") + 0.05) / (_r37_lum("#3B2A1B") + 0.05) >= 7.0,
+      round((_r37_lum("#FFFCF0") + 0.05) / (_r37_lum("#3B2A1B") + 0.05), 2))
+# 光晕跟着换暖，但阴影链（光晕 + 暖影）不能只剩一层
+check("R38: 光晕换暖（rgba(255,244,214)）且箱影仍是「光 + 影」两层",
+      "rgba(255, 244, 214, 0.55)" in _r38_root
+      and "box-shadow: var(--glow-sky), var(--shadow-land)" in _r38_hero)
+
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
