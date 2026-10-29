@@ -218,7 +218,8 @@ check("sheet drops down from the header",
       "keyframes sheetDown" in css and "top: calc(100% + 12px)" in css)
 check("header sits above the tabbar", "z-index: 45;" in css)
 check("old tabbar sheet styles gone", ".tab-more" not in css)
-check("styles for dark tabbar", "rgba(43, 29, 17, 0.94)" in css)
+# R39: tabbar 从一块纯色改成渐变，这里跟到渐变里更深的那一端（仍然是深色底）
+check("styles for dark tabbar", "rgba(34, 23, 13, 0.96)" in css)
 check("two-entry tabbar is even", ".tabbar-center" in css and "flex: 1 1 0;" in css)
 check("app.js wires the sheet", 'getElementById("tab-more")' in sources["app.js"])
 
@@ -2536,6 +2537,66 @@ check("R38: 标题高亮条仍比地平线更亮，深棕字压上去 >= 7:1（�
 check("R38: 光晕换暖（rgba(255,244,214)）且箱影仍是「光 + 影」两层",
       "rgba(255, 244, 214, 0.55)" in _r38_root
       and "box-shadow: var(--glow-sky), var(--shadow-land)" in _r38_hero)
+
+
+print()
+print("R39) 背景与周围都是渐变：五层光、页头与底栏两端同色")
+
+import colorsys as _r39_colorsys
+
+_r39_body = re.search(r"(?m)^body\s*\{([^}]*)\}", r38_css)
+_r39_body = _r39_body.group(1) if _r39_body else ""
+_r39_root2 = _a1_block(r38_css, ":root")
+_r39_head = _a1_block(r38_css, ".site-header")
+_r39_tab = _a1_block(r38_css, ".tabbar-inner")
+
+
+def _r39_rgba(block):
+    return [tuple(int(x) for x in m[:3]) + (float(m[3]),)
+            for m in re.findall(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)", block)]
+
+
+def _r39_hue(rgb):
+    return _r39_colorsys.rgb_to_hsv(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)[0] * 360.0
+
+
+def _r39_lum(rgb):
+    c = [v / 255.0 for v in rgb]
+    c = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+# 四角都有光 + 顶上那层暖雾还在 —— 这才叫「整片画布是渐变的」
+check("R39: 画布五层渐变，四角都有光（0%/6%/-8%/98%/44%/100%），暖雾衔接没丢",
+      all(x in _r39_body for x in ["at 50% 0%", "at 6% -8%", "at 98% 4%",
+                                   "at 50% 44%", "at 50% 100%",
+                                   "linear-gradient(180deg, var(--sky-haze) 0%"]),
+      [x for x in ["at 50% 0%", "at 6% -8%", "at 98% 4%", "at 50% 44%", "at 50% 100%"] if x not in _r39_body])
+# 三束光必须淡：一层单独看不该像「一种颜色」，否则只是把色块挪了个位置
+_r39_glows = []
+for _n in ("a", "b", "c"):
+    _m = re.search(r"--bg-glow-%s:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)" % _n, _r39_root2)
+    if _m:
+        _r39_glows.append((int(_m.group(1)), int(_m.group(2)), int(_m.group(3)), float(_m.group(4))))
+check("R39: 三束光都淡（alpha <= 0.25）且都是暖色（r > g > b）",
+      len(_r39_glows) == 3
+      and all(g[3] <= 0.25 for g in _r39_glows)
+      and all(g[0] > g[1] > g[2] for g in _r39_glows),
+      _r39_glows)
+# 页头 / 底栏：都不再是一块 rgba
+check("R39: 页头与底部导航都改成渐变（不再是单块 rgba 横条）",
+      "background: linear-gradient(180deg, rgba(214, 168, 96, 0.80) 0%" in _r39_head
+      and "background: linear-gradient(180deg, rgba(52, 36, 21, 0.90) 0%" in _r39_tab)
+# 「过渡」而不是「拼色」：两端同色系
+_h = [g for g in _r39_rgba(_r39_head) if g[3] >= 0.5]
+_t = [g for g in _r39_rgba(_r39_tab) if g[3] >= 0.5]
+check("R39: 页头渐变两端色相差 <= 12 度（是过渡，不是两种颜色拼起来）",
+      len(_h) == 2 and abs(_r39_hue(_h[0]) - _r39_hue(_h[1])) <= 12.0,
+      [(g[:3], round(_r39_hue(g), 1)) for g in _h])
+check("R39: 底栏渐变两端同色相且上亮下沉（光从上面来）",
+      len(_t) == 2 and abs(_r39_hue(_t[0]) - _r39_hue(_t[1])) <= 12.0
+      and _r39_lum(_t[0][:3]) > _r39_lum(_t[1][:3]),
+      [(g[:3], round(_r39_hue(g), 1), round(_r39_lum(g[:3]), 3)) for g in _t])
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
