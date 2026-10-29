@@ -2387,6 +2387,44 @@ check("R35: 窄屏窗户单独收小圆角与内边距",
       ".hero { padding: 30px 14px 26px; border-radius: 26px; }" in r35_css)
 
 print()
+print("R36) 蓝天与金色画布自然衔接，背景添一层远景")
+
+r36_css = r35_css
+_r36_root = _a1_block(r36_css, ":root")
+_r36_hero = _a1_block(r36_css, ".hero")
+_r36_land = _a1_block(r36_css, "body::before")
+_r36_body = re.search(r"(?m)^body\s*\{([^}]*)\}", r36_css)
+_r36_body = _r36_body.group(1) if _r36_body else ""
+
+# 衔接的实质：天空窗的最低一档和画布顶上的那层雾是同一个颜色
+check("R36: 画布顶上那层暖雾，和天空窗的下缘是同一个颜色",
+      "var(--sky-haze) 0%" in _r36_body and "var(--sky-haze) 100%" in _r36_hero,
+      (_r36_body.count("--sky-haze"), _r36_hero.count("--sky-haze")))
+check("R36: 雾是叠在金色上的，画布底色仍是 var(--bg)",
+      "background-color: var(--bg)" in _r36_body)
+check("R36: 天空窗用冷光晕 + 暖影两个令牌落地，不手写影子",
+      "box-shadow: var(--glow-sky), var(--shadow-land)" in _r36_hero
+      and "--glow-sky:" in _r36_root and "--shadow-land:" in _r36_root)
+check("R36: 远景层钉在视口底部、铺满宽度、不吃点击",
+      "position: fixed" in _r36_land and "pointer-events: none" in _r36_land
+      and "z-index: -1" in _r36_land and "background-size: 100% 100%" in _r36_land)
+check("R36: 远景是内联 SVG（两道山脊 + 四棵树 + 三只鸟），不新增图片也不发外部请求",
+      'url("data:image/svg+xml,' in _r36_land
+      and "viewBox='0 0 1200 320'" in _r36_land
+      and _r36_land.count("%3Cpolygon") == 4
+      and _r36_land.count("C") >= 4)
+# 云会飘，山不会动 —— 远景层里不能冒出 animation
+check("R36: 远景是静的（没有动画，也不吃减少动效那条规则的例外）",
+      "animation" not in _r36_land and "transition" not in _r36_land)
+# SVG 里没法用 var()，所以只能写字面色；这条尺子保证它和令牌是同一组值
+check("R36: 山色与 --ridge / --leaf 是同一组值（改令牌必须一起改 SVG）",
+      re.search(r"--ridge:\s*#9C8B6B", _r36_root) is not None
+      and re.search(r"--leaf:\s*#7E9468", _r36_root) is not None
+      and "%239C8B6B" in _r36_land and "%237E9468" in _r36_land)
+check("R36: 手机上远景压到 34vh，不跟卡片抢地方",
+      "body::before { height: min(34vh, 300px); opacity: 0.5; }" in r36_css)
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)

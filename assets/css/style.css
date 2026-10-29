@@ -47,7 +47,9 @@
        浮层  sheet 模态与抽屉（要比 lg 更沉）/ float 悬浮主按钮（要明显浮在栏上方）
        环    ring-focus 输入框 / ring-soft 容器 / ring-pulse 直链那一条的呼吸
        辉光  glow-brand / glow-brand-lg / glow-neutral（小圆形头像的彩色底光）
-       光晕  halo-breathe（空态图标外面那三层，合成一个令牌免得散着写） */
+       光晕  halo-breathe（空态图标外面那三层，合成一个令牌免得散着写）
+       落地  glow-sky / shadow-land（第 36 轮：天空窗往金色里晕开的一圈冷光，
+             和它压到画布上的那层暖影 —— 蓝和金色就是靠这两层化开的） */
   --shadow-sheet:  0 26px 64px rgba(43, 27, 15, 0.42);
   --shadow-float:  0 10px 24px rgba(23, 14, 6, 0.30);
   --ring-focus:    0 0 0 3px rgba(203, 146, 67, 0.20);
@@ -59,6 +61,8 @@
   --halo-breathe:  0 0 0 10px rgba(255, 175, 130, 0.13),
                    0 0 0 22px rgba(255, 190, 150, 0.08),
                    0 14px 30px rgba(255, 140, 105, 0.22);
+  --glow-sky:      0 0 76px 10px rgba(165, 218, 243, 0.40);
+  --shadow-land:   0 26px 56px -28px rgba(93, 63, 28, 0.40);
 
   /* 第 35 轮：首页顶部那一片「天空」。**只有 .hero 用**，别铺到全站 ——
      画布的身份色是下面那层金色，天空是一扇窗，不是新的底色。
@@ -67,6 +71,12 @@
   --sky-mid:   #C3E9FA;
   --sky-low:   #E3F5FE;
   --sky-warm:  rgba(255, 240, 202, 0.95);   /* 天际暖光 + 标题高亮条 */
+  --sky-haze:  #FBF2E3;   /* 地平线那层奶油色：天空窗的下缘 = 画布上的暖雾，同一个值 */
+
+  /* 第 36 轮：背景的「风景层」。远山用暖灰（和金色画布同族，才不像贴上去的绿色贴纸），
+     草坡压到低饱和的橄榄绿；两样都只取很淡的一层 —— 它是「外面有山」的暗示，不是插画。 */
+  --ridge:     #9C8B6B;
+  --leaf:      #7E9468;
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
@@ -109,11 +119,35 @@ body {
   line-height: 1.7;
   color: var(--text);
   background-color: var(--bg);
-  /* 底色就是 #CB9243，只叠一层很淡的顶部柔光，让画面不那么平 */
-  background-image: radial-gradient(120% 62% at 50% 0%, var(--bg-lift) 0%, rgba(255, 255, 255, 0) 62%);
+  /* 底色就是 #CB9243。第 36 轮起在这层金色上再叠一层暖雾：
+     天空窗的下缘是 --sky-haze，画布顶上也是 --sky-haze —— 两处接上，
+     蓝色就不再是「一块贴在金色上的贴纸」，而是慢慢化进画布。
+     （风景本身在下面 body::before 里，是独立的一层，只铺视口底部。） */
+  background-image:
+    radial-gradient(120% 62% at 50% 0%, var(--bg-lift) 0%, rgba(255, 255, 255, 0) 62%),
+    linear-gradient(180deg, var(--sky-haze) 0%, rgba(251, 242, 227, 0) 46%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   padding-bottom: 112px; /* 给底部导航留位置（第 34 轮字号变大后加高） */
+}
+
+/* 第 36 轮：视口底部那道远景 —— 一层远山、一层草坡、坡上几棵松树，天上三只鸟。
+   fixed 到视口底边，不跟着内容滚，像看得见摸不着的地平线；纯装饰不接点击，
+   也没有动画（云会飘，山不会动）。参考旅游宣传页的做法：只给轮廓、不给细节。 */
+body::before {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: min(52vh, 460px);
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 320' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%235A422C' stroke-width='3' stroke-linecap='round' opacity='0.28'%3E%3Cpath d='M842 62q9-9 18 0'/%3E%3Cpath d='M874 80q9-9 18 0'/%3E%3Cpath d='M908 56q9-9 18 0'/%3E%3C/g%3E%3Cpath d='M0 196C150 128 300 176 432 140 560 106 700 182 840 146 980 110 1092 172 1200 146L1200 320L0 320Z' fill='%239C8B6B' opacity='0.34'/%3E%3Cpath d='M0 254C180 200 330 248 500 218 660 190 820 254 980 226 1090 208 1150 240 1200 228L1200 320L0 320Z' fill='%237E9468' opacity='0.48'/%3E%3Cg fill='%235F7A4E' opacity='0.38'%3E%3Cpolygon points='250,254 264,204 278,254'/%3E%3Cpolygon points='292,250 304,210 316,250'/%3E%3Cpolygon points='960,250 974,200 988,250'/%3E%3Cpolygon points='1000,246 1012,208 1024,246'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: bottom center;
+  background-size: 100% 100%;
+  opacity: 0.62;
 }
 
 h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: 0.2px; }
@@ -279,7 +313,9 @@ button, input, textarea, select {
   background-image:
     radial-gradient(62% 26% at 50% 104%, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0) 72%),
     radial-gradient(78% 62% at 84% -14%, var(--sky-warm) 0%, rgba(255, 240, 202, 0) 64%),
-    linear-gradient(180deg, var(--sky-high) 0%, var(--sky-mid) 40%, var(--sky-low) 74%, #F7FCFF 100%);
+    linear-gradient(180deg, var(--sky-high) 0%, var(--sky-mid) 40%, var(--sky-low) 74%, var(--sky-haze) 100%);
+  /* 两种影子各干一件事：冷光晕把蓝往金色里晕开（衔接），暖影把它压到画布上（落地） */
+  box-shadow: var(--glow-sky), var(--shadow-land);
 }
 
 /* 两层云：远云大而慢、近云小而快。动画只动 background-position-x，
@@ -1905,6 +1941,8 @@ body.modal-open { overflow: hidden; }
   .hero-title { font-size: var(--fs-display); line-height: 1.26; }
   .card { padding: 18px; border-radius: var(--radius-md); }
   .hero { padding: 30px 14px 26px; border-radius: 26px; }
+  /* 手机上视口矮，远景压到 34vh，别把卡片挤得没地方站 */
+  body::before { height: min(34vh, 300px); opacity: 0.5; }
   .hero-gate { width: min(300px, 86%); margin-bottom: 10px; }
   .btn-lg { font-size: var(--fs-base); padding: 16px 32px; }
   .stat-num { font-size: var(--fs-md); }
