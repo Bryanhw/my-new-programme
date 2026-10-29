@@ -2338,6 +2338,55 @@ check("R34: 大标题 900 字重、行高收到 1.34",
       and "line-height: 1.34" in _a1_block(r34_css, ".hero-title"))
 
 print()
+print("R35) 首页的一扇天空窗：蓝天、两层飘云、暖光")
+
+r35_css = r34_css
+_r35_root = _a1_block(r35_css, ":root")
+_r35_hero = _a1_block(r35_css, ".hero")
+_r35_far = _a1_block(r35_css, ".hero::before")
+_r35_near = _a1_block(r35_css, ".hero::after")
+_r35_body = re.search(r"(?m)^body\s*\{([^}]*)\}", r35_css)
+_r35_body = _r35_body.group(1) if _r35_body else ""
+
+check("R35: 四个天空令牌都声明在 :root",
+      all(t in _r35_root for t in ["--sky-high", "--sky-mid", "--sky-low", "--sky-warm"]),
+      [t for t in ["--sky-high", "--sky-mid", "--sky-low", "--sky-warm"] if t not in _r35_root])
+# 身份色不能被顺手改掉：天空是一扇窗（只给 .hero），画布仍是金色
+check("R35: 天空只用在首页那一块，body 底色仍是金色画布",
+      "background-color: var(--bg)" in _r35_body
+      and r35_css.count("var(--sky-high)") == 1
+      and r35_css.count("var(--sky-low)") == 1
+      and r35_css.count("var(--sky-mid)") == 2,
+      (r35_css.count("var(--sky-high)"), r35_css.count("var(--sky-mid)"), r35_css.count("var(--sky-low)")))
+check("R35: .hero 自成一个隔离层并裁边，云漏不到金色画布上",
+      "isolation: isolate" in _r35_hero and "overflow: hidden" in _r35_hero
+      and "position: relative" in _r35_hero)
+check("R35: 两层云都压在文字下面、也不吃点击",
+      "z-index: -1" in _r35_far and "z-index: -1" in _r35_near
+      and "pointer-events: none" in _r35_far and "pointer-events: none" in _r35_near)
+check("R35: 两朵云都是内联 SVG —— 不新增一张图，也不发外部请求",
+      _r35_far.count('url("data:image/svg+xml,') == 1
+      and _r35_near.count('url("data:image/svg+xml,') == 1
+      and "http://www.w3.org/2000/svg" in _r35_far
+      and "http://www.w3.org/2000/svg" in _r35_near)
+# 接缝：位移量必须正好等于一个平铺宽度，否则每 130 秒会跳一下
+check("R35: 云的位移量等于平铺宽度（远云 620、近云 340）",
+      "background-size: 620px auto" in _r35_far
+      and "background-position-x: -620px" in r35_css
+      and "background-size: 340px auto" in _r35_near
+      and "background-position-x: 80px" in r35_css
+      and "background-position-x: -260px" in r35_css)
+check("R35: 减少动效偏好下云停住（全局那条 !important 兜着）",
+      "@media (prefers-reduced-motion: reduce)" in r35_css
+      and "animation: none !important" in r35_css)
+check("R35: 蓝底上的高亮条改成暖奶油色，不再用几乎看不见的白",
+      "var(--sky-warm) 54%" in _a1_block(r35_css, ".hero-title .hl"))
+check("R35: 校门抠图加了一圈白晕，边缘不在蓝底上发黑",
+      "drop-shadow(0 0 26px rgba(255, 255, 255, 0.92))" in _a1_block(r35_css, ".hero-gate"))
+check("R35: 窄屏窗户单独收小圆角与内边距",
+      ".hero { padding: 30px 14px 26px; border-radius: 26px; }" in r35_css)
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)

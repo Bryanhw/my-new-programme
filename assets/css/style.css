@@ -60,6 +60,14 @@
                    0 0 0 22px rgba(255, 190, 150, 0.08),
                    0 14px 30px rgba(255, 140, 105, 0.22);
 
+  /* 第 35 轮：首页顶部那一片「天空」。**只有 .hero 用**，别铺到全站 ——
+     画布的身份色是下面那层金色，天空是一扇窗，不是新的底色。
+     天顶 -> 近地平线由深到浅，最上面再叠一层暖光，跟金色画布接得上。 */
+  --sky-high:  #A5DAF3;
+  --sky-mid:   #C3E9FA;
+  --sky-low:   #E3F5FE;
+  --sky-warm:  rgba(255, 240, 202, 0.95);   /* 天际暖光 + 标题高亮条 */
+
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
   /* 字号阶梯（第 32 轮收敛）。收敛前全站有 25 个不同的 font-size：
@@ -258,8 +266,60 @@ button, input, textarea, select {
 
 /* ------------------------------ 主页 Hero ------------------------------ */
 .hero {
-  padding: 44px 0 12px;
+  /* 第 35 轮：整块变成一个「天空窗」。
+     ::before / ::after 是两层漂移的云（z-index: -1 压在文字下面），
+     云底那团白光写在 background 里，校门看起来就像站在云上。 */
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 40px 20px 30px;
+  border-radius: 32px;
   text-align: center;
+  background-color: var(--sky-mid);
+  background-image:
+    radial-gradient(62% 26% at 50% 104%, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(78% 62% at 84% -14%, var(--sky-warm) 0%, rgba(255, 240, 202, 0) 64%),
+    linear-gradient(180deg, var(--sky-high) 0%, var(--sky-mid) 40%, var(--sky-low) 74%, #F7FCFF 100%);
+}
+
+/* 两层云：远云大而慢、近云小而快。动画只动 background-position-x，
+   正好走完一个平铺宽度，所以接缝看不出来。减少动效时由文件末尾那条
+   @media (prefers-reduced-motion: reduce) 统一停掉，云会静静地停在那儿。 */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: repeat-x;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 120'%3E%3Cg fill='%23FFFFFF'%3E%3Cellipse cx='70' cy='82' rx='62' ry='30'/%3E%3Cellipse cx='118' cy='60' rx='52' ry='38'/%3E%3Cellipse cx='174' cy='80' rx='56' ry='30'/%3E%3Crect x='20' y='80' width='222' height='30' rx='15'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 620px auto;
+  background-position: 0 9%;
+  opacity: 0.92;
+  animation: sky-drift-far 130s linear infinite;
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: repeat-x;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 90'%3E%3Cg fill='%23FFFFFF'%3E%3Cellipse cx='44' cy='62' rx='40' ry='22'/%3E%3Cellipse cx='78' cy='46' rx='34' ry='27'/%3E%3Cellipse cx='114' cy='62' rx='36' ry='22'/%3E%3Crect x='8' y='60' width='146' height='24' rx='12'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 340px auto;
+  background-position: 80px 21%;
+  opacity: 0.78;
+  animation: sky-drift-near 86s linear infinite;
+}
+
+/* 位移量 = 平铺宽度，且近云的起点也要对得上（80 - 340 = -260） */
+@keyframes sky-drift-far {
+  from { background-position-x: 0; }
+  to   { background-position-x: -620px; }
+}
+@keyframes sky-drift-near {
+  from { background-position-x: 80px; }
+  to   { background-position-x: -260px; }
 }
 
 .hero-greeting {
@@ -277,7 +337,7 @@ button, input, textarea, select {
   margin-bottom: 16px;
 }
 .hero-title .hl {
-  background: linear-gradient(180deg, transparent 54%, rgba(255, 253, 251, 0.85) 54%);
+  background: linear-gradient(180deg, transparent 54%, var(--sky-warm) 54%);
   padding: 0 4px;
 }
 
@@ -325,7 +385,9 @@ button, input, textarea, select {
   width: min(360px, 88%);
   height: auto;
   margin: 0 auto 14px;
-  filter: drop-shadow(0 14px 26px rgba(59, 42, 27, 0.30));
+  /* 白晕一层，把抠图边缘从蓝底上化开，像贴纸那样亮一圈 */
+  filter: drop-shadow(0 0 26px rgba(255, 255, 255, 0.92))
+          drop-shadow(0 16px 28px rgba(59, 42, 27, 0.24));
 }
 
 /* ------------------------------ 主行动按钮 ------------------------------ */
@@ -1842,7 +1904,7 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 520px) {
   .hero-title { font-size: var(--fs-display); line-height: 1.26; }
   .card { padding: 18px; border-radius: var(--radius-md); }
-  .hero { padding: 28px 0 10px; }
+  .hero { padding: 30px 14px 26px; border-radius: 26px; }
   .hero-gate { width: min(300px, 86%); margin-bottom: 10px; }
   .btn-lg { font-size: var(--fs-base); padding: 16px 32px; }
   .stat-num { font-size: var(--fs-md); }
