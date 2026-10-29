@@ -2410,19 +2410,74 @@ check("R36: 远景层钉在视口底部、铺满宽度、不吃点击",
       and "z-index: -1" in _r36_land and "background-size: 100% 100%" in _r36_land)
 check("R36: 远景是内联 SVG（两道山脊 + 四棵树 + 三只鸟），不新增图片也不发外部请求",
       'url("data:image/svg+xml,' in _r36_land
-      and "viewBox='0 0 1200 320'" in _r36_land
+      and "viewBox='0 0 1200 340'" in _r36_land
       and _r36_land.count("%3Cpolygon") == 4
       and _r36_land.count("C") >= 4)
 # 云会飘，山不会动 —— 远景层里不能冒出 animation
 check("R36: 远景是静的（没有动画，也不吃减少动效那条规则的例外）",
       "animation" not in _r36_land and "transition" not in _r36_land)
 # SVG 里没法用 var()，所以只能写字面色；这条尺子保证它和令牌是同一组值
+# 第 37 轮把两档山色调深了（#9C8B6B -> #786141、#7E9468 -> #4F6541），这条跟着换值
 check("R36: 山色与 --ridge / --leaf 是同一组值（改令牌必须一起改 SVG）",
-      re.search(r"--ridge:\s*#9C8B6B", _r36_root) is not None
-      and re.search(r"--leaf:\s*#7E9468", _r36_root) is not None
-      and "%239C8B6B" in _r36_land and "%237E9468" in _r36_land)
+      re.search(r"--ridge:\s*#786141", _r36_root) is not None
+      and re.search(r"--leaf:\s*#4F6541", _r36_root) is not None
+      and "%23786141" in _r36_land and "%234F6541" in _r36_land)
 check("R36: 手机上远景压到 34vh，不跟卡片抢地方",
       "body::before { height: min(34vh, 300px); opacity: 0.5; }" in r36_css)
+
+
+print()
+print("R37) 天空与山之间不再有分界：山顶渐隐、山脚起雾、山色压深一档")
+
+
+def _r37_lum(hexstr):
+    """WCAG 相对亮度，用来判断「谁更深」。"""
+    h = hexstr.lstrip("#")
+    ch = [int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
+    ch = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in ch]
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+
+
+r37_css = r36_css
+_r37_root = _a1_block(r37_css, ":root")
+_r37_land = _a1_block(r37_css, "body::before")
+_r37_body = re.search(r"(?m)^body\s*\{([^}]*)\}", r37_css)
+_r37_body = _r37_body.group(1) if _r37_body else ""
+
+
+def _r37_tok(name):
+    m = re.search(r"--%s:\s*(#[0-9A-Fa-f]{6})" % name, _r37_root)
+    return m.group(1) if m else ""
+
+
+_r37_ridge = _r37_tok("ridge")
+_r37_leaf = _r37_tok("leaf")
+_r37_canvas = _r37_tok("bg")
+# 山必须比画布明显深 —— 否则「远山」读起来就是一片脏金色
+check("R37: 两种山色都明显比画布深（山亮度 < 0.17，画布约 0.33）",
+      bool(_r37_ridge) and bool(_r37_leaf) and bool(_r37_canvas)
+      and _r37_lum(_r37_ridge) < 0.17 and _r37_lum(_r37_leaf) < 0.17
+      and _r37_lum(_r37_canvas) > 0.30,
+      (_r37_ridge, round(_r37_lum(_r37_ridge), 3) if _r37_ridge else None,
+       _r37_leaf, round(_r37_lum(_r37_leaf), 3) if _r37_leaf else None,
+       _r37_canvas, round(_r37_lum(_r37_canvas), 3) if _r37_canvas else None))
+# 山顶那条硬边就是「两段拼在一起」的元凶
+check("R37: 远景上沿渐隐（0 -> 38% 才实），山从雾里长出来而不是从一条线开始",
+      "mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%" in _r37_land
+      and "#000 38%" in _r37_land,
+      _r37_land.count("mask-image"))
+# 山脚起雾：SVG 里一个奶油色渐变盖在最下面，雾色必须就是 --sky-haze
+check("R37: 山脚有一层薄雾，雾色与 --sky-haze 同值（不是另一种白）",
+      "%3ClinearGradient id='m'" in _r37_land
+      and "fill='url(%23m)'" in _r37_land
+      and _r37_land.count("%23FBF2E3") == 3
+      and "var(--sky-haze)" in r37_css,
+      _r37_land.count("%23FBF2E3"))
+# 雾得足够浓：山脚必须是页面里比较亮的地方，否则页脚小字压在山影上会掉到 AA 以下
+check("R37: 雾最浓处 >= 0.55，山脚不能成为页面最黑的地方（页脚小字靠它提亮）",
+      "stop-opacity='0.62'" in _r37_land)
+check("R37: 画布底边压了一点暖，山不是悬在纯金色上",
+      "rgba(120, 88, 48, 0.10) 0%" in _r37_body and "rgba(251, 242, 227, 0) 58%" in _r37_body)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

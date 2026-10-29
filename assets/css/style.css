@@ -75,8 +75,8 @@
 
   /* 第 36 轮：背景的「风景层」。远山用暖灰（和金色画布同族，才不像贴上去的绿色贴纸），
      草坡压到低饱和的橄榄绿；两样都只取很淡的一层 —— 它是「外面有山」的暗示，不是插画。 */
-  --ridge:     #9C8B6B;
-  --leaf:      #7E9468;
+  --ridge:     #786141;   /* 第 37 轮：从 #9C8B6B 调深，山才立得住 */
+  --leaf:      #4F6541;   /* 第 37 轮：从 #7E9468 调深，草坡不再像一层绿纱 */
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
@@ -125,7 +125,10 @@ body {
      （风景本身在下面 body::before 里，是独立的一层，只铺视口底部。） */
   background-image:
     radial-gradient(120% 62% at 50% 0%, var(--bg-lift) 0%, rgba(255, 255, 255, 0) 62%),
-    linear-gradient(180deg, var(--sky-haze) 0%, rgba(251, 242, 227, 0) 46%);
+    /* 底边压一点暖：山不是悬在纯金色上，是站在一块被夕照压深的地面上 */
+    radial-gradient(130% 44% at 50% 100%, rgba(120, 88, 48, 0.10) 0%, rgba(120, 88, 48, 0) 72%),
+    /* 顶上的暖雾拉长到 58%：天空窗 -> 金色画布 -> 地面，三段之间不再有明显分界 */
+    linear-gradient(180deg, var(--sky-haze) 0%, rgba(251, 242, 227, 0) 58%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   padding-bottom: 112px; /* 给底部导航留位置（第 34 轮字号变大后加高） */
@@ -143,11 +146,14 @@ body::before {
   height: min(52vh, 460px);
   z-index: -1;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 320' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%235A422C' stroke-width='3' stroke-linecap='round' opacity='0.28'%3E%3Cpath d='M842 62q9-9 18 0'/%3E%3Cpath d='M874 80q9-9 18 0'/%3E%3Cpath d='M908 56q9-9 18 0'/%3E%3C/g%3E%3Cpath d='M0 196C150 128 300 176 432 140 560 106 700 182 840 146 980 110 1092 172 1200 146L1200 320L0 320Z' fill='%239C8B6B' opacity='0.34'/%3E%3Cpath d='M0 254C180 200 330 248 500 218 660 190 820 254 980 226 1090 208 1150 240 1200 228L1200 320L0 320Z' fill='%237E9468' opacity='0.48'/%3E%3Cg fill='%235F7A4E' opacity='0.38'%3E%3Cpolygon points='250,254 264,204 278,254'/%3E%3Cpolygon points='292,250 304,210 316,250'/%3E%3Cpolygon points='960,250 974,200 988,250'/%3E%3Cpolygon points='1000,246 1012,208 1024,246'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 340' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FBF2E3' stop-opacity='0'/%3E%3Cstop offset='0.55' stop-color='%23FBF2E3' stop-opacity='0.22'/%3E%3Cstop offset='1' stop-color='%23FBF2E3' stop-opacity='0.62'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg fill='none' stroke='%235A422C' stroke-width='3' stroke-linecap='round' opacity='0.26'%3E%3Cpath d='M842 120q9-9 18 0'/%3E%3Cpath d='M874 138q9-9 18 0'/%3E%3Cpath d='M908 114q9-9 18 0'/%3E%3C/g%3E%3Cpath d='M0 150C160 108 320 146 470 116 610 88 740 148 880 120 1000 96 1100 140 1200 122L1200 340L0 340Z' fill='%23786141' opacity='0.15'/%3E%3Cpath d='M0 196C150 132 300 180 432 146 560 112 700 188 840 152 980 116 1092 178 1200 152L1200 340L0 340Z' fill='%23786141' opacity='0.30'/%3E%3Cpath d='M0 258C180 204 330 252 500 222 660 194 820 258 980 230 1090 212 1150 244 1200 232L1200 340L0 340Z' fill='%234F6541' opacity='0.46'/%3E%3Cg fill='%233E5233' opacity='0.5'%3E%3Cpolygon points='250,266 264,214 278,266'/%3E%3Cpolygon points='292,262 304,220 316,262'/%3E%3Cpolygon points='960,262 974,212 988,262'/%3E%3Cpolygon points='1000,258 1012,218 1024,258'/%3E%3C/g%3E%3Crect x='0' y='150' width='1200' height='190' fill='url(%23m)'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: bottom center;
   background-size: 100% 100%;
   opacity: 0.62;
+  /* 山顶那一条不再是硬边：上沿 0 -> 38% 才实，山是从雾里长出来的 */
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.5) 14%, #000 38%);
+          mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.5) 14%, #000 38%);
 }
 
 h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: 0.2px; }
