@@ -2566,23 +2566,42 @@ def _r39_lum(rgb):
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
 
 
-# 四角都有光 + 顶上那层暖雾还在 —— 这才叫「整片画布是渐变的」
-check("R39: 画布五层渐变，四角都有光（0%/6%/-8%/98%/44%/100%），暖雾衔接没丢",
-      all(x in _r39_body for x in ["at 50% 0%", "at 6% -8%", "at 98% 4%",
-                                   "at 50% 44%", "at 50% 100%",
+# 第 40 轮：站主澄清了要的不是「四角各有光」，而是「中间深、左右两边渐浅」。
+# 所以画布上只留一层横向对称的淡出：半径 50% 宽 = 中线到左右边缘，
+# 中心 32% 之内不染色（内容列还是纯金），越靠边奶油越浓。
+check("R40: 画布是「中间深、两边浅」的横向淡出（半径 50% 宽，中线起算），暖雾衔接没丢",
+      all(x in _r39_body for x in ["radial-gradient(50% 96% at 50% 46%",
+                                   "var(--bg-fade-0) 32%",
+                                   "var(--bg-fade-mid) 62%",
+                                   "var(--bg-fade-edge) 100%",
                                    "linear-gradient(180deg, var(--sky-haze) 0%"]),
-      [x for x in ["at 50% 0%", "at 6% -8%", "at 98% 4%", "at 50% 44%", "at 50% 100%"] if x not in _r39_body])
-# 三束光必须淡：一层单独看不该像「一种颜色」，否则只是把色块挪了个位置
-_r39_glows = []
-for _n in ("a", "b", "c"):
-    _m = re.search(r"--bg-glow-%s:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)" % _n, _r39_root2)
-    if _m:
-        _r39_glows.append((int(_m.group(1)), int(_m.group(2)), int(_m.group(3)), float(_m.group(4))))
-check("R39: 三束光都淡（alpha <= 0.25）且都是暖色（r > g > b）",
-      len(_r39_glows) == 3
-      and all(g[3] <= 0.25 for g in _r39_glows)
-      and all(g[0] > g[1] > g[2] for g in _r39_glows),
-      _r39_glows)
+      [x for x in ["radial-gradient(50% 96% at 50% 46%", "var(--bg-fade-0) 32%",
+                   "var(--bg-fade-mid) 62%", "var(--bg-fade-edge) 100%"] if x not in _r39_body])
+# 三档必须是**同一个 RGB**、只变透明度 —— 这才是「同一种颜色淡出」而不是「两种颜色拼接」
+_r40_fade = []
+for _n in ("0", "mid", "edge"):
+    _m = re.search(r"--bg-fade-%s:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)" % _n, _r39_root2)
+    _r40_fade.append((int(_m.group(1)), int(_m.group(2)), int(_m.group(3)), float(_m.group(4))) if _m else None)
+check("R40: 三档淡出用同一个 RGB，只有透明度递增（0 < mid < edge）—— 两边和中间没有色差",
+      all(_r40_fade) and len(set(f[:3] for f in _r40_fade)) == 1
+      and _r40_fade[0][3] < _r40_fade[1][3] < _r40_fade[2][3],
+      _r40_fade)
+# 中心那一档必须完全不染色：一上来就染色，中间就不再是金色画布
+check("R40: 中心档 alpha == 0（内容列仍是原本的金色，不是被洗淡过的金）",
+      bool(_r40_fade[0]) and _r40_fade[0][3] == 0.0,
+      _r40_fade[0])
+# 左右对称 = 画布上不许再有任何偏离中线的横向位置，方向光令牌也必须清干净
+check("R40: 画布左右对称（无 at 6% / at 98% 偏置），第 39 轮的方向光令牌已删净",
+      "at 6%" not in _r39_body and "at 98%" not in _r39_body
+      and "at 50%" in _r39_body and "--bg-glow-" not in r38_css,
+      [x for x in ["at 6%", "at 98%", "--bg-glow-"] if x in _r39_body or x in r38_css])
+# 淡出方向必须是「更浅」：边缘那档的亮度要明显高于画布底色
+_r40_bg = re.search(r"--bg:\s*(#[0-9A-Fa-f]{6})", _r39_root2)
+_r40_bg = _r40_bg.group(1) if _r40_bg else "#000000"
+check("R40: 边缘比画布明显更浅（奶油亮度 >= 画布 x1.6），所以是「越来越浅」不是「换个颜色」",
+      bool(_r40_fade[2]) and _r37_lum("#%02X%02X%02X" % _r40_fade[2][:3]) >= _r37_lum(_r40_bg) * 1.6,
+      (round(_r37_lum("#%02X%02X%02X" % _r40_fade[2][:3]), 3), round(_r37_lum(_r40_bg), 3)))
+
 # 页头 / 底栏：都不再是一块 rgba
 check("R39: 页头与底部导航都改成渐变（不再是单块 rgba 横条）",
       "background: linear-gradient(180deg, rgba(214, 168, 96, 0.80) 0%" in _r39_head
