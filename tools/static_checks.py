@@ -2384,8 +2384,10 @@ check("R35: 蓝底上的高亮条改成暖奶油色，不再用几乎看不见�
       "var(--sky-warm) 54%" in _a1_block(r35_css, ".hero-title .hl"))
 check("R35: 校门抠图加了一圈白晕，边缘不在蓝底上发黑",
       "drop-shadow(0 0 26px rgba(255, 255, 255, 0.92))" in _a1_block(r35_css, ".hero-gate"))
+_r35_hero_blocks = re.findall(r"\.hero\s*\{([^}]*)\}", r35_css)
 check("R35: 窄屏窗户单独收小圆角与内边距",
-      ".hero { padding: 30px 14px 26px; border-radius: 26px; }" in r35_css)
+      any("padding: 30px 14px 26px;" in b and "border-radius: 26px;" in b
+          for b in _r35_hero_blocks))
 
 print()
 print("R36) 蓝天与金色画布自然衔接，背景添一层远景")
@@ -2632,6 +2634,44 @@ check("R41: 窗底缘与画布顶雾仍是同一个 --sky-haze（没有影子也
       "var(--sky-haze) 100%" in _r41_hero and "var(--sky-haze) 0%" in _r41_body
       and "--glow-sky" not in r38_css and "--shadow-land" not in r38_css,
       (_r41_hero.count("--sky-haze"), _r41_body.count("--sky-haze"), r38_css.count("--glow-sky")))
+
+print()
+print("R42) 天空窗四边羽化：面板的轮廓自己化掉，画布和窗之间没有边")
+
+_r42_hero = re.sub(r"/\*.*?\*/", "", _a1_block(r38_css, ".hero"), flags=re.S)
+_r42_flat = re.sub(r"\s+", " ", _r42_hero)
+# 两轴两张蒙版，必须取交集。默认是并集：两张各自 0..1 的蒙版并起来几乎是全不透明，
+# 羽化就白做了 —— 所以 composite 一定要钉死。
+check("R42: 窗的四边都羽化（横 72px / 顶 28px / 底 56px），且两轴蒙版取交集",
+      "linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 72px, #000 calc(100% - 72px), rgba(0, 0, 0, 0) 100%)" in _r42_flat
+      and "linear-gradient(180deg, rgba(0, 0, 0, 0) 0, #000 28px, #000 calc(100% - 56px), rgba(0, 0, 0, 0) 100%)" in _r42_flat
+      and "mask-composite: intersect" in _r42_flat
+      and "-webkit-mask-composite: source-in" in _r42_flat,
+      [k for k in ("90deg", "180deg", "mask-composite: intersect",
+                   "-webkit-mask-composite: source-in") if k not in _r42_flat])
+# 羽化宽度要有下限（太小看不出、还是硬边）和上限（太大就吃掉云、吃到文字）
+_r42_h = re.search(r"90deg, rgba\(0, 0, 0, 0\) 0, #000 (\d+)px, #000 calc\(100% - (\d+)px\)", _r42_flat)
+_r42_w = [int(x) for x in _r42_h.groups()] if _r42_h else []
+_r42_top = re.search(r"180deg, rgba\(0, 0, 0, 0\) 0, #000 (\d+)px", _r42_flat)
+check("R42: 羽化宽度在 48-96px 之间，顶边 <= 40px（再深就吃到校门顶上的红旗）",
+      len(_r42_w) >= 2 and all(48 <= w <= 96 for w in _r42_w)
+      and bool(_r42_top) and int(_r42_top.group(1)) <= 40,
+      (_r42_w, _r42_top.group(1) if _r42_top else None))
+# 小屏只有 354px 宽，72px 的羽化会切进文字；窄屏那条必须单独收窄到 40px。
+_r42_narrow = [b for b in re.findall(r"\.hero\s*\{([^}]*)\}", r38_css)
+               if "padding: 30px 14px 26px;" in b]
+_r42_narrow = _r42_narrow[0] if _r42_narrow else ""
+_r42_narrow_decl = re.sub(r"/\*.*?\*/", "", _r42_narrow, flags=re.S)
+check("R42: 小屏羽化收窄到 40px（不让羽化切进标题和按钮的字边）",
+      re.search(r"(?m)^\s*mask-image: linear-gradient\(90deg, rgba\(0, 0, 0, 0\) 0, #000 40px", _r42_narrow_decl) is not None
+      and re.search(r"(?m)^\s*-webkit-mask-image: linear-gradient\(90deg, rgba\(0, 0, 0, 0\) 0, #000 40px", _r42_narrow_decl) is not None
+      and "72px" not in _r42_narrow_decl,
+      _r42_narrow_decl.count("40px"))
+# 羽化是「让边缘化掉」，不是「把窗裁掉」：圆角与 overflow: hidden 还得留着，
+# 云是靠 overflow 裁在窗里的，不然云会铺到画布上。
+check("R42: 圆角与 overflow: hidden 仍在（羽化没有顶替裁剪云层的职责）",
+      "border-radius: 32px" in _r42_flat and "overflow: hidden" in _r42_flat,
+      (_r42_flat.count("border-radius: 32px"), _r42_flat.count("overflow: hidden")))
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

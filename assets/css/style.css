@@ -341,9 +341,23 @@ button, input, textarea, select {
     linear-gradient(180deg, var(--sky-high) 0%, var(--sky-mid) 40%, var(--sky-low) 74%, var(--sky-haze) 100%);
   /* 第 41 轮：站主要「把中间部分的边框去除」，指的就是这扇窗四周那圈边。
      原来那两层箱影（暖光溢出 + 暖影）一左一右把窗框了一圈 —— 光晕是一道亮边、
-     暖影是一道暗边，看着就是「一块贴上去的窗」。现在整条 box-shadow 撤掉：
-     窗没有边，只有颜色本身从亮天过渡到底缘的 --sky-haze，
-     而画布顶上那层雾也是 --sky-haze，两处同色，窗就那么化进画布。 */
+     暖影是一道暗边，看着就是「一块贴上去的窗」。整条 box-shadow 已撤掉。 */
+  /* 第 42 轮：影子撤掉之后还剩一道边 —— 不是线，是奶油色面板和金色画布之间的
+     颜色突变。圆角再大、影子再轻，只要面板有一块不透明的底，它的轮廓就还在。
+     所以这次不让面板去「描边」，而是让面板自己**在四边上化掉**：
+     横向各 72px、顶边 28px、底边 56px 内 alpha 从 0 拉到 1（羽化，feather）。
+     两轴是两张蒙版，必须取交集（intersect）—— 默认是取并集（add），
+     并集会互相补齐，羽化等于没做，这一点写进护栏了。 */
+  -webkit-mask-image:
+    linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 72px, #000 calc(100% - 72px), rgba(0, 0, 0, 0) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0, #000 28px, #000 calc(100% - 56px), rgba(0, 0, 0, 0) 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 72px, #000 calc(100% - 72px), rgba(0, 0, 0, 0) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0, #000 28px, #000 calc(100% - 56px), rgba(0, 0, 0, 0) 100%);
+  mask-composite: intersect;
+  /* 顶边只羽化 28px：再深就吃到校门顶上的红旗和塔尖了；底边 56px 随便给，
+     下面只有留白，窗底刚好化进画布顶雾。 */
 }
 
 /* 两层云：远云大而慢、近云小而快。动画只动 background-position-x，
@@ -1970,7 +1984,14 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 520px) {
   .hero-title { font-size: var(--fs-display); line-height: 1.26; }
   .card { padding: 18px; border-radius: var(--radius-md); }
-  .hero { padding: 30px 14px 26px; border-radius: 26px; }
+  .hero {
+    padding: 30px 14px 26px;
+    border-radius: 26px;
+    /* 小屏只有 354px 宽，72px 的羽化会切进标题和按钮的字边，收到 40px；
+       窗本来就更窄，40px 已经够把那道色阶化掉。单层蒙版不必取交集。 */
+    -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 40px, #000 calc(100% - 40px), rgba(0, 0, 0, 0) 100%);
+    mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 40px, #000 calc(100% - 40px), rgba(0, 0, 0, 0) 100%);
+  }
   /* 手机上视口矮，远景压到 34vh，别把卡片挤得没地方站 */
   body::before { height: min(34vh, 300px); opacity: 0.5; }
   .hero-gate { width: min(300px, 86%); margin-bottom: 10px; }
