@@ -67,16 +67,20 @@
      写着写着就变成「凭手感挑一个」。现在只留下面这几档，写样式一律用令牌，
      不要直接写 px（tools/static_checks.py 会拦）。
      取法：小于正文的一律往上并（小字在手机上先吃亏）；正文和帖子正文不动。
-     每个值后面那行是它的用途，换字号之前先想想是不是真的属于那一档。 */
-  --fs-xs:       12px;    /* 标签、时间戳、计数、底部导航文字 */
-  --fs-sm:       13.5px;  /* 小字正文：链接、按钮、FAQ 正文、评论 */
-  --fs-base:     15.5px;  /* 正文与帖子正文（body / .post-body） */
-  --fs-md:       17px;    /* 输入框、栏目标题、头像里的字 */
-  --fs-lg:       19px;    /* 菜单图标、弹窗标题、个人页昵称 */
-  --fs-xl:       22px;    /* 登录页大标题 */
-  --fs-2xl:      24px;    /* 窄屏首页大标题、底部导航中间那颗 */
-  --fs-display:  27px;    /* 宽屏首页大标题、上传图标 */
-  --fs-icon-xl:  32px;    /* 头像、空状态的大图标 */
+     每个值后面那行是它的用途，换字号之前先想想是不是真的属于那一档。
+
+     第 34 轮：整条阶梯往上移一档（正文 15.5 -> 17，每档 +1~3px），
+     但**大标题拉得更开**（27 -> 38）。只整体放大是「缩放」，
+     标题与正文的比例变大才是「更显眼」。档位数不变（11）。 */
+  --fs-xs:       13px;    /* 标签、时间戳、计数、底部导航文字 */
+  --fs-sm:       15px;    /* 小字正文：链接、按钮、FAQ 正文、评论 */
+  --fs-base:     17px;    /* 正文与帖子正文（body / .post-body） */
+  --fs-md:       19px;    /* 输入框、栏目标题、头像里的字 */
+  --fs-lg:       22px;    /* 菜单图标、弹窗标题、个人页昵称 */
+  --fs-xl:       26px;    /* 登录页大标题 */
+  --fs-2xl:      29px;    /* 底部导航中间那颗 */
+  --fs-display:  38px;    /* 首页大标题（宽窄屏都用它）、上传图标 */
+  --fs-icon-xl:  42px;    /* 头像、空状态的大图标 */
   --fs-brand:    clamp(40px, 12vw, 74px);  /* 页脚品牌字（宽屏） */
   --fs-brand-sm: 43px;    /* 页脚品牌字（窄屏） */
 }
@@ -101,7 +105,7 @@ body {
   background-image: radial-gradient(120% 62% at 50% 0%, var(--bg-lift) 0%, rgba(255, 255, 255, 0) 62%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
-  padding-bottom: 96px; /* 给底部导航留位置 */
+  padding-bottom: 112px; /* 给底部导航留位置（第 34 轮字号变大后加高） */
 }
 
 h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: 0.2px; }
@@ -120,7 +124,7 @@ button, input, textarea, select {
 /* 页面容器 */
 .wrap {
   width: 100%;
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
   padding: 0 18px;
 }
@@ -141,7 +145,7 @@ button, input, textarea, select {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 60px;
+  height: 64px;
 }
 
 .brand {
@@ -157,9 +161,9 @@ button, input, textarea, select {
 .brand:hover { text-decoration: none; }
 
 .brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   display: grid;
   place-items: center;
   font-size: var(--fs-md);
@@ -192,8 +196,8 @@ button, input, textarea, select {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 38px;
-  padding: 0 14px;
+  height: 42px;
+  padding: 0 16px;
   border-radius: 12px;
   font-size: var(--fs-sm);
   font-weight: 700;
@@ -210,7 +214,7 @@ button, input, textarea, select {
 .header-login svg { flex: 0 0 auto; }
 
 @media (max-width: 520px) {
-  .header-login { width: 38px; padding: 0; }
+  .header-login { width: 42px; padding: 0; }
   .header-login .header-login-text { display: none; }
 }
 
@@ -222,7 +226,7 @@ button, input, textarea, select {
 
 .nav-btn {
   width: 38px;
-  height: 38px;
+  height: 42px;
   display: grid;
   place-items: center;
   border-radius: 12px;
@@ -254,50 +258,51 @@ button, input, textarea, select {
 
 /* ------------------------------ 主页 Hero ------------------------------ */
 .hero {
-  padding: 34px 0 10px;
+  padding: 44px 0 12px;
   text-align: center;
 }
 
 .hero-greeting {
-  font-size: var(--fs-base);
+  font-size: var(--fs-sm);
   color: var(--ink-faint);
-  letter-spacing: 1.5px;
-  margin-bottom: 6px;
+  letter-spacing: 3px;
+  margin-bottom: 10px;
 }
 
 .hero-title {
   font-size: var(--fs-display);
-  line-height: 1.45;
+  line-height: 1.34;
+  font-weight: 900;
   color: var(--ink);
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 .hero-title .hl {
-  background: linear-gradient(180deg, transparent 62%, rgba(255, 253, 251, 0.85) 62%);
-  padding: 0 3px;
+  background: linear-gradient(180deg, transparent 54%, rgba(255, 253, 251, 0.85) 54%);
+  padding: 0 4px;
 }
 
 .hero-sub {
   font-size: var(--fs-base);
-  line-height: 1.9;
+  line-height: 1.8;
   color: var(--ink-soft);
-  max-width: 460px;
-  margin: 0 auto 18px;
+  max-width: 540px;
+  margin: 0 auto 22px;
 }
 
 /* 「想匿名 / 想署名」两颗小标签：把最大的顾虑直接摆在首屏 */
 .hero-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   justify-content: center;
-  margin: 0 auto 22px;
+  margin: 0 auto 24px;
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 15px;
+  padding: 8px 16px;
   border-radius: var(--radius-pill);
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -317,9 +322,9 @@ button, input, textarea, select {
 /* 学校正门（AI 生成 → 抠掉绿底 → 透明 PNG），替代原来的太阳装饰 */
 .hero-gate {
   display: block;
-  width: min(330px, 86%);
+  width: min(360px, 88%);
   height: auto;
-  margin: 0 auto 10px;
+  margin: 0 auto 14px;
   filter: drop-shadow(0 14px 26px rgba(59, 42, 27, 0.30));
 }
 
@@ -329,7 +334,7 @@ button, input, textarea, select {
   flex-direction: column;
   gap: 12px;
   align-items: center;
-  max-width: 420px;
+  max-width: 460px;
   margin: 0 auto 8px;
 }
 
@@ -339,7 +344,7 @@ button, input, textarea, select {
   border-radius: var(--radius-pill);
   font-weight: 700;
   font-size: var(--fs-base);
-  padding: 13px 26px;
+  padding: 15px 28px;
   transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease), background 0.18s var(--ease);
   display: inline-flex;
   align-items: center;
@@ -364,7 +369,7 @@ button, input, textarea, select {
 
 .btn-lg {
   font-size: var(--fs-md);
-  padding: 16px 40px;
+  padding: 18px 44px;
 }
 
 .btn-ghost {
@@ -383,7 +388,7 @@ button, input, textarea, select {
 
 .btn-sm {
   font-size: var(--fs-sm);
-  padding: 8px 16px;
+  padding: 9px 18px;
 }
 
 .link-plain {
@@ -403,13 +408,13 @@ button, input, textarea, select {
   background: var(--surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  padding: 20px;
-  margin-bottom: 16px;
+  padding: 22px;
+  margin-bottom: 18px;
   border: 1px solid rgba(243, 227, 217, 0.55);
 }
 
 .section {
-  margin-top: 30px;
+  margin-top: 40px;
 }
 
 .section-head {
@@ -417,7 +422,7 @@ button, input, textarea, select {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .section-title {
@@ -466,10 +471,10 @@ button, input, textarea, select {
 }
 
 .avatar {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 15px;
   display: grid;
   place-items: center;
   font-weight: 800;
@@ -740,7 +745,7 @@ button, input, textarea, select {
 }
 
 .textarea {
-  min-height: 132px;
+  min-height: 150px;
   resize: vertical;
   line-height: 1.75;
 }
@@ -1041,7 +1046,7 @@ input[type="file"] { display: none; }
 .tabbar-inner {
   pointer-events: auto;
   width: 100%;
-  max-width: 720px;
+  max-width: 760px;
   display: flex;
   align-items: flex-end;
   justify-content: space-around;
@@ -1077,10 +1082,10 @@ input[type="file"] { display: none; }
   margin: 0;
 }
 .tabbar-center .tabbar-icon {
-  width: 52px;
-  height: 52px;
-  margin-top: -22px;
-  border-radius: 18px;
+  width: 56px;
+  height: 56px;
+  margin-top: -24px;
+  border-radius: 19px;
   display: grid;
   place-items: center;
   font-size: var(--fs-2xl);
@@ -1135,7 +1140,7 @@ input[type="file"] { display: none; }
 .menu-item:hover { text-decoration: none; background: var(--brand-ghost); }
 .menu-item.active { background: var(--brand-ghost); color: #A8451A; }
 
-.menu-icon { font-size: var(--fs-lg); width: 22px; text-align: center; }
+.menu-icon { font-size: var(--fs-lg); width: 26px; text-align: center; }
 .menu-text { display: flex; flex-direction: column; line-height: 1.35; }
 .menu-text b    { font-size: var(--fs-base); font-weight: 700; }
 .menu-text small { font-size: var(--fs-xs); color: var(--text-muted); }
@@ -1144,11 +1149,11 @@ input[type="file"] { display: none; }
 
 /* 主页配图：一张有窗光的校园照片 */
 .home-photo {
-  margin: 22px 0 4px;
+  margin: 30px 0 6px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--surface);
-  border: 5px solid rgba(255, 253, 251, 0.92);
+  border: 6px solid rgba(255, 253, 251, 0.92);
   box-shadow: var(--shadow-lg);
 }
 .home-photo img {
@@ -1161,7 +1166,7 @@ input[type="file"] { display: none; }
   object-position: center 52%;
 }
 .home-photo figcaption {
-  padding: 11px 15px;
+  padding: 13px 18px;
   font-size: var(--fs-sm);
   text-align: center;
   color: var(--text-muted);
@@ -1835,17 +1840,17 @@ body.modal-open { overflow: hidden; }
 }
 
 @media (max-width: 520px) {
-  .hero-title { font-size: var(--fs-2xl); }
-  .card { padding: 17px; border-radius: var(--radius-md); }
-  .hero { padding: 24px 0 6px; }
-  .hero-gate { width: min(272px, 84%); margin-bottom: 6px; }
-  .btn-lg { font-size: var(--fs-base); padding: 15px 30px; }
+  .hero-title { font-size: var(--fs-display); line-height: 1.26; }
+  .card { padding: 18px; border-radius: var(--radius-md); }
+  .hero { padding: 28px 0 10px; }
+  .hero-gate { width: min(300px, 86%); margin-bottom: 10px; }
+  .btn-lg { font-size: var(--fs-base); padding: 16px 32px; }
   .stat-num { font-size: var(--fs-md); }
-  .pill { font-size: var(--fs-xs); padding: 6px 13px; }
-  .empty-icon { width: 74px; height: 74px; font-size: var(--fs-icon-xl); }
+  .pill { font-size: var(--fs-xs); padding: 7px 14px; }
+  .empty-icon { width: 78px; height: 78px; font-size: var(--fs-icon-xl); }
   .footer-brand { font-size: var(--fs-brand-sm); }
   .menu-sheet { width: 214px; }
-  .home-photo { margin-top: 18px; border-width: 4px; }
+  .home-photo { margin-top: 24px; border-width: 5px; }
   /* 窄屏/竖屏：恢复照片原始 4:3，整张都在画面里，不再把中间一条放大 */
   .home-photo img { aspect-ratio: 1706 / 1279; object-position: center; }
   .comment.is-reply { margin-left: 14px; padding-left: 10px; }
@@ -2165,7 +2170,7 @@ body.modal-open { overflow: hidden; }
 
 /* 4) 锚点定位：sticky 页头 60px + 一点余量 */
 [id] {
-  scroll-margin-top: 72px;
+  scroll-margin-top: 76px;
 }
 
 /* 5) 标题断行更均衡（不支持的浏览器自动忽略） */

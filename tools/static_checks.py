@@ -2021,11 +2021,14 @@ check("R32: \u9664 clamp \u90a3\u4e00\u6863\u5916\u90fd\u662f\u7eaf px\uff0c\u4e
 check("R32: \u76f8\u90bb\u4e24\u6863\u81f3\u5c11\u5dee 1px\uff08\u5dee\u534a\u50cf\u7d20\u7684\u5e76\u5217\u5c31\u662f\u8ba9\u4eba\u51ed\u624b\u611f\u6311\uff09",
       all(b[1] - a[1] >= 1.0 for a, b in zip(r32_px, r32_px[1:])), r32_px)
 
-check("R32: \u6700\u5c0f\u4e00\u6863 12px", r32_val.get("xs") == "12px", r32_val.get("xs"))
-check("R32: \u5c0f\u5b57\u6b63\u6587 13.5px\u2014\u2014FAQ \u6b63\u6587\u4e0e\u8bc4\u8bba\u6ca1\u88ab\u7f29\u5230 13",
-      r32_val.get("sm") == "13.5px", r32_val.get("sm"))
-check("R32: \u6b63\u6587 / \u5e16\u5b50\u6b63\u6587 15.5px\u2014\u2014\u6ca1\u6709\u4e3a\u4e86\u300c\u51d1\u6574\u300d\u628a\u5b83\u7f29\u5c0f",
-      r32_val.get("base") == "15.5px", r32_val.get("base"))
+# 第 34 轮：阶梯整体上移一档（正文 15.5 -> 17，大标题 27 -> 38）。
+# 这是**有意变更**，不是手滑：下面三条值断言跟着改，
+# 并在这里写下原因（下一个看到这三个数字变了的人，不会以为是回退）。
+check("R32/R34: 最小一档 13px", r32_val.get("xs") == "13px", r32_val.get("xs"))
+check("R32/R34: 小字正文 15px——FAQ 正文与评论没被留在 13",
+      r32_val.get("sm") == "15px", r32_val.get("sm"))
+check("R32/R34: 正文 / 帖子正文 17px——没有为了「凑整」把它缩小",
+      r32_val.get("base") == "17px", r32_val.get("base"))
 check("R32: \u9875\u811a\u54c1\u724c\u5b57\u4ecd\u662f\u539f\u6765\u7684 clamp\uff0c\u5916\u89c2\u6ca1\u88ab\u6539\u6389",
       r32_val.get("brand") == "clamp(40px, 12vw, 74px)", r32_val.get("brand"))
 
@@ -2286,6 +2289,53 @@ check("R33: 钢印标记全站只有一处",
       appjs.count('class="anon-stamp"') == 1)
 check("R33: 全站只有一处在拼「匿名 #」",
       appjs.count('"匿名 #"') == 1)
+
+print()
+print("R34) 字阶上移一档 + 首页刊头化")
+
+r34_css = r32_css
+r34_val = r32_val
+
+
+def _r34_px(name):
+    return _r32_px(r34_val.get(name))
+
+
+_r34_ratio = (_r34_px("display") or 0) / (_r34_px("base") or 1)
+# 只许往上，不许回缩。下一次有人想「收一收」的时候，这几条会先红。
+check("R34: 正文至少 17px（第 33 轮是 15.5px，字号只许往上）",
+      (_r34_px("base") or 0) >= 17.0, r34_val.get("base"))
+check("R34: 叙事小字至少 15px", (_r34_px("sm") or 0) >= 15.0, r34_val.get("sm"))
+check("R34: 最小一档至少 13px", (_r34_px("xs") or 0) >= 13.0, r34_val.get("xs"))
+check("R34: 首页大标题 38px——比正文大一倍还多（不是整体缩放）",
+      r34_val.get("display") == "38px", r34_val.get("display"))
+check("R34: 标题 / 正文 至少 2.1 倍——「更显眼」靠的是比例",
+      _r34_ratio >= 2.1, round(_r34_ratio, 2))
+
+# 字号变大了，装它的固定高度就得跟着长，否则就是截断而不是放大
+check("R34: 页头 64px（装 19px 品牌字与 34px 图标）",
+      "height: 64px" in _a1_block(r34_css, ".site-header .wrap"),
+      _a1_block(r34_css, ".site-header .wrap").strip()[:60])
+check("R34: 品牌图标 34px（字号 19px 时 30px 显小）",
+      "width: 34px" in _a1_block(r34_css, ".brand-mark")
+      and "height: 34px" in _a1_block(r34_css, ".brand-mark"))
+check("R34: 头像 44px（字号 17px 时 40px 会挤）",
+      "height: 44px" in _a1_block(r34_css, ".avatar"))
+check("R34: 底栏中间那颗 56px",
+      "height: 56px" in _a1_block(r34_css, ".tabbar-center .tabbar-icon"))
+check("R34: 底部留白 112px（底栏随字号变高了）",
+      re.search(r"(?m)^body\s*\{([^}]*)\}", r34_css) is not None and
+      "padding-bottom: 112px" in re.search(r"(?m)^body\s*\{([^}]*)\}", r34_css).group(1))
+check("R34: 锚点让开 64px 页头（scroll-margin 76px）",
+      "scroll-margin-top: 76px" in r34_css)
+
+# 窄屏不能又把大标题缩回去：这是上一次「看不出变化」的真正原因
+check("R34: 窄屏首页大标题也走 --fs-display（不再降到 2xl）",
+      ".hero-title { font-size: var(--fs-display); line-height: 1.26; }" in r34_css,
+      [l.strip() for l in r34_css.split("\n") if ".hero-title { font-size" in l][:2])
+check("R34: 大标题 900 字重、行高收到 1.34",
+      "font-weight: 900" in _a1_block(r34_css, ".hero-title")
+      and "line-height: 1.34" in _a1_block(r34_css, ".hero-title"))
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
