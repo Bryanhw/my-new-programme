@@ -2403,9 +2403,6 @@ check("R36: 画布顶上那层暖雾，和天空窗的下缘是同一个颜色",
       (_r36_body.count("--sky-haze"), _r36_hero.count("--sky-haze")))
 check("R36: 雾是叠在金色上的，画布底色仍是 var(--bg)",
       "background-color: var(--bg)" in _r36_body)
-check("R36: 天空窗用冷光晕 + 暖影两个令牌落地，不手写影子",
-      "box-shadow: var(--glow-sky), var(--shadow-land)" in _r36_hero
-      and "--glow-sky:" in _r36_root and "--shadow-land:" in _r36_root)
 check("R36: 远景层钉在视口底部、铺满宽度、不吃点击",
       "position: fixed" in _r36_land and "pointer-events: none" in _r36_land
       and "z-index: -1" in _r36_land and "background-size: 100% 100%" in _r36_land)
@@ -2533,10 +2530,6 @@ check("R38: 标题高亮条仍比地平线更亮，深棕字压上去 >= 7:1（�
       and _r37_lum(_r38_low) < _r37_lum("#FFFCF0") * 1.0
       and (_r37_lum("#FFFCF0") + 0.05) / (_r37_lum("#3B2A1B") + 0.05) >= 7.0,
       round((_r37_lum("#FFFCF0") + 0.05) / (_r37_lum("#3B2A1B") + 0.05), 2))
-# 光晕跟着换暖，但阴影链（光晕 + 暖影）不能只剩一层
-check("R38: 光晕换暖（rgba(255,244,214)）且箱影仍是「光 + 影」两层",
-      "rgba(255, 244, 214, 0.55)" in _r38_root
-      and "box-shadow: var(--glow-sky), var(--shadow-land)" in _r38_hero)
 
 
 print()
@@ -2616,6 +2609,29 @@ check("R39: 底栏渐变两端同色相且上亮下沉（光从上面来）",
       len(_t) == 2 and abs(_r39_hue(_t[0]) - _r39_hue(_t[1])) <= 12.0
       and _r39_lum(_t[0][:3]) > _r39_lum(_t[1][:3]),
       [(g[:3], round(_r39_hue(g), 1), round(_r39_lum(g[:3]), 3)) for g in _t])
+
+print()
+print("R41) 天空窗没有边：站主要「把中间部分的边框去除」")
+
+_r41_hero = _a1_block(r38_css, ".hero")
+_r41_decl = re.sub(r"/\*.*?\*/", "", _r41_hero, flags=re.S)   # 注释里怎么讲都不算
+# 「边」的三种写法：箱影（亮晕 + 暗影框一圈）、border、outline。一样都不许有
+check("R41: 天空窗没有边（box-shadow / border / outline 都没有），不再是「贴上去的一块窗」",
+      not re.search(r"(?m)^\s*box-shadow\s*:", _r41_decl)
+      and not re.search(r"(?m)^\s*border\s*:", _r41_decl)
+      and not re.search(r"(?m)^\s*outline\s*:", _r41_decl),
+      [k for k in ("box-shadow", "border:", "outline") if k in _r41_decl])
+# 也不许用滤镜把边加回来（drop-shadow 就是换了个马甲的箱影）
+check("R41: 也没有拿 filter: drop-shadow 换个马甲把边加回来",
+      "drop-shadow" not in _r41_hero and "filter:" not in _r41_hero,
+      _r41_hero.count("drop-shadow"))
+# 窗和画布靠同一个颜色接上：窗底缘 --sky-haze，画布顶上也是 --sky-haze
+_r41_body = re.search(r"(?m)^body\s*\{([^}]*)\}", r38_css)
+_r41_body = _r41_body.group(1) if _r41_body else ""
+check("R41: 窗底缘与画布顶雾仍是同一个 --sky-haze（没有影子也能接住，不是靠明暗差硬拼）",
+      "var(--sky-haze) 100%" in _r41_hero and "var(--sky-haze) 0%" in _r41_body
+      and "--glow-sky" not in r38_css and "--shadow-land" not in r38_css,
+      (_r41_hero.count("--sky-haze"), _r41_body.count("--sky-haze"), r38_css.count("--glow-sky")))
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
