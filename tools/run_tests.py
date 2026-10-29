@@ -137,6 +137,13 @@ ZH_OK = "\u672a\u8fdd\u89c4"
 ZH_GONE = "\u770b\u4e0d\u5230"
 ZH_ANON = "\u533f\u540d"
 ZH_HASH = "\u533f\u540d #"      # the anonymous post-code prefix, e.g. "\u533f\u540d #3F9A21"
+
+
+def stamp(code):
+    """编号在卡片上的样子：包在一层钢印 span 里（第 33 轮）。
+    卡片上的字仍然是「匿名 #XXXXXX」，只是编号那一段多了一个 span；
+    回执、举报下载那些地方走的是纯文本，仍用 ZH_HASH 直接拼。"""
+    return '<span class="anon-stamp">#' + code + "</span>"
 # Fixture post ids for the post-code tests (shared by the card and receipt scenarios).
 A1 = "f1e2d3c4-0000-4000-8000-000000000001"
 A2 = "f1e2d3c4-0000-4000-8000-000000000002"
@@ -408,7 +415,7 @@ def run_b():
                       % (pid, author, "true" if anon else "false", name))
 
     c_a1 = card(A1, True, "u-1")
-    check("anonymous card shows a per-post code", ZH_HASH + "771CEA" in c_a1, c_a1[:200])
+    check("anonymous card shows a per-post code", stamp("771CEA") in c_a1, c_a1[:200])
     check("anonymous card no longer reads as one shared name", ZH_NICK not in c_a1, c_a1[:200])
     check("the code ignores the author (never derived from author_id)",
           c_a1 == card(A1, True, "u-2"))
@@ -418,11 +425,11 @@ def run_b():
     # Same person, two anonymous posts -> two codes. This is the whole point:
     # the numbers must NOT let anyone stitch one author's posts together.
     check("same author, two anon posts, two different codes",
-          ZH_HASH + "771B57" in card(A2, True, "u-1"), "expected a different code for the 2nd post")
+          stamp("771B57") in card(A2, True, "u-1"), "expected a different code for the 2nd post")
 
     named = card(A1, False, "u-1", name="\u5c0f\u660e")
     check("a named card keeps its nickname", "\u5c0f\u660e" in named, named[:200])
-    check("a named card carries no code", ZH_HASH not in named, named[:200])
+    check("a named card carries no code", "anon-stamp" not in named, named[:200])
 
     check("anonCodeOf is six uppercase hex digits",
           js(it, "/^[0-9A-F]{6}$/.test(Campus.anonCodeOf(%r))" % A1) is True)
@@ -438,7 +445,7 @@ def run_b():
     no_id = js(it, "Campus.renderPostCard({ is_anonymous: true, display_name: 'x', content: 'x',"
                    " image_path: null, status: 'approved', created_at: '2026-09-23T10:00:00.000Z' })")
     check("a missing id falls back to the old wording", ZH_NICK in no_id, no_id[:200])
-    check("a missing id never invents a code", ZH_HASH not in no_id, no_id[:200])
+    check("a missing id never invents a code", "anon-stamp" not in no_id, no_id[:200])
 
     print("- likes account column is unreadable at the interface")
     it = load("feed.html", "mock-logged")
@@ -1977,7 +1984,7 @@ check("the page still rendered after degrading",
 check("the probe remembers there is no such column",
       js(it, "Campus.anonCodeSupported()") is False)
 check("the anonymous post falls back to the per-post code",
-      ZH_HASH + CODE_A1 in js(it, "Campus.renderPostCard({ id: %r, is_anonymous: true,"
+      stamp(CODE_A1) in js(it, "Campus.renderPostCard({ id: %r, is_anonymous: true,"
                                    " display_name: 'x', content: 'x', image_path: null,"
                                    " status: 'approved', created_at: '2026-09-23T10:00:00.000Z' })"
                                % A1))
@@ -1994,8 +2001,8 @@ check("nothing was bounced back", bounced == [], bounced)
 check("the probe reports the column is there", js(it, "Campus.anonCodeSupported()") is True)
 feed_html = js(it, "document.getElementById('feed').innerHTML")
 check("the feed shows the database code (not the per-post one)",
-      ZH_HASH + CODE_U2 in feed_html, feed_html[:300])
-check("the per-post code is gone from that post", ZH_HASH + "4ED4E7" not in feed_html)
+      stamp(CODE_U2) in feed_html, feed_html[:300])
+check("the per-post code is gone from that post", "4ED4E7" not in feed_html)
 
 print("- the server code wins, but only in a sane shape")
 
@@ -2011,14 +2018,14 @@ check("anonName prefers the column",
       js(it, "Campus.anonName({ id: %r, is_anonymous: true, anon_code: 'ABC123' })" % A1)
       == ZH_HASH + "ABC123")
 check("a lower-case code is normalised, not printed raw",
-      ZH_HASH + "ABC123" in card_j(", anon_code: 'abc123'"))
+      stamp("ABC123") in card_j(", anon_code: 'abc123'"))
 check("a short code is ignored (falls back to the per-post code)",
-      ZH_HASH + CODE_A1 in card_j(", anon_code: 'ABC12'"))
+      stamp(CODE_A1) in card_j(", anon_code: 'ABC12'"))
 check("a non-hex code is ignored",
-      ZH_HASH + CODE_A1 in card_j(", anon_code: 'ZZZZZZ'"))
-check("an empty code is ignored", ZH_HASH + CODE_A1 in card_j(", anon_code: ''"))
+      stamp(CODE_A1) in card_j(", anon_code: 'ZZZZZZ'"))
+check("an empty code is ignored", stamp(CODE_A1) in card_j(", anon_code: ''"))
 check("a named post never shows a code, column or not",
-      ZH_HASH not in js(it, "Campus.renderPostCard({ id: %r, is_anonymous: false,"
+      "anon-stamp" not in js(it, "Campus.renderPostCard({ id: %r, is_anonymous: false,"
                             " display_name: 'Nick', content: 'x', image_path: null,"
                             " status: 'approved', anon_code: 'ABC123',"
                             " created_at: '2026-09-23T10:00:00.000Z' })" % A1))

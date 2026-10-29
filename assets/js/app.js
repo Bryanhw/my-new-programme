@@ -2112,6 +2112,25 @@ window.Campus = (function () {
   }
 
   /**
+   * 卡片上那枚「匿名编号」的小钢印（第 33 轮）
+   *
+   * 文字仍然是 anonName() 给的「匿名 #4821」：不另造一套写法，
+   * 也不改 anonName 本身 —— 举报回执、图片提示那些地方用的是纯文本。
+   * 这里只把编号那一段包一层 span，让 CSS 把它做成钢印；
+   * 形状对不上（没有 #、编号形状不对）就原样输出，宁可不好看也不猜。
+   */
+  function postNameHtml(post, name) {
+    var text = String(name == null ? "" : name);
+    if (!post || !post.is_anonymous) return escapeHtml(text);
+    var at = text.lastIndexOf("#");
+    if (at <= 0) return escapeHtml(text);
+    var code = text.slice(at + 1);
+    if (!/^[0-9A-Za-z]{3,12}$/.test(code)) return escapeHtml(text);
+    return escapeHtml(text.slice(0, at)) +
+      '<span class="anon-stamp">#' + escapeHtml(code) + "</span>";
+  }
+
+  /**
    * 取数据库给的稳定洞号（D1 之后每个匿名帖都带这一列）
    *
    * 只接受「六位十六进制」这种形状：号是给人看的标识，不是数据通道 ——
@@ -2442,7 +2461,7 @@ window.Campus = (function () {
     html += '<div class="post-head">';
     html += avatarHtml(post);
     html += '<div class="post-meta">';
-    html += '<div class="post-name">' + escapeHtml(name);
+    html += '<div class="post-name">' + postNameHtml(post, name);
     html += statusTag(post.status);
     html += "</div>";
     html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + "</div>";

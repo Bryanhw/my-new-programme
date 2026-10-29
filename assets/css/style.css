@@ -40,6 +40,26 @@
   --shadow-md: 0 10px 30px rgba(59, 42, 27, 0.15);
   --shadow-lg: 0 18px 48px rgba(59, 42, 27, 0.22);
 
+  /* 阴影按用途取（第 33 轮收敛）。收敛前：34 处声明、25 种值、22 种只出现过一次，
+     而且把三类完全不同的东西混在同一个属性里 —— 抬升、焦点环、彩色辉光。
+     现在分开命名，写样式一律用令牌，别手写 rgba：
+       抬升  sm 静置 / md 抬起与 hover / lg 大块浮层
+       浮层  sheet 模态与抽屉（要比 lg 更沉）/ float 悬浮主按钮（要明显浮在栏上方）
+       环    ring-focus 输入框 / ring-soft 容器 / ring-pulse 直链那一条的呼吸
+       辉光  glow-brand / glow-brand-lg / glow-neutral（小圆形头像的彩色底光）
+       光晕  halo-breathe（空态图标外面那三层，合成一个令牌免得散着写） */
+  --shadow-sheet:  0 26px 64px rgba(43, 27, 15, 0.42);
+  --shadow-float:  0 10px 24px rgba(23, 14, 6, 0.30);
+  --ring-focus:    0 0 0 3px rgba(203, 146, 67, 0.20);
+  --ring-soft:     0 0 0 4px rgba(255, 140, 105, 0.14);
+  --ring-pulse:    0 0 0 8px rgba(255, 140, 105, 0.20);
+  --glow-brand:    0 4px 12px rgba(255, 125, 85, 0.28);
+  --glow-brand-lg: 0 12px 28px rgba(255, 125, 85, 0.32);
+  --glow-neutral:  0 4px 12px rgba(160, 140, 125, 0.24);
+  --halo-breathe:  0 0 0 10px rgba(255, 175, 130, 0.13),
+                   0 0 0 22px rgba(255, 190, 150, 0.08),
+                   0 14px 30px rgba(255, 140, 105, 0.22);
+
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
   /* 字号阶梯（第 32 轮收敛）。收敛前全站有 25 个不同的 font-size：
@@ -144,7 +164,7 @@ button, input, textarea, select {
   place-items: center;
   font-size: var(--fs-md);
   background: rgba(255, 253, 251, 0.94);
-  box-shadow: 0 4px 12px rgba(59, 42, 27, 0.20);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 页头右侧的身份提示：金底上必须单行 + 用深棕，否则会折行被 60px 页头切掉 */
@@ -179,11 +199,11 @@ button, input, textarea, select {
   font-weight: 700;
   color: #FFF6EC;
   background: linear-gradient(135deg, #4A3423, #2A1B10);
-  box-shadow: 0 6px 16px rgba(43, 27, 15, 0.28);
+  box-shadow: var(--shadow-sm);
   white-space: nowrap;
   transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
-.header-login:hover { text-decoration: none; transform: translateY(-1px); box-shadow: 0 9px 20px rgba(43, 27, 15, 0.34); }
+.header-login:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .header-login:active { transform: translateY(0); }
 .header-login:focus-visible { outline: 2px solid var(--ink-solid); outline-offset: 2px; }
 .header-login[hidden] { display: none; }
@@ -338,9 +358,9 @@ button, input, textarea, select {
 .btn-primary {
   background: linear-gradient(135deg, #4A3423, #2A1B10);
   color: #FFF6EC;
-  box-shadow: 0 10px 26px rgba(43, 27, 15, 0.32);
+  box-shadow: var(--shadow-md);
 }
-.btn-primary:hover { box-shadow: 0 14px 32px rgba(43, 27, 15, 0.40); }
+.btn-primary:hover { box-shadow: var(--shadow-lg); }
 
 .btn-lg {
   font-size: var(--fs-md);
@@ -456,12 +476,12 @@ button, input, textarea, select {
   font-size: var(--fs-base);
   color: #fff;
   background: linear-gradient(135deg, #FFB48F, #FF7D55);
-  box-shadow: 0 4px 12px rgba(255, 125, 85, 0.28);
+  box-shadow: var(--glow-brand);
   user-select: none;
 }
 .avatar.anon {
   background: linear-gradient(135deg, #D9CFC7, #B9A99D);
-  box-shadow: 0 4px 12px rgba(160, 140, 125, 0.24);
+  box-shadow: var(--glow-neutral);
   font-size: var(--fs-md);
 }
 
@@ -483,7 +503,7 @@ button, input, textarea, select {
 .avatar.anon[data-hue-band="11"] { --anon-a: #B49A86; --anon-b: #8A6E58; }
 .avatar.anon[data-hue-band] {
   background: linear-gradient(135deg, var(--anon-a), var(--anon-b));
-  box-shadow: 0 4px 12px rgba(59, 42, 27, 0.18);
+  box-shadow: var(--shadow-sm);
   color: #fff;
 }
 
@@ -716,7 +736,7 @@ button, input, textarea, select {
 .input:focus,
 .textarea:focus {
   border-color: var(--brand);
-  box-shadow: 0 0 0 4px rgba(255, 140, 105, 0.14);
+  box-shadow: var(--ring-soft);
 }
 
 .textarea {
@@ -859,7 +879,7 @@ button, input, textarea, select {
   height: 22px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 2px 6px rgba(120, 95, 80, 0.24);
+  box-shadow: var(--shadow-sm);
   transition: transform 0.22s var(--ease);
 }
 .switch[aria-checked="true"] { background: linear-gradient(135deg, #FFA177, #FF7043); }
@@ -974,9 +994,7 @@ input[type="file"] { display: none; }
   border-radius: 50%;
   font-size: var(--fs-icon-xl);
   background: radial-gradient(circle at 34% 30%, #FFE7CE 0%, #FFD3B4 52%, #FFC49E 100%);
-  box-shadow: 0 0 0 10px rgba(255, 175, 130, 0.13),
-              0 0 0 22px rgba(255, 190, 150, 0.08),
-              0 14px 30px rgba(255, 140, 105, 0.22);
+  box-shadow: var(--halo-breathe);
   animation: breathe 6s var(--ease) infinite;
 }
 
@@ -1068,7 +1086,7 @@ input[type="file"] { display: none; }
   font-size: var(--fs-2xl);
   color: var(--ink-solid);
   background: linear-gradient(135deg, #FFD79A, #E39A2B);
-  box-shadow: 0 10px 24px rgba(23, 14, 6, 0.42);
+  box-shadow: var(--shadow-float);
 }
 .tabbar-center .tabbar-label { margin-top: 3px; }
 
@@ -1083,7 +1101,7 @@ input[type="file"] { display: none; }
   border-radius: 20px;
   background: rgba(255, 253, 251, 0.98);
   border: 1px solid rgba(203, 146, 67, 0.30);
-  box-shadow: 0 18px 48px rgba(43, 27, 15, 0.34);
+  box-shadow: var(--shadow-lg);
   animation: sheetDown 0.22s var(--ease) both;
 }
 /* 指向「☰」的小尖角（在面板顶部，尖朝上） */
@@ -1131,7 +1149,7 @@ input[type="file"] { display: none; }
   overflow: hidden;
   background: var(--surface);
   border: 5px solid rgba(255, 253, 251, 0.92);
-  box-shadow: 0 18px 44px rgba(43, 27, 15, 0.26);
+  box-shadow: var(--shadow-lg);
 }
 .home-photo img {
   width: 100%;
@@ -1167,7 +1185,7 @@ input[type="file"] { display: none; }
   font-weight: 800;
   color: #fff;
   background: linear-gradient(135deg, #FFB48F, #FF7D55);
-  box-shadow: 0 12px 28px rgba(255, 125, 85, 0.32);
+  box-shadow: var(--glow-brand-lg);
 }
 
 .profile-name { font-size: var(--fs-lg); font-weight: 800; }
@@ -1333,7 +1351,7 @@ body.modal-open { overflow: hidden; }
   padding: 22px 20px 18px;
   border-radius: 22px;
   background: var(--surface);
-  box-shadow: 0 26px 64px rgba(43, 27, 15, 0.44);
+  box-shadow: var(--shadow-sheet);
   animation: sheetDown 0.2s var(--ease) both;
 }
 .modal-title {
@@ -1361,7 +1379,7 @@ body.modal-open { overflow: hidden; }
 .modal-input:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(203, 146, 67, 0.20);
+  box-shadow: var(--ring-focus);
 }
 .modal-hint {
   margin-top: 8px;
@@ -1664,7 +1682,7 @@ body.modal-open { overflow: hidden; }
 .comment-input::placeholder { color: var(--text-faint); }
 .comment-input:focus {
   border-color: var(--brand);
-  box-shadow: 0 0 0 4px rgba(255, 140, 105, 0.14);
+  box-shadow: var(--ring-soft);
 }
 
 .comment-form-foot {
@@ -1704,7 +1722,7 @@ body.modal-open { overflow: hidden; }
 .circle-pick select:focus,
 .circle-bar select:focus {
   border-color: var(--brand);
-  box-shadow: 0 0 0 4px rgba(255, 140, 105, 0.14);
+  box-shadow: var(--ring-soft);
 }
 
 .circle-hot-title { margin: 14px 0 8px; }
@@ -1915,7 +1933,7 @@ body.modal-open { overflow: hidden; }
 @media (prefers-reduced-motion: no-preference) {
   @keyframes target-pulse {
     0%, 100% { box-shadow: 0 0 0 2px var(--brand), var(--shadow-sm); }
-    50%      { box-shadow: 0 0 0 8px rgba(255, 140, 105, 0.20), var(--shadow-md); }
+    50%      { box-shadow: var(--ring-pulse), var(--shadow-md); }
   }
   .post-target {
     animation: rise 0.4s var(--ease) both, target-pulse 1.5s var(--ease) 2;
@@ -2016,7 +2034,7 @@ body.modal-open { overflow: hidden; }
   max-height: 82vh;
   border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: 0 26px 64px rgba(43, 27, 15, 0.5);
+  box-shadow: var(--shadow-sheet);
   cursor: zoom-out;
 }
 
@@ -2160,4 +2178,23 @@ body.modal-open { overflow: hidden; }
 }
 .post-body {
   text-wrap: pretty;
+}
+
+/* 匿名编号：一枚小钢印（第 33 轮）
+   小圆角（3px）是「标记」的语言；胶囊（999px）是「按钮」的语言 ——
+   这个编号不能点，所以不能长成按钮的样子。
+   字号比正文小一档、字色压到 72% 墨色（对比度仍在 5:1 上下），
+   user-select: none 是因为它是编号，不是要被复制的正文。 */
+.anon-stamp {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 1px 6px 1px 5px;
+  border: 1px solid rgba(59, 42, 27, 0.28);
+  border-radius: 3px;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  color: rgba(59, 42, 27, 0.72);
+  vertical-align: 1px;
+  user-select: none;
 }

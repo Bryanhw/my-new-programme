@@ -2240,6 +2240,54 @@ check("D6: README says where the review console lives and that it is not publish
       "\u5ba1\u6838\u53f0" in _readme and "--demo" in _readme)
 
 print()
+print("R33) 阴影按用途分、匿名编号做成钢印")
+
+r33_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
+
+# 阴影一律走令牌：box-shadow 里不再出现手写颜色。
+# （第 33 轮之前：34 处声明、25 种值、22 种只出现过一次）
+r33_shadow_lines = [l.strip() for l in r33_css.split("\n")
+                    if "box-shadow:" in l and "rgba(" in l]
+check("R33: box-shadow 里不再有手写颜色（一律走令牌）",
+      not r33_shadow_lines, r33_shadow_lines)
+
+_r33_root = _a1_block(r33_css, ":root")
+for _tok in ("--shadow-sheet", "--shadow-float", "--ring-focus", "--ring-soft",
+             "--ring-pulse", "--glow-brand", "--glow-brand-lg", "--glow-neutral",
+             "--halo-breathe"):
+    check("R33: :root 定义了 %s" % _tok, (_tok + ":") in _r33_root)
+
+# 三类阴影不能混着用：焦点环和品牌辉光都不是抬升
+check("R33: 容器焦点走 --ring-soft（三处同值合一）",
+      r33_css.count("var(--ring-soft)") == 3)
+check("R33: 输入框焦点走 --ring-focus", "var(--ring-focus)" in r33_css)
+check("R33: 头像的彩色底光走 --glow-* 而不是 --shadow-*",
+      "var(--glow-brand)" in r33_css and "var(--glow-brand-lg)" in r33_css
+      and "var(--glow-neutral)" in r33_css)
+
+# 钢印：小圆角 · 字号令牌 · 不能选中
+_stamp = _a1_block(r33_css, ".anon-stamp")
+check("R33: .anon-stamp 存在", bool(_stamp))
+check("R33: 钢印是小圆角（标记），不是胶囊（按钮）",
+      ("border-radius: 3px" in _stamp) and ("999px" not in _stamp))
+check("R33: 钢印用的是字号令牌", "font-size: var(--fs-xs)" in _stamp)
+check("R33: 钢印不能被选中（它是编号，不是正文）", "user-select: none" in _stamp)
+
+# 卡片署名：编号包一层 span，但文字仍然来自 anonName（S1 红线不动）
+check("R33: 卡片署名走 postNameHtml",
+      "html += '<div class=\"post-name\">' + postNameHtml(post, name);" in appjs)
+check("R33: postNameHtml 只包编号，不另造写法",
+      'text.lastIndexOf("#")' in appjs and "/^[0-9A-Za-z]{3,12}$/" in appjs)
+check("R33: anonName 仍然返回纯文本（举报回执还要用）",
+      '"\u533f\u540d #" + code' in name_body if False else ('"匿名 #" + code' in name_body))
+check("R33: postNameHtml 只有卡片一处调用（回执仍是纯文本）",
+      appjs.count("postNameHtml(") == 2)
+check("R33: 钢印标记全站只有一处",
+      appjs.count('class="anon-stamp"') == 1)
+check("R33: 全站只有一处在拼「匿名 #」",
+      appjs.count('"匿名 #"') == 1)
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)
