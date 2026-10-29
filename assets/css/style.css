@@ -2111,3 +2111,53 @@ body.modal-open { overflow: hidden; }
 }
 .saves-missing b { color: var(--ink-soft); }
 .saves-missing .link-plain { margin-top: 8px; }
+
+/* ==================================================================
+   第 33 轮 · 排版细则（纯新增，不修改上面任何一条）
+   ------------------------------------------------------------------
+   只做四件"看不见、但摸得出"的事，全部零依赖、零 JS：
+     1) 数字等宽：点赞数 / 时间戳 / 匿名编号 / 字数计数变化时不再左右抖
+     2) 键盘焦点：没有单独写过的可交互元素，也给一条统一描边
+     3) 选中文字：品牌金做一个很淡的底，复制帖文时不再是一片系统蓝
+     4) 锚点定位：跳转目标不被 60px 的 sticky 页头盖住
+   备注：字体族、字号阶梯、颜色令牌一概不动；这里只有 font-variant、outline、
+        背景色、滚动余量四类属性。
+   ================================================================== */
+
+/* 1) 数字等宽 —— 只加 font-variant-numeric，不动字号与字重 */
+.post-foot,
+.post-time,
+.post-name,
+.stat-num,
+.counter {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 2) 键盘焦点兜底 —— 已有 :focus-visible 的元素仍走它们自己那条（特异性更高） */
+:where(a, button, summary, [role="button"]):focus-visible {
+  outline: 2px solid var(--brand-strong);
+  outline-offset: 2px;
+}
+
+/* 3) 选中文字 */
+::selection {
+  background: rgba(203, 146, 67, 0.26);
+  color: inherit;
+}
+
+/* 4) 锚点定位：sticky 页头 60px + 一点余量 */
+[id] {
+  scroll-margin-top: 72px;
+}
+
+/* 5) 标题断行更均衡（不支持的浏览器自动忽略） */
+.hero-title,
+.section-title,
+.empty-title,
+.modal-title,
+.auth-title {
+  text-wrap: balance;
+}
+.post-body {
+  text-wrap: pretty;
+}
