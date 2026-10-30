@@ -2673,6 +2673,98 @@ check("R42: 圆角与 overflow: hidden 仍在（羽化没有顶替裁剪云层�
       "border-radius: 32px" in _r42_flat and "overflow: hidden" in _r42_flat,
       (_r42_flat.count("border-radius: 32px"), _r42_flat.count("overflow: hidden")))
 
+
+print()
+print("R43) 可读性与材质：小字过线、纸有颗粒、纸片只有一种语法")
+
+# ---- 对比度：算真的，不靠肉眼 ----
+def _r43_chan(h):
+    h = h.lstrip("#")
+    v = int(h, 16) / 255.0
+    return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+
+def _r43_lum(c):
+    c = c.lstrip("#")
+    return (0.2126 * _r43_chan(c[0:2]) + 0.7152 * _r43_chan(c[2:4])
+            + 0.0722 * _r43_chan(c[4:6]))
+
+
+def _r43_ratio(a, b):
+    la, lb = _r43_lum(a), _r43_lum(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def _r43_hex(name):
+    """取 :root 里某个令牌的 #RRGGBB（令牌值里带 rgba() 时抓其中的 hex）。"""
+    m = re.search(r"(?m)^\s*" + re.escape(name) + r"\s*:\s*([^;]+);", css)
+    if not m:
+        return None
+    hm = re.search(r"#([0-9A-Fa-f]{6})", m.group(1))
+    return "#" + hm.group(1) if hm else None
+
+
+_r43_bgs = ("#FFFFFF", "#FFF6EF")          # 白卡 --surface / 暖白卡 --surface-soft
+_r43_weak = []
+for _t in ("--text-muted", "--text-faint", "--brand-text"):
+    _c = _r43_hex(_t)
+    for _bg in _r43_bgs:
+        if not _c or _r43_ratio(_c, _bg) < 4.5:
+            _r43_weak.append("%s on %s = %s" % (_t, _bg, "%.2f" % _r43_ratio(_c, _bg) if _c else "missing"))
+# 窗内亮黄底上那档弱字：alpha 低于 .75 就只有 4.3，刚好差一口气
+_r43_ink_faint = re.search(r"(?m)^\s*--ink-faint:\s*rgba\(\s*59,\s*42,\s*27,\s*([0-9.]+)\s*\)", css)
+_r43_if_alpha = float(_r43_ink_faint.group(1)) if _r43_ink_faint else 0.0
+check("R43: 小字三档（muted/faint/链接色）在白卡与暖白卡上都过 4.5:1，窗内弱字 alpha >= .75",
+      not _r43_weak and _r43_if_alpha >= 0.75,
+      (_r43_weak, _r43_if_alpha))
+
+# ---- 彩色文字不再借 --brand-strong 当字色（它只有 2.82:1）----
+_r43_a_rule = re.search(r"(?m)^a\s*\{([^}]*)\}", css)
+_r43_a_body = re.sub(r"/\*.*?\*/", "", _r43_a_rule.group(1) if _r43_a_rule else "", flags=re.S)
+check("R43: 彩色文字一律走 --brand-text，--brand-strong 只留给底色与描边",
+      "color: var(--brand-text)" in _r43_a_body
+      and re.search(r"(?m)^\s*color: var\(--brand-strong\)", css) is None,
+      (_r43_a_body.strip()[:60],))
+
+# ---- 金底上的信息性文字：ink-faint(.78) 只有 3.47:1，必须提到 --ink ----
+def _r43_block(sel):
+    m = re.search(r"(?m)^" + re.escape(sel) + r"\s*\{([^}]*)\}", css)
+    return re.sub(r"/\*.*?\*/", "", m.group(1), flags=re.S) if m else ""
+
+
+_r43_gold_txt = {_s: _r43_block(_s) for _s in (".header-user", ".site-footer", ".footer-line")}
+check("R43: 金底上的页头用户名 / slogan / 页脚兜底字用 --ink（5.04:1），不再用发灰的一档",
+      all("color: var(--ink)" in _r43_gold_txt[_s] for _s in _r43_gold_txt),
+      [k for k in _r43_gold_txt if "color: var(--ink)" not in _r43_gold_txt[k]])
+
+# ---- 纸纹：金色画布要有颗粒，不是平涂 ----
+_r43_after_m = re.search(r"(?m)^body::after\s*\{([^}]*)\}", css)
+_r43_after = re.sub(r"/\*.*?\*/", "", _r43_after_m.group(1) if _r43_after_m else "", flags=re.S)
+_r43_flat = re.sub(r"\s+", " ", _r43_after)
+_r43_op = re.search(r"opacity:\s*([0-9.]+)", _r43_flat)
+_r43_opv = float(_r43_op.group(1)) if _r43_op else 1.0
+check("R43: body::after 铺一层 feTurbulence 纸纹（soft-light / opacity <= .05 / 不吃点击）",
+      "feTurbulence" in _r43_flat and "fractalNoise" in _r43_flat
+      and "mix-blend-mode: soft-light" in _r43_flat
+      and "position: fixed" in _r43_flat and "z-index: -1" in _r43_flat
+      and "pointer-events: none" in _r43_flat
+      and "data:image/svg+xml" in _r43_flat and "background-size: 140px 140px" in _r43_flat
+      and _r43_opv <= 0.05,
+      (_r43_opv, [k for k in ("feTurbulence", "soft-light", "pointer-events: none",
+                              "background-size: 140px 140px") if k not in _r43_flat]))
+
+# ---- 卡片只有一种「纸」：无边框 + --shadow-sm + 同一档圆角 ----
+_r43_cards = {}
+for _s in (".card", ".empty"):
+    _b = _r43_block(_s)
+    _r43_cards[_s] = re.sub(r"\s+", " ", _b)
+_r43_bad = [k for k, v in _r43_cards.items()
+            if re.search(r"(?:^|;)\s*border\s*:", v)
+            or "box-shadow: var(--shadow-sm)" not in v
+            or "border-radius: var(--radius-lg)" not in v]
+check("R43: .card 与 .empty 统一为纸片（无 border、--shadow-sm、同一档圆角）",
+      not _r43_bad, (_r43_bad, {k: v[:70] for k, v in _r43_cards.items()}))
+
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:

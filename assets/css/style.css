@@ -16,18 +16,25 @@
   --brand-strong:  #FF6B45;
   --brand-soft:    #FFE3D6;
   --brand-ghost:   #FFF1EA;
+  /* 第 43 轮：只给**文字**用的橙。--brand-strong(#FF6B45) 在白卡上只有 2.82:1，
+     当链接色等于没上色；但它是按钮/chip/焦点环的底色，调深会让整站发闷。
+     所以文字用这个深一档的 #C2421B（白卡 5.14 / 暖白卡 4.81），底色继续用 --brand 系。 */
+  --brand-text:    #C2421B;
 
   /* 直接落在金色画布上的文字（深棕，对 #CB9243 对比度 5:1 以上） */
   --ink:           #3B2A1B;
   --ink-soft:      #5A422C;
-  --ink-faint:     rgba(59, 42, 27, 0.66);
+  --ink-faint:     rgba(59, 42, 27, 0.78);  /* 第 43 轮 .66 -> .78：窗内亮黄底上 4.30 -> 4.80 */
   --ink-line:      rgba(59, 42, 27, 0.18);
   --ink-solid:     #2B1D11;                    /* 主按钮 / 底部导航的深色块 */
   --ink-sun:       #FFD08A;                    /* 深色块上的高亮金 */
 
   --text:          #4A3B32;
-  --text-muted:    #9A8A7E;
-  --text-faint:    #BFB1A6;
+  /* 第 43 轮：这两档原来都在 4.5:1 线下（3.33 和 2.09），时间戳和图注发灰看不清。
+     现在是 5.37 / 4.99（白卡）、5.04 / 4.68（暖白卡 --surface-soft），两档都过线，
+     并且 --text-faint 仍比 --text-muted 淡一档，层次没丢。 */
+  --text-muted:    #7A6758;
+  --text-faint:    #7F6C5D;
 
   --line:          #F3E3D9;
 
@@ -171,11 +178,27 @@ body::before {
   /* 山顶那一条不再是硬边：上沿 0 -> 38% 才实，山是从雾里长出来的 */
   -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.5) 14%, #000 38%);
           mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.5) 14%, #000 38%);
+}/* 第 43 轮：纸纹。金色画布一路做到第 42 轮，层次全靠渐变和柔光，但表面还是「平涂」的 ——
+   远看像塑料板，不像纸。这里叠一层 140px 平铺的灰噪点（feTurbulence，data URI 内联，
+   不新增图片文件），soft-light 混合、opacity .045：颗粒只出现在亮部，卡片和文字压在下面完全不受影响。
+   z-index:-1 与 body::before 同层，但 ::after 在文档顺序上更后，所以颗粒盖在山景之上、内容之下。 */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.82'%20numOctaves='3'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='140'%20height='140'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
 }
+
+
 
 h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: 0.2px; }
 p  { margin: 0; }
-a  { color: var(--brand-strong); text-decoration: none; }
+a  { color: var(--brand-text); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 img { max-width: 100%; display: block; }
@@ -249,7 +272,7 @@ button, input, textarea, select {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--ink-faint);
+  color: var(--ink);  /* 第 43 轮：页头是一条金底，.78 的 ink-faint 3.47:1 不够读 */
 }
 .header-user a { color: var(--ink-solid); text-decoration: underline; text-underline-offset: 2px; }
 .header-user a:hover { color: #A8451A; }
@@ -550,7 +573,8 @@ button, input, textarea, select {
   box-shadow: var(--shadow-sm);
   padding: 22px;
   margin-bottom: 18px;
-  border: 1px solid rgba(243, 227, 217, 0.55);
+  /* 第 43 轮：去掉 1px 浅边。它和 --shadow-sm 干的是同一件事（把纸片从画布上抬起来），
+     两样一起用会让卡片边缘发脏；统一成「只靠阴影」。 */
 }
 
 .section {
@@ -680,7 +704,7 @@ button, input, textarea, select {
   padding: 1.5px 8px;
   border-radius: var(--radius-pill);
   background: var(--brand-ghost);
-  color: var(--brand-strong);
+  color: var(--brand-text);
   vertical-align: middle;
 }
 
@@ -789,12 +813,12 @@ button, input, textarea, select {
 }
 .like-btn:hover:not(:disabled) {
   background: var(--brand-ghost);
-  color: var(--brand-strong);
+  color: var(--brand-text);
   transform: translateY(-1px);
 }
 .like-btn.liked {
   background: var(--brand-soft);
-  color: var(--brand-strong);
+  color: var(--brand-text);
 }
 .like-btn:disabled { cursor: default; opacity: 0.8; }
 
@@ -899,7 +923,7 @@ button, input, textarea, select {
   color: var(--text-faint);
   margin-top: 6px;
 }
-.counter.warn { color: var(--brand-strong); font-weight: 700; }
+.counter.warn { color: var(--brand-text); font-weight: 700; }
 
 /* 今日一问（C1）：发布页正文框上方的一句话，点「写这个」带进正文（不强制）。
    默认 hidden，脚本算好今天那句才显出来 —— 脚本没跑起来时它不会留个空壳。 */
@@ -1054,7 +1078,7 @@ button, input, textarea, select {
 }
 .tab.active {
   background: var(--surface);
-  color: var(--brand-strong);
+  color: var(--brand-text);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1124,8 +1148,9 @@ input[type="file"] { display: none; }
   padding: 34px 22px 30px;
   color: var(--ink-soft);
   background: rgba(255, 253, 251, 0.72);
-  border: 1px solid rgba(255, 253, 251, 0.92);
   border-radius: var(--radius-lg);
+  /* 第 43 轮：白边撤掉、换成和 .card 同一个 --shadow-sm —— 空状态也是纸片，不该是第三种语法。 */
+  box-shadow: var(--shadow-sm);
 }
 
 /* 空状态的图标 = 一枚和首页太阳同源的柔光，让"什么都还没有"也不显冷清 */
@@ -1350,7 +1375,7 @@ input[type="file"] { display: none; }
   padding: 12px 8px;
   text-align: center;
 }
-.stat-num { font-size: var(--fs-lg); font-weight: 800; color: var(--brand-strong); }
+.stat-num { font-size: var(--fs-lg); font-weight: 800; color: var(--brand-text); }
 .stat-label { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
 
 /* ------------------------------ 登录页 ------------------------------ */
@@ -1386,7 +1411,7 @@ input[type="file"] { display: none; }
 .site-footer {
   text-align: center;
   padding: 52px 18px 0;
-  color: var(--ink-faint);
+  color: var(--ink);  /* 第 43 轮：金底上 .78 的 ink-faint 只有 3.47:1，兜底色提到 --ink(5.04) */
 }
 
 .footer-brand {
@@ -1404,7 +1429,7 @@ input[type="file"] { display: none; }
 
 .footer-line {
   font-size: var(--fs-base);
-  color: var(--ink-soft);
+  color: var(--ink);  /* 第 43 轮：slogan 是要读的句子，--ink-soft 在金底只有 3.44:1 */
   margin-bottom: 16px;
 }
 
@@ -1559,7 +1584,7 @@ body.modal-open { overflow: hidden; }
   color: var(--text-faint);
   padding: 2px;
 }
-.report-btn:hover { color: var(--brand-strong); text-decoration: underline; }
+.report-btn:hover { color: var(--brand-text); text-decoration: underline; }
 
 /* ------------------------------ 举报弹窗 ------------------------------ */
 /* 外壳复用 .modal-backdrop / .modal，这里只补原因列表和补充说明 */
@@ -1792,7 +1817,7 @@ body.modal-open { overflow: hidden; }
   color: var(--text-faint);
   padding: 2px 0;
 }
-.comment-actions .link-plain:hover { color: var(--brand-strong); }
+.comment-actions .link-plain:hover { color: var(--brand-text); }
 
 .comment-form { margin-top: 10px; }
 
@@ -1903,7 +1928,7 @@ body.modal-open { overflow: hidden; }
 }
 .chip-on {
   background: var(--brand);
-  border-color: var(--brand-strong);
+  border-color: var(--brand-strong);  /* 描边不是文字：这里保持原深一档的橙 */
   color: #FFFFFF;
 }
 
@@ -1977,7 +2002,7 @@ body.modal-open { overflow: hidden; }
 
 /* 卡片元信息里的圈名 */
 .post-circle {
-  color: var(--brand-strong);
+  color: var(--brand-text);
   font-weight: 600;
 }
 
@@ -2078,7 +2103,7 @@ body.modal-open { overflow: hidden; }
 }
 .post-menu .link-plain:hover {
   background: var(--brand-ghost);
-  color: var(--brand-strong);
+  color: var(--brand-text);
   text-decoration: none;
 }
 
@@ -2260,7 +2285,7 @@ body.modal-open { overflow: hidden; }
 }
 .my-comment-go {
   margin-left: auto;
-  color: var(--brand-strong);
+  color: var(--brand-text);
   font-weight: 600;
   text-decoration: none;
 }
