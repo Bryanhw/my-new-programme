@@ -2008,8 +2008,20 @@ R32_LADDER = ["xs", "sm", "base", "md", "lg", "xl", "2xl", "display", "icon-xl",
 
 
 def _r32_px(v):
-    m = re.match(r"^([\d.]+)px$", v or "")
-    return float(m.group(1)) if m else None
+    """第 47 轮起字阶走 rem：这里统一换算回「16px 基准下的像素」，
+    好让下面所有「至少 17px」这类断言继续说的是同一件事。"""
+    v = (v or "").strip()
+    m = re.match(r"^([\d.]+)px$", v)
+    if m:
+        return float(m.group(1))
+    m = re.match(r"^([\d.]+)rem$", v)
+    if m:
+        return round(float(m.group(1)) * 16.0, 4)
+    return None
+
+
+def _r32_is_rem(v):
+    return re.match(r"^[\d.]+rem$", (v or "").strip()) is not None
 
 
 r32_px = [(n, _r32_px(r32_val.get(n))) for n in R32_LADDER]
@@ -2018,27 +2030,33 @@ r32_px = [(n, v) for n, v in r32_px if v is not None]
 check("R32: :root \u91cc\u6070\u597d\u5b9a\u4e49\u4e86 11 \u6863\u5b57\u53f7", len(r32_tokens) == 11, r32_names)
 check("R32: \u58f0\u660e\u987a\u5e8f\u5c31\u662f\u9636\u68af\u987a\u5e8f",
       r32_names == R32_LADDER, r32_names)
-check("R32: \u9664 clamp \u90a3\u4e00\u6863\u5916\u90fd\u662f\u7eaf px\uff0c\u4e00\u6863\u4e0d\u7f3a", len(r32_px) == 10, r32_px)
+check("R32: 除 clamp 那一档外都是纯 rem，一档不缺",
+      len(r32_px) == 10 and all(_r32_is_rem(r32_val.get(n)) for n in R32_LADDER if n != "brand"),
+      dict((n, r32_val.get(n)) for n in R32_LADDER if n != "brand"))
 check("R32: \u76f8\u90bb\u4e24\u6863\u81f3\u5c11\u5dee 1px\uff08\u5dee\u534a\u50cf\u7d20\u7684\u5e76\u5217\u5c31\u662f\u8ba9\u4eba\u51ed\u624b\u611f\u6311\uff09",
       all(b[1] - a[1] >= 1.0 for a, b in zip(r32_px, r32_px[1:])), r32_px)
 
 # 第 34 轮：阶梯整体上移一档（正文 15.5 -> 17，大标题 27 -> 38）。
 # 这是**有意变更**，不是手滑：下面三条值断言跟着改，
 # 并在这里写下原因（下一个看到这三个数字变了的人，不会以为是回退）。
-check("R32/R34: 最小一档 13px", r32_val.get("xs") == "13px", r32_val.get("xs"))
-check("R32/R34: 小字正文 15px——FAQ 正文与评论没被留在 13",
-      r32_val.get("sm") == "15px", r32_val.get("sm"))
-check("R32/R34: 正文 / 帖子正文 17px——没有为了「凑整」把它缩小",
-      r32_val.get("base") == "17px", r32_val.get("base"))
-check("R32: \u9875\u811a\u54c1\u724c\u5b57\u4ecd\u662f\u539f\u6765\u7684 clamp\uff0c\u5916\u89c2\u6ca1\u88ab\u6539\u6389",
-      r32_val.get("brand") == "clamp(40px, 12vw, 74px)", r32_val.get("brand"))
+check("R32/R34: 最小一档 0.8125rem（默认字号下仍是 13px）",
+      r32_val.get("xs") == "0.8125rem" and _r32_px(r32_val.get("xs")) == 13.0, r32_val.get("xs"))
+check("R32/R34: 小字正文 0.9375rem / 15px——FAQ 正文与评论没被留在 13",
+      r32_val.get("sm") == "0.9375rem" and _r32_px(r32_val.get("sm")) == 15.0, r32_val.get("sm"))
+check("R32/R34: 正文 1.0625rem / 17px——没有为了「凑整」把它缩小",
+      r32_val.get("base") == "1.0625rem" and _r32_px(r32_val.get("base")) == 17.0, r32_val.get("base"))
+check("R32: 页脚品牌字仍是同一个 clamp（下限 40px、上限 74px，中间跟屏幕走）",
+      " ".join((r32_val.get("brand") or "").split()) == "clamp(2.5rem, 12vw, 4.625rem)",
+      r32_val.get("brand"))
 
 r32_decls = re.findall(r"font-size:\s*([^;}]+)", r32_css)
 r32_used = sorted(set(re.match(r"var\(--fs-([a-z0-9-]+)\)", v.strip()).group(1)
                       for v in r32_decls if v.strip().startswith("var(--fs-")))
+# 第 47 轮：html 的 font-size: 100% 是 rem 的基准，唯一允许的非令牌声明
 r32_naked = sorted(set(v.strip() for v in r32_decls
-                       if not v.strip().startswith("var(--fs-") and v.strip() != "inherit"))
-check("R32: style.css \u91cc\u4e00\u5f8b\u8d70\u4ee4\u724c\uff08\u6ca1\u6709\u5199\u6b7b\u7684 font-size\uff09",
+                       if not v.strip().startswith("var(--fs-")
+                       and v.strip() not in ("inherit", "100%")))
+check("R32: style.css 里一律走令牌（只有 html 那 100% 是 rem 的基准）",
       not r32_naked, r32_naked)
 check("R32: \u7528\u5230\u7684\u6bcf\u4e00\u6863\u90fd\u5728 :root \u91cc\u5b9a\u4e49\u8fc7",
       all(u in r32_names for u in r32_used), [u for u in r32_used if u not in r32_names])
@@ -2308,8 +2326,8 @@ check("R34: 正文至少 17px（第 33 轮是 15.5px，字号只许往上）",
       (_r34_px("base") or 0) >= 17.0, r34_val.get("base"))
 check("R34: 叙事小字至少 15px", (_r34_px("sm") or 0) >= 15.0, r34_val.get("sm"))
 check("R34: 最小一档至少 13px", (_r34_px("xs") or 0) >= 13.0, r34_val.get("xs"))
-check("R34: 首页大标题 38px——比正文大一倍还多（不是整体缩放）",
-      r34_val.get("display") == "38px", r34_val.get("display"))
+check("R34: 首页大标题 38px（2.375rem）——比正文大一倍还多（不是整体缩放）",
+      _r34_px("display") == 38.0, r34_val.get("display"))
 check("R34: 标题 / 正文 至少 2.1 倍——「更显眼」靠的是比例",
       _r34_ratio >= 2.1, round(_r34_ratio, 2))
 
@@ -2327,8 +2345,8 @@ check("R34: 底栏中间那颗 56px",
 _r34_body_block = re.search(r"(?m)^body\s*\{([^}]*)\}", r34_css)
 _r34_pb = re.search(r"padding-bottom:\s*([^;]+);", _r34_body_block.group(1) if _r34_body_block else "")
 _r34_pb_val = " ".join((_r34_pb.group(1) if _r34_pb else "").split())
-check("R34: 底部留白 112px（底栏随字号变高了）—— 第 46 轮起在它之上再加安全区",
-      _r34_pb_val.startswith("calc(112px + env(safe-area-inset-bottom))"), _r34_pb_val)
+check("R34: 底部留白 100px（底栏高 100）—— 第 47 轮收窄后跟着降，安全区仍加在它上面",
+      _r34_pb_val.startswith("calc(100px + env(safe-area-inset-bottom))"), _r34_pb_val)
 check("R34: 锚点让开 64px 页头（scroll-margin 76px）",
       "scroll-margin-top: 76px" in r34_css)
 
@@ -2948,8 +2966,8 @@ check("R46: ...热区同样补到 45px（31.5 + 7 + 7）",
 _r46_body = re.search(r"(?m)^body\s*\{([^}]*)\}", css).group(1)
 _r46_pb = re.search(r"padding-bottom:\s*([^;]+);", _r46_body)
 _r46_pb_val = " ".join((_r46_pb.group(1) if _r46_pb else "").split())
-check("R46: 底部留白是「112px 加上手机的安全区」，不是二选一",
-      _r46_pb_val == "calc(112px + env(safe-area-inset-bottom))", _r46_pb_val)
+check("R46: 底部留白是「100px 加上手机的安全区」，不是二选一",
+      _r46_pb_val == "calc(100px + env(safe-area-inset-bottom))", _r46_pb_val)
 
 _r46_pc = re.search(r"@media \(prefers-contrast: more\)\s*\{([\s\S]*?)\n\}", css)
 _r46_pc_body = _r46_pc.group(1) if _r46_pc else ""
@@ -2977,6 +2995,45 @@ for _p in PAGES:
         if _b > _a + 1:
             _r46_skips.append((_p, "h%d -> h%d" % (_a, _b)))
 check("R46: 8 个页面里没有跳级的标题（h2 不会直接接 h4）", not _r46_skips, _r46_skips)
+
+
+print()
+print("R47) 字号跟随浏览器设置（px -> rem）+ 底部导航收窄")
+
+_r47_html = re.search(r"(?m)^html\s*\{([^}]*)\}", css)
+_r47_html_body = _r47_html.group(1) if _r47_html else ""
+_r47_html_fs = re.search(r"font-size:\s*([^;]+);", _r47_html_body)
+_r47_html_fs_val = (_r47_html_fs.group(1) if _r47_html_fs else "").strip()
+check("R47: html 的字号是 100%——rem 跟浏览器设置走，不是钉死的 px",
+      _r47_html_fs_val == "100%", _r47_html_fs_val or "html has no font-size")
+
+# 默认 16px 下，换单位之后每一档必须还是原来那个像素值（外观零变化）
+R47_EXPECT = {"xs": 13.0, "sm": 15.0, "base": 17.0, "md": 19.0, "lg": 22.0,
+              "xl": 26.0, "2xl": 29.0, "display": 38.0, "icon-xl": 42.0, "brand-sm": 43.0}
+_r47_off = dict((n, (_r32_px(r32_val.get(n)), v)) for n, v in R47_EXPECT.items()
+                if _r32_px(r32_val.get(n)) != v)
+check("R47: 十档字号在默认字号下像素值一个没变（换单位不是换设计）", not _r47_off, _r47_off)
+check("R47: 十档全部是 rem，没有一档偷偷留成 px",
+      all(_r32_is_rem(r32_val.get(n)) for n in R47_EXPECT),
+      dict((n, r32_val.get(n)) for n in R47_EXPECT if not _r32_is_rem(r32_val.get(n))))
+_r47_brand = " ".join((r32_val.get("brand") or "").split())
+check("R47: clamp 那档的两头也是 rem（中间留给 vw，宽度跟着屏幕）",
+      _r47_brand.startswith("clamp(2.5rem, 12vw, 4.625rem)") and "px" not in _r47_brand,
+      _r47_brand)
+
+_r47_ti_flat = " ".join(_a1_block(css, ".tabbar-inner").split())
+check("R47: 底栏内层上下内边距收到 6px",
+      "padding: 6px 12px calc(6px + env(safe-area-inset-bottom));" in _r47_ti_flat,
+      _r47_ti_flat[:110])
+_r47_item = " ".join(_a1_block(css, ".tabbar-item").split())
+check("R47: 底栏标签不再继承 1.7 的行高（那 9px 是显厚的真正原因）",
+      "line-height: 1.3" in _r47_item, _r47_item[:110])
+check("R47: 底栏中间那颗仍然是 56px（收窄的是边距，不是那颗按钮）",
+      "height: 56px" in _a1_block(css, ".tabbar-center .tabbar-icon"))
+check("R47: 正文留白跟着降到 100px，且安全区仍加在它上面",
+      _r46_pb_val == "calc(100px + env(safe-area-inset-bottom))", _r46_pb_val)
+_r47_px_fs = sorted(set(re.findall(r"font-size:\s*[0-9.]+px", css)))
+check("R47: 整份样式表里没有一处 font-size 用 px 兜底", not _r47_px_fs, _r47_px_fs)
 
 
 print()

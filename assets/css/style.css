@@ -110,21 +110,32 @@
      第 34 轮：整条阶梯往上移一档（正文 15.5 -> 17，每档 +1~3px），
      但**大标题拉得更开**（27 -> 38）。只整体放大是「缩放」，
      标题与正文的比例变大才是「更显眼」。档位数不变（11）。 */
-  --fs-xs:       13px;    /* 标签、时间戳、计数、底部导航文字 */
-  --fs-sm:       15px;    /* 小字正文：链接、按钮、FAQ 正文、评论 */
-  --fs-base:     17px;    /* 正文与帖子正文（body / .post-body） */
-  --fs-md:       19px;    /* 输入框、栏目标题、头像里的字 */
-  --fs-lg:       22px;    /* 菜单图标、弹窗标题、个人页昵称 */
-  --fs-xl:       26px;    /* 登录页大标题 */
-  --fs-2xl:      29px;    /* 底部导航中间那颗 */
-  --fs-display:  38px;    /* 首页大标题（宽窄屏都用它）、上传图标 */
-  --fs-icon-xl:  42px;    /* 头像、空状态的大图标 */
-  --fs-brand:    clamp(40px, 12vw, 74px);  /* 页脚品牌字（宽屏） */
-  --fs-brand-sm: 43px;    /* 页脚品牌字（窄屏） */
+  /* 第 47 轮：字阶单位从 px 换成 rem —— 浏览器里把「默认字号」调大的人，
+     整站的文字会跟着一起变大；px 写死的字号则不认这个设置。
+     换算按 16px = 1rem，括号里是它仍然是原来那个像素值（默认字号下零变化）。
+     vw 那一档留在中间：大标题的宽度仍然跟着屏幕走。 */
+  --fs-xs:       0.8125rem;   /* 13px：标签、时间戳、计数、底部导航文字 */
+  --fs-sm:       0.9375rem;   /* 15px：小字正文——链接、按钮、FAQ 正文、评论 */
+  --fs-base:     1.0625rem;   /* 17px：正文与帖子正文（body / .post-body） */
+  --fs-md:       1.1875rem;   /* 19px：输入框、栏目标题、头像里的字 */
+  --fs-lg:       1.375rem;    /* 22px：菜单图标、弹窗标题、个人页昵称 */
+  --fs-xl:       1.625rem;    /* 26px：登录页大标题 */
+  --fs-2xl:      1.8125rem;   /* 29px：底部导航中间那颗 */
+  --fs-display:  2.375rem;    /* 38px：首页大标题（宽窄屏都用它）、上传图标 */
+  --fs-icon-xl:  2.625rem;    /* 42px：头像、空状态的大图标 */
+  --fs-brand:    clamp(2.5rem, 12vw, 4.625rem);  /* 40-74px：页脚品牌字（宽屏） */
+  --fs-brand-sm: 2.6875rem;   /* 43px：页脚品牌字（窄屏） */
 }
 
 /* ------------------------------ 基础重置 ------------------------------ */
 * { box-sizing: border-box; }
+
+/* rem 的基准是这里。100% 就是「跟浏览器设置走」：
+   默认 16px；用户把默认字号调到 20px，1rem 就是 20px，全部字号一起放大。
+   这里一写死 px，上面那一整套 rem 就白换了。 */
+html {
+  font-size: 100%;
+}
 
 html, body {
   margin: 0;
@@ -157,9 +168,9 @@ body {
     linear-gradient(180deg, var(--sky-haze) 0%, rgba(251, 242, 227, 0) 58%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
-  /* 第 46 轮：112px 是底栏自己的高度，手机还有一条 home 横条要躲 ——
-     坐实的那 112px 一分不少，安全区是加在它下面的。 */
-  padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  /* 底栏自己的高度（第 47 轮收窄到 100px），手机还有一条 home 横条要躲 ——
+     坐实的那 100px 一分不少，安全区是加在它下面的。 */
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
 /* 第 36 轮：视口底部那道远景 —— 一层远山、一层草坡、坡上几棵松树，天上三只鸟。
@@ -1264,7 +1275,8 @@ input[type="file"] { display: none; }
   display: flex;
   align-items: flex-end;
   justify-content: space-around;
-  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  /* 第 47 轮：上下 8 -> 6。底栏是常驻的一条，多出来的 4px 一直压在内容上。 */
+  padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
   /* 第 39 轮：底部导航也走渐变 —— 上面稍微透一点（能看到远山的雾），底部压深，
      像一条从画面里浮起来、又沉下去的边，而不是一块黑塑料。 */
   background: linear-gradient(180deg, rgba(52, 36, 21, 0.90) 0%, rgba(34, 23, 13, 0.96) 100%);
@@ -1279,6 +1291,9 @@ input[type="file"] { display: none; }
   align-items: center;
   gap: 2px;
   padding: 6px 2px;
+  /* 第 47 轮：标签原来继承 body 的 1.7，13px 的字占 22.1px 高，
+     上下各白 4.5px —— 那 9px 是底栏显厚的真正原因。1.3 只留 2px 呼吸。 */
+  line-height: 1.3;
   border-radius: var(--radius-sm);
   color: rgba(255, 246, 236, 0.62);
   font-size: var(--fs-xs);
