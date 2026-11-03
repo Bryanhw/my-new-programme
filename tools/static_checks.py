@@ -2766,6 +2766,75 @@ check("R43: .card 与 .empty 统一为纸片（无 border、--shadow-sm、同一
       not _r43_bad, (_r43_bad, {k: v[:70] for k, v in _r43_cards.items()}))
 
 print()
+print("R44) another way in: screen readers hear it, keyboards skip it, forced colours keep the edge")
+
+# ---- 提示条：四种类型不能再只靠底色说话 ----
+_r44_notice_bad = []
+for _p in PAGES:
+    _t = read(os.path.join(ROOT, _p))
+    _m = re.search(r'<div class="notice notice-info[^"]*" id="notice"([^>]*)>', _t)
+    _attr = _m.group(1) if _m else ""
+    if not (_m and 'role="status"' in _attr and 'aria-live="polite"' in _attr
+            and 'aria-atomic="true"' in _attr):
+        _r44_notice_bad.append(_p)
+check("R44: every page's #notice is a live region (status / polite / atomic)",
+      not _r44_notice_bad, _r44_notice_bad)
+
+_r44_app = sources.get("app.js", "")
+_r44_leads = re.search(r"NOTICE_LEAD\s*=\s*\{([^}]*)\}", _r44_app)
+_r44_lead_body = _r44_leads.group(1) if _r44_leads else ""
+check("R44: notice types carry a hidden text prefix, not colour alone",
+      all((k + ":") in _r44_lead_body for k in ("info", "ok", "warn", "error"))
+      and _r44_lead_body.count("\uff1a") == 4
+      and "visually-hidden" in _r44_app
+      and "el.textContent = text" not in _r44_app,
+      (_r44_lead_body.strip()[:80],))
+
+_r44_vh = re.sub(r"\s+", " ", _r43_block(".visually-hidden"))
+check("R44: .visually-hidden is a 1px clip (no layout, no scrollbar)",
+      "position: absolute" in _r44_vh and "width: 1px" in _r44_vh
+      and "height: 1px" in _r44_vh and "clip-path: inset(50%)" in _r44_vh
+      and "overflow: hidden" in _r44_vh,
+      _r44_vh[:80])
+
+# ---- skip link：第一个 Tab 就能离开页头 ----
+_r44_skip_bad = []
+for _p in PAGES:
+    _t = read(os.path.join(ROOT, _p))
+    _first = re.search(r"<body>\s*\n\s*(<[^>]+>)", _t)
+    if not (_first and 'class="skip-link"' in _first.group(1)
+            and 'href="#main"' in _first.group(1)):
+        _r44_skip_bad.append(_p)
+check("R44: skip link is the first element in <body> and points at #main",
+      not _r44_skip_bad, _r44_skip_bad)
+
+_r44_main_bad = []
+for _p in PAGES:
+    _t = read(os.path.join(ROOT, _p))
+    _m = re.search(r"<main([^>]*)>", _t)
+    _attr = _m.group(1) if _m else ""
+    if not (_m and 'id="main"' in _attr and 'tabindex="-1"' in _attr):
+        _r44_main_bad.append(_p)
+check("R44: <main> can receive focus on all eight pages (id + tabindex=-1)",
+      not _r44_main_bad, _r44_main_bad)
+
+_r44_sl = re.sub(r"\s+", " ", _r43_block(".skip-link"))
+check("R44: skip link stays off-screen until focused",
+      "position: fixed" in _r44_sl and "transform: translateY(-240%)" in _r44_sl
+      and re.search(r"\.skip-link:focus\s*\{\s*transform: translateY\(0\)", css) is not None
+      and re.search(r"main:focus\s*\{\s*outline:\s*none;\s*\}", css) is not None,
+      _r44_sl[:90])
+
+# ---- 强制色模式：box-shadow 会被丢掉，纸片得靠真边框 ----
+_r44_fc = re.search(r"@media \(forced-colors: active\)\s*\{([\s\S]*?)\n\}", css)
+_r44_fc_body = _r44_fc.group(1) if _r44_fc else ""
+check("R44: forced-colors adds a CanvasText border to cards and the skip link",
+      ".card," in _r44_fc_body and ".empty," in _r44_fc_body
+      and ".skip-link" in _r44_fc_body
+      and "border: 1px solid CanvasText" in _r44_fc_body,
+      _r44_fc_body.strip()[:100])
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)

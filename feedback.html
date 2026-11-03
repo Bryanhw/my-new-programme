@@ -28,9 +28,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>意见反馈 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=50dd54f9">
+<link rel="stylesheet" href="assets/css/style.css?v=925df2c7">
 </head>
 <body>
+
+<a class="skip-link" href="#main">跳到主要内容</a>
 
 <header class="site-header">
   <div class="wrap">
@@ -85,9 +87,9 @@
   </div>
 </header>
 
-<main class="wrap">
+<main class="wrap" id="main" tabindex="-1">
 
-  <div class="notice notice-info mt-16" id="notice" hidden></div>
+  <div class="notice notice-info mt-16" id="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
   <p class="text-sm on-gold" style="padding:16px 0 4px">
     不用登录，也不用先匿名进入 —— 直接写就行。<br>
@@ -167,7 +169,7 @@
 
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/app.js?v=8f30d03d"></script>
+<script src="assets/js/app.js?v=b9ada8d0"></script>
 <script src="assets/js/feedback.js?v=5e230d42"></script>
 </body>
 </html>

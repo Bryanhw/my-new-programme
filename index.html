@@ -28,9 +28,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>校园拾光 · 分享今天的日常</title>
-<link rel="stylesheet" href="assets/css/style.css?v=50dd54f9">
+<link rel="stylesheet" href="assets/css/style.css?v=925df2c7">
 </head>
 <body>
+
+<a class="skip-link" href="#main">跳到主要内容</a>
 
 <header class="site-header">
   <div class="wrap">
@@ -85,7 +87,7 @@
   </div>
 </header>
 
-<main class="wrap">
+<main class="wrap" id="main" tabindex="-1">
 
   <section class="hero">
     <img class="hero-gate" src="assets/img/school-gate.png" width="779" height="466"
@@ -115,7 +117,7 @@
     <figcaption>图书馆的下午，光刚好落在书架和沙发上</figcaption>
   </figure>
 
-  <div class="notice notice-info" id="notice" hidden></div>
+  <div class="notice notice-info" id="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
   <section class="section" id="circle-section" hidden>
     <div class="section-head">
@@ -191,7 +193,7 @@
 <script src="assets/js/campuses.js?v=43cddca3"></script>
 <script src="assets/js/circles.js?v=f6e3aaf5"></script>
 <script src="assets/js/hotwords.js?v=631fd476"></script>
-<script src="assets/js/app.js?v=8f30d03d"></script>
+<script src="assets/js/app.js?v=b9ada8d0"></script>
 <script src="assets/js/home.js?v=9ea6312a"></script>
 </body>
 </html>

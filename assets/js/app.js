@@ -2528,12 +2528,20 @@ window.Campus = (function () {
     return html;
   }
 
+  /** 提示条的类型前缀：四种提示原先只靠底色区分，读屏听不出"这是提醒还是报错" */
+  var NOTICE_LEAD = { info: "提示：", ok: "好了：", warn: "注意：", error: "没成功：" };
+
   /** 表单/页面提示条 */
   function showNotice(el, type, text) {
     if (!el) return;
+    var kind = type || "info";
     el.hidden = false;
-    el.className = "notice notice-" + (type || "info");
-    el.textContent = text;
+    el.className = "notice notice-" + kind;
+    // 第 44 轮：先塞一段看不见的类型前缀，再放正文。视觉零变化，读屏能听见"没成功："。
+    // 用 innerHTML 而不是 createElement：测试环境的假 DOM 只实现了 innerHTML。
+    el.innerHTML = '<span class="visually-hidden">'
+      + escapeHtml(NOTICE_LEAD[kind] || NOTICE_LEAD.info) + "</span>"
+      + escapeHtml(String(text));
   }
 
   function hideNotice(el) {

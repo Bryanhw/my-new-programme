@@ -28,9 +28,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>重设密码 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=50dd54f9">
+<link rel="stylesheet" href="assets/css/style.css?v=925df2c7">
 </head>
 <body>
+
+<a class="skip-link" href="#main">跳到主要内容</a>
 
 <header class="site-header">
   <div class="wrap">
@@ -77,9 +79,9 @@
   </div>
 </header>
 
-<main class="wrap" style="max-width:520px">
+<main class="wrap" id="main" tabindex="-1" style="max-width:520px">
 
-  <div class="notice notice-info mt-24" id="notice" hidden></div>
+  <div class="notice notice-info mt-24" id="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
   <div class="auth-card mt-16">
     <div class="auth-head">
@@ -149,7 +151,7 @@
 
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/app.js?v=8f30d03d"></script>
+<script src="assets/js/app.js?v=b9ada8d0"></script>
 <script src="assets/js/reset.js?v=778337a6"></script>
 </body>
 </html>

@@ -217,6 +217,29 @@ button, input, textarea, select {
   padding: 0 18px;
 }
 
+/* --------------------- 第 44 轮：跳过页头 --------------------- */
+/* 键盘和读屏用户第一个 Tab 原本落在品牌、身份、登录、菜单上，要按五六次才进正文。
+   这个链接平时停在屏幕上方外面，聚焦时滑下来；激活后焦点直接落到 <main>，
+   不是只把页面滚过去（GOV.UK 的 skip link 就是这么要求的）。 */
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: #FFF6EF;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow-md);
+  transform: translateY(-240%);
+}
+.skip-link:focus { transform: translateY(0); }
+/* 焦点已经在正文上，再画一圈焦点环是多余的（和 GOV.UK 一样处理） */
+main:focus { outline: none; }
+
 /* ------------------------------ 页头 ------------------------------ */
 .site-header {
   position: sticky;
@@ -1140,6 +1163,19 @@ input[type="file"] { display: none; }
 .notice-error { background: #FFEFEF; color: #C0392B; border: 1px solid #FFD6D6; }
 .notice-ok    { background: #EFFAF0; color: #2E7D42; border: 1px solid #CFEFD6; }
 .notice[hidden] { display: none; }
+
+/* 只给读屏看的文字：视觉上不占位，但会被播报（提示条的类型前缀专用） */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* ------------------------------ 空状态 / 骨架 ------------------------------ */
 /* 空状态直接落在金色画布上，所以用一层奶油底把它托起来 */
@@ -2378,4 +2414,17 @@ body.modal-open { overflow: hidden; }
   color: rgba(59, 42, 27, 0.72);
   vertical-align: 1px;
   user-select: none;
+}
+
+/* --------------------- 第 44 轮：强制色模式兜底 --------------------- */
+/* Windows 高对比模式会整个丢掉 box-shadow —— 第 43 轮刚把 .card / .empty 的边框撤成阴影，
+   那种环境下纸片和画布之间就没有边了。所以只在那一个环境把边框补回来，常态仍是零边框；
+   第 43 轮「卡片只有一种语法」在普通渲染里一个字没变。
+   skip link 同理：深色底在强制色下会被压成 Canvas，需要一条描边才看得出是个按钮。 */
+@media (forced-colors: active) {
+  .card,
+  .empty,
+  .skip-link {
+    border: 1px solid CanvasText;
+  }
 }

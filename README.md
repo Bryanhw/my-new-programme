@@ -440,7 +440,7 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），1018 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），1025 项
 python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），887 项
 ```
 
@@ -961,6 +961,41 @@ python tools\make_icons.py --check    # 只校验（CI 也靠它）
 护栏 1000 → **1005**（+5），故意破坏自测 **6/6** 全红（右上那束光没了、一束光加浓成色块、
 一束光偏冷发蓝、页头退回纯 rgba、底栏改成上深下亮、页头两端金拼绿），还原逐字节一致。
 运行测试 **887/0** 不变；零新图、零外部请求、零动画（所以不碰 `prefers-reduced-motion`）。
+
+### 换一种方式用：读屏能听见、键盘能跳过、高对比下纸片还有边
+
+前三轮都在调「看见的人觉得怎样」。这一轮换三个视角，服务的是同一批人：**不靠鼠标、不靠颜色、
+开着高对比模式**在用这个站。三处都只动语义层，普通渲染下一个像素没变。
+
+**一、提示条能被念出来。** `.notice` 四种类型（提示 / 好了 / 注意 / 没成功）原先只靠底色区分，
+`#notice` 也没有 `role` / `aria-live` —— 登录密码错、手机号格式错、图片超 5MB 的时候，
+读屏用户只觉得自己按了没反应。现在八个页面的 `#notice` 都是
+`role="status" aria-live="polite" aria-atomic="true"`，`showNotice()` 会在正文前塞一段
+`.visually-hidden` 的类型前缀（「注意：」「没成功：」…）—— **颜色只说给看得见的人听，
+文字说给所有人听**。94 处调用一处没改，全在这一个函数里生效。
+
+**二、第一个 Tab 就能离开页头。** 八个页面的 `<body>` 第一个元素现在是
+`<a class="skip-link" href="#main">跳到主要内容</a>`，平时停在屏幕上方外面，聚焦才滑下来；
+`<main>` 带 `id="main"` 与 `tabindex="-1"`，激活后焦点真的落进正文 ——
+只滚动不放焦点是半套做法（GOV.UK 的 skip link 文档里专门写了这一条）。
+
+**三、高对比模式下纸片还有边。** Windows 强制色模式会**整个丢掉 `box-shadow`** —— 上一轮
+刚把 `.card` / `.empty` 的边框撤成阴影，那种环境下纸片和画布之间就没有边了。
+`@media (forced-colors: active)` 里只在那一个环境补回 `1px solid CanvasText`，
+常态仍是零边框，「卡片只有一种语法」在普通渲染里一个字没变。
+
+顺手修了一件测试基础设施的事：`tools/stub.js` 里 `innerHTML` 和 `textContent` 原本是两个
+互不相干的字段，于是「用 `innerHTML` 写入的提示条」读 `textContent` 永远是空，看着像没写进去。
+现在按真浏览器对齐（写 `innerHTML`，`textContent` 就是去标签后的纯文本）。
+
+护栏 1018 → **1025**（+7）：八个页面的 live region、四种类型的中文前缀、`.visually-hidden`
+的 1px 裁剪、skip link 是 body 第一个元素、八个 `<main>` 都能聚焦、skip link 平时在屏外、
+`forced-colors` 的边框。故意破坏自测 **7/7** 全红、还原逐字节一致；运行测试 **887/0** 不变；
+零新依赖、零新图、零外部请求。
+
+**站主可微调**：skip link 的位置就是 `.skip-link` 的 `top` / `left`；想让它更醒目就改
+`background` / `font-weight`，但别删 `transform: translateY(-240%)` —— 那是「平时看不见」的那一半。
+提示条前缀的措辞在 `app.js` 的 `NOTICE_LEAD` 里，四个词随便换，只要还是四个。
 
 ### 纸有颗粒了：小字不再发灰、纸片只剩一种语法
 

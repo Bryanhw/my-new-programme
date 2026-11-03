@@ -99,12 +99,27 @@ function __cls(el) {
   };
 }
 
+/* 第 44 轮：真浏览器里 innerHTML 与 textContent 是同一条内容的两副面孔 ——
+   写 innerHTML，textContent 就变成去掉标签的纯文本。测试替身原先把它俩当成
+   互不相干的字段，于是「用 innerHTML 写入的提示条」读 textContent 永远是空，
+   看上去像提示没写进去。这里按真浏览器的行为对齐。 */
+function __plainText(html) {
+  return String(html)
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
 function __el(id) {
   var el = {
     id: id,
     tagName: 'DIV',
-    innerHTML: '',
-    textContent: '',
+    _html: '',
+    _text: '',
     value: '',
     hidden: false,
     className: '',
@@ -118,6 +133,19 @@ function __el(id) {
     _attrs: {}
   };
   el.classList = __cls(el);
+
+  Object.defineProperty(el, 'innerHTML', {
+    get: function () { return el._html; },
+    set: function (v) { el._html = String(v); el._text = __plainText(el._html); },
+    enumerable: true,
+    configurable: true
+  });
+  Object.defineProperty(el, 'textContent', {
+    get: function () { return el._text; },
+    set: function (v) { el._text = String(v); },
+    enumerable: true,
+    configurable: true
+  });
 
   el.addEventListener = function (t, fn) { (el._h[t] = el._h[t] || []).push(fn); };
   el.removeEventListener = function () {};
