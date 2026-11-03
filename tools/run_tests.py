@@ -3609,6 +3609,89 @@ check("...the last 10 of that circle arrive, and nothing outside sneaks in",
 
 print()
 print("=" * 70)
+print("SCENARIO K - the keyboard: ? opens the sheet, g then a letter goes places")
+print("=" * 70)
+
+it = load("index.html", "mock-logged")
+_created0 = js(it, "__created.length")
+check("loading the home page builds no sheet", _created0 == 0, _created0)
+check("the hint under the buttons is revealed once the keys are wired",
+      js(it, "document.getElementById('keys-hint').hidden") is False)
+
+# g 后面接一个不听招呼的键：什么都不该发生
+js(it, "__docEmit('keydown', { key: 'g', target: document.body })")
+js(it, "__docEmit('keydown', { key: 'z', target: document.body })")
+check("g then a letter nobody claimed goes nowhere",
+      js(it, "String(window.location.href)") == "", js(it, "String(window.location.href)"))
+
+print("- pressing ?")
+js(it, "__docEmit('keydown', { key: '?', target: document.body })")
+check("? opens the sheet", js(it, "document.getElementById('keys-modal').hidden") is False)
+_created1 = js(it, "__created.length")
+check("...and it is built exactly then, not at load", _created1 - _created0 == 1,
+      (_created0, _created1))
+_panel = js(it, "document.getElementById('keys-modal').innerHTML")
+check("the sheet spells out the dialog it is",
+      'role="dialog"' in _panel and 'aria-modal="true"' in _panel
+      and 'aria-labelledby="keys-title"' in _panel, _panel[:80])
+check("every row of the table is on it, keys and all",
+      _panel.count("<kbd>") == 12 and _panel.count("<li>") == 8,
+      (_panel.count("<kbd>"), _panel.count("<li>")))
+check("the page stops scrolling behind it",
+      js(it, "document.body.classList.contains('modal-open')") is True)
+check("the close button says what it does",
+      'id="keys-close"' in _panel and "知道了" in _panel)
+
+js(it, "__docEmit('keydown', { key: '?', target: document.body })")
+check("? again puts it away", js(it, "document.getElementById('keys-modal').hidden") is True)
+check("...and the page can scroll again",
+      js(it, "document.body.classList.contains('modal-open')") is False)
+
+js(it, "__docEmit('keydown', { key: '?', target: document.body })")
+js(it, "__docEmit('keydown', { key: 'Escape', target: document.body })")
+check("Esc closes it too", js(it, "document.getElementById('keys-modal').hidden") is True)
+check("reopening reuses the same node instead of stacking copies",
+      js(it, "__created.length") - _created0 == 1, js(it, "__created.length"))
+
+print("- g then f")
+js(it, "__docEmit('keydown', { key: 'g', target: document.body })")
+js(it, "__docEmit('keydown', { key: 'f', target: document.body })")
+check("g then f goes to the feed", js(it, "String(window.location.href)") == "feed.html",
+      js(it, "String(window.location.href)"))
+
+print("- the keys that must not be stolen")
+it = load("index.html", "mock-logged")
+js(it, "__docEmit('keydown', { key: '?', target: { tagName: 'INPUT' } })")
+check("? typed into a box is just a question mark",
+      js(it, "__created.length") == 0, js(it, "__created.length"))
+
+it = load("index.html", "mock-logged")
+js(it, "__docEmit('keydown', { key: 'g', target: { tagName: 'TEXTAREA', isContentEditable: false } })")
+js(it, "__docEmit('keydown', { key: 'f', target: { tagName: 'TEXTAREA', isContentEditable: false } })")
+check("g then f typed into a textarea stays in the textarea",
+      js(it, "String(window.location.href)") == "", js(it, "String(window.location.href)"))
+
+it = load("index.html", "mock-logged")
+js(it, "__docEmit('keydown', { key: '?', target: document.body, ctrlKey: true })")
+check("Ctrl+? belongs to the browser", js(it, "__created.length") == 0)
+
+_it_k = load("index.html", "mock-logged")
+check("typing targets are recognised, plain text is not",
+      js(_it_k, "Campus.isTypingTarget({ tagName: 'input' })") is True
+      and js(_it_k, "Campus.isTypingTarget({ tagName: 'SELECT' })") is True
+      and js(_it_k, "Campus.isTypingTarget({ tagName: 'BUTTON', isContentEditable: true })") is True
+      and js(_it_k, "Campus.isTypingTarget({ tagName: 'DIV' })") is False
+      and js(_it_k, "Campus.isTypingTarget(null)") is False)
+
+print("- the hint is clickable too")
+it = load("index.html", "mock-logged")
+js(it, "document.getElementById('keys-open').click()")
+check("clicking the hint opens the same sheet",
+      js(it, "document.getElementById('keys-modal').hidden") is False)
+
+
+print()
+print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 print("=" * 70)
 for f in failures:

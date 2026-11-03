@@ -2835,6 +2835,93 @@ check("R44: forced-colors adds a CanvasText border to cards and the skip link",
       _r44_fc_body.strip()[:100])
 
 print()
+print("R45) a shortcut sheet on the home page: one table feeds both the keys and the card")
+
+_r45_idx = read(os.path.join(ROOT, "index.html"))
+_r45_hint = re.search(r'<p class="keys-hint" id="keys-hint"([^>]*)>(.*?)</p>', _r45_idx, re.S)
+_r45_hint_attr = _r45_hint.group(1) if _r45_hint else ""
+_r45_hint_body = _r45_hint.group(2) if _r45_hint else ""
+check("R45: the home page carries one hint, and it stays hidden until the keys are wired",
+      bool(_r45_hint) and "hidden" in _r45_hint_attr
+      and 'id="keys-open"' in _r45_hint_body
+      and 'type="button"' in _r45_hint_body
+      and "<kbd>" in _r45_hint_body,
+      _r45_hint.group(0)[:120] if _r45_hint else "no hint on the home page")
+
+_r45_elsewhere = [p for p in PAGES
+                  if p != "index.html" and 'id="keys-hint"' in read(os.path.join(ROOT, p))]
+check("R45: that hint is the home page's own - the other pages do not get a copy",
+      not _r45_elsewhere, _r45_elsewhere)
+
+_r45_app = sources.get("app.js", "")
+_r45_rows = re.search(r"SHORTCUT_ROWS\s*=\s*\[([\s\S]*?)\n  \];", _r45_app)
+_r45_rows_body = _r45_rows.group(1) if _r45_rows else ""
+_r45_go = re.search(r"SHORTCUT_GO\s*=\s*\{([^}]*)\}", _r45_app)
+_r45_go_body = _r45_go.group(1) if _r45_go else ""
+_r45_go_keys = sorted(re.findall(r'(\w+):\s*"[\w.\-/]+"', _r45_go_body))
+check("R45: one table, eight rows, and the g-prefix reaches exactly h/f/p/q",
+      len(re.findall(r"keys:\s*\[", _r45_rows_body)) == 8
+      and _r45_go_keys == ["f", "h", "p", "q"]
+      and all(('["g", "%s"]' % k) in _r45_rows_body for k in ("h", "f", "p", "q")),
+      (len(re.findall(r"keys:\s*\[", _r45_rows_body)), _r45_go_keys))
+
+check("R45: the sheet is announced as a dialog, by name",
+      '<div class="modal keys-modal" role="dialog" aria-modal="true" ' in _r45_app
+      and 'aria-labelledby="keys-title"' in _r45_app
+      and 'id="keys-title"' in _r45_app
+      and '<button class="btn btn-primary" type="button" id="keys-close">' in _r45_app,
+      "")
+
+_r45_typing = re.search(r"function isTypingTarget\(t\)\s*\{([\s\S]*?)\n  \}", _r45_app)
+_r45_typing_body = _r45_typing.group(1) if _r45_typing else ""
+check("R45: typing wins - inputs, textareas, selects and editable areas opt out",
+      all(k in _r45_typing_body for k in ('"INPUT"', '"TEXTAREA"', '"SELECT"', "isContentEditable"))
+      and "isTypingTarget(e.target)" in _r45_app,
+      _r45_typing_body.strip()[:100])
+
+check("R45: no browser or system chord is ever stolen",
+      "e.ctrlKey || e.altKey || e.metaKey" in _r45_app,
+      "")
+
+_r45_setup = re.search(r"function setupShortcuts\(\)\s*\{([\s\S]*?)\n  \}", _r45_app)
+_r45_setup_body = _r45_setup.group(1) if _r45_setup else ""
+check("R45: nothing is built until it is asked for, and the hint waits for the binding",
+      "appendChild" not in _r45_setup_body
+      and "addEventListener" in _r45_setup_body
+      and "hint.hidden = false" in _r45_setup_body
+      and _r45_setup_body.index('document.addEventListener("keydown", shortcutOnKey)')
+      < _r45_setup_body.index("hint.hidden = false"),
+      _r45_setup_body.strip()[:120])
+
+check("R45: closing hands focus back, and the page scrolls again",
+      "keysReturnFocus" in _r45_app and "back.focus()" in _r45_app
+      and "document.body.classList.remove(\"modal-open\")" in _r45_app
+      and "document.body.classList.add(\"modal-open\")" in _r45_app,
+      "")
+
+_r45_kbd = re.sub(r"\s+", " ", _r43_block("kbd"))
+check("R45: a key is drawn as a little paper cap, shadow from a token",
+      "border: 1px solid" in _r45_kbd
+      and "box-shadow: var(--shadow-key)" in _r45_kbd
+      and "font-size: var(--fs-xs)" in _r45_kbd,
+      _r45_kbd[:110])
+
+_r45_list = re.sub(r"\s+", " ", _r43_block(".keys-list"))
+check("R45: the sheet's list drops the bullets and stacks its rows",
+      "list-style: none" in _r45_list and "flex-direction: column" in _r45_list,
+      _r45_list[:90])
+
+check("R45: the hint is a real control - pointer, ring on focus, nothing pinned yet",
+      re.search(r"\.keys-hint-btn\s*\{[^}]*cursor: pointer", css) is not None
+      and re.search(r"\.keys-hint-btn:focus-visible\s*\{[^}]*var\(--ring-focus\)", css) is not None,
+      "")
+
+_r45_html = sorted(f for f in os.listdir(ROOT) if f.endswith(".html"))
+check("R45: no new page was added for this",
+      _r45_html == sorted(PAGES), _r45_html)
+
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)

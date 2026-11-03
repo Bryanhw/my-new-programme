@@ -46,6 +46,8 @@
   --shadow-sm: 0 4px 14px rgba(59, 42, 27, 0.10);
   --shadow-md: 0 10px 30px rgba(59, 42, 27, 0.15);
   --shadow-lg: 0 18px 48px rgba(59, 42, 27, 0.22);
+  /* 键帽底下那道硬边：不是抬升，是「这块可以按下去」的一点厚度 */
+  --shadow-key: 0 1px 0 rgba(59, 42, 27, 0.14);
 
   /* 阴影按用途取（第 33 轮收敛）。收敛前：34 处声明、25 种值、22 种只出现过一次，
      而且把三类完全不同的东西混在同一个属性里 —— 抬升、焦点环、彩色辉光。
@@ -1527,6 +1529,83 @@ input[type="file"] { display: none; }
 }
 .btn.is-loading { opacity: 0.72; cursor: progress; }
 .btn.is-loading .icon-refresh { animation: spin 0.8s linear infinite; }
+
+/* ------------------------------ 键盘快捷键 ------------------------------ */
+/* 首页那一行提示：低调、可点 —— 触屏用户看不见键帽，但能点开同一份说明。
+   默认藏起来，由 app.js 在确认快捷键真的绑上了再露出来（见 #keys-hint[hidden]）。 */
+.keys-hint {
+  margin: 14px auto 0;
+  text-align: center;
+}
+
+.keys-hint-btn {
+  display: inline-block;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 253, 251, 0.72);
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.keys-hint-btn:hover { background: rgba(255, 253, 251, 0.96); color: var(--ink); }
+.keys-hint-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+}
+
+/* 键帽：一张小纸片，和站里别的「实物」同一种做法（细边 + 底下一道浅影） */
+kbd {
+  display: inline-block;
+  min-width: 21px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(59, 42, 27, 0.18);
+  background: #FFFDFB;
+  box-shadow: var(--shadow-key);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+/* 说明弹窗：外壳复用 .modal-backdrop / .modal，这里只补那张两列表 */
+.keys-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 2px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.keys-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.keys-list li:last-child { border-bottom: 0; }
+.keys-combo {
+  flex: 0 0 104px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.keys-then {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+.keys-what {
+  flex: 1;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--text);
+}
 
 /* ------------------------------ 发帖昵称弹窗 ------------------------------ */
 .modal-backdrop {

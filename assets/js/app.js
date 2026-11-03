@@ -2946,6 +2946,179 @@ window.Campus = (function () {
   }
 
   /* ------------------------------------------------------------------
+   * 10.5 键盘快捷键
+   *   这个站是「浏览器里的一张纸」，不该只有鼠标能用。一张表同时喂给
+   *   绑定逻辑和弹窗里的说明，所以说明和实现不会写着写着对不上。
+   * ------------------------------------------------------------------ */
+
+  /* g 开头的两键组合：h 回首页 / f 广场 / p 发布 / q 常见问题 */
+  var SHORTCUT_GO = {
+    h: "index.html",
+    f: "feed.html",
+    p: "post.html",
+    q: "faq.html"
+  };
+
+  var SHORTCUT_ROWS = [
+    { keys: ["?"], label: "打开 / 关掉这份说明" },
+    { keys: ["Esc"], label: "关掉弹窗、菜单，或这份说明" },
+    { keys: ["g", "h"], label: "回首页" },
+    { keys: ["g", "f"], label: "去内容广场" },
+    { keys: ["g", "p"], label: "去发布" },
+    { keys: ["g", "q"], label: "去常见问题" },
+    { keys: ["Tab"], label: "在能点的地方之间一个个走" },
+    { keys: ["Enter"], label: "打开聚焦的那一项" }
+  ];
+
+  var GO_WINDOW = 1500;   // 「g 然后 x」的间隔上限（毫秒）
+
+  var keysWrap = null;
+  var keysReturnFocus = null;
+  var goPending = "";
+  var goPendingAt = 0;
+
+  /** 正在往输入框 / 可编辑区域里写字时，快捷键一律让路 */
+  function isTypingTarget(t) {
+    if (!t) return false;
+    var tag = String(t.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    return !!t.isContentEditable;
+  }
+
+  function keysHelpHtml() {
+    var rows = "";
+    for (var i = 0; i < SHORTCUT_ROWS.length; i++) {
+      var row = SHORTCUT_ROWS[i];
+      var combo = "";
+      for (var j = 0; j < row.keys.length; j++) {
+        if (j > 0) combo += '<span class="keys-then">然后</span>';
+        combo += "<kbd>" + escapeHtml(row.keys[j]) + "</kbd>";
+      }
+      rows += "<li>" +
+                '<span class="keys-combo">' + combo + "</span>" +
+                '<span class="keys-what">' + escapeHtml(row.label) + "</span>" +
+              "</li>";
+    }
+    return "" +
+      '<div class="modal keys-modal" role="dialog" aria-modal="true" ' +
+           'aria-labelledby="keys-title">' +
+        '<h2 class="modal-title" id="keys-title">键盘上也能用</h2>' +
+        '<p class="modal-text">写在输入框里的字不受影响 —— 正在打字时这些键都不抢。</p>' +
+        '<ul class="keys-list">' + rows + "</ul>" +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-primary" type="button" id="keys-close">知道了</button>' +
+        "</div>" +
+      "</div>";
+  }
+
+  /** 第一次按 ? 才把说明建出来（和举报弹窗一样：没人用就一个节点都不建） */
+  function ensureKeysHelp() {
+    if (keysWrap) return keysWrap;
+    if (!document.body) return null;
+
+    var wrap = document.createElement("div");
+    wrap.className = "modal-backdrop";
+    wrap.id = "keys-modal";
+    wrap.hidden = true;
+    wrap.innerHTML = keysHelpHtml();
+    document.body.appendChild(wrap);
+    keysWrap = wrap;
+
+    wrap.addEventListener("click", function (e) {
+      var el = e.target;
+      var close = el && el.closest ? el.closest("#keys-close") : null;
+      if (close || el === wrap) closeKeysHelp();
+    });
+
+    return wrap;
+  }
+
+  function closeKeysHelp() {
+    if (!keysWrap || keysWrap.hidden) return false;
+    keysWrap.hidden = true;
+    if (document.body) document.body.classList.remove("modal-open");
+    var back = keysReturnFocus;
+    keysReturnFocus = null;
+    // 关掉之后把焦点还回打开前的位置，不然键盘用户会被丢回页面开头
+    if (back && back.focus) {
+      try { back.focus(); } catch (err) { /* 那个元素已经不在了 */ }
+    }
+    return true;
+  }
+
+  function openKeysHelp(opener) {
+    var wrap = ensureKeysHelp();
+    if (!wrap) return false;
+    keysReturnFocus = opener || null;
+    wrap.hidden = false;
+    if (document.body) document.body.classList.add("modal-open");
+    var close = document.getElementById("keys-close");
+    if (close && close.focus) {
+      try { close.focus(); } catch (err) { /* 同上 */ }
+    }
+    return true;
+  }
+
+  function toggleKeysHelp(opener) {
+    if (closeKeysHelp()) return false;      // 已经开着 → 收起来
+    return openKeysHelp(opener || null);
+  }
+
+  function shortcutOnKey(e) {
+    if (!e) return;
+    var key = String(e.key || "");
+    if (!key) return;
+
+    // 带修饰键的一律不抢：Ctrl+F、Cmd+P 这些是浏览器和系统自己的
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+    if (key === "Escape" || key === "Esc") {
+      if (keysWrap && !keysWrap.hidden) closeKeysHelp();
+      return;                               // 别的 Esc 由各自的弹窗自己处理
+    }
+
+    if (isTypingTarget(e.target)) { goPending = ""; return; }
+
+    if (key === "?") {
+      if (e.preventDefault) e.preventDefault();
+      toggleKeysHelp(e.target || null);
+      return;
+    }
+
+    var now = Date.now();
+    if (goPending === "g") {
+      goPending = "";
+      var dest = SHORTCUT_GO[String(key).toLowerCase()];
+      if (dest && now - goPendingAt <= GO_WINDOW) {
+        if (e.preventDefault) e.preventDefault();
+        window.location.href = dest;
+      }
+      return;
+    }
+
+    if (String(key).toLowerCase() === "g") {
+      goPending = "g";
+      goPendingAt = now;
+    }
+  }
+
+  /** 真的绑上了，才把首页那行提示露出来 —— 不摆一个按了没反应的入口 */
+  function setupShortcuts() {
+    if (!document.addEventListener) return;
+    document.addEventListener("keydown", shortcutOnKey);
+
+    var hint = document.getElementById("keys-hint");
+    if (hint) hint.hidden = false;
+
+    var opener = document.getElementById("keys-open");
+    if (opener && opener.addEventListener) {
+      opener.addEventListener("click", function () { toggleKeysHelp(opener); });
+    }
+  }
+
+  setupShortcuts();
+
+  /* ------------------------------------------------------------------
    * 11. 导出
    * ------------------------------------------------------------------ */
   return {
@@ -3079,6 +3252,14 @@ window.Campus = (function () {
     setupCard: setupCard,
     setupHint: setupHint,
     debounce: debounce,
+
+    // 键盘快捷键：一张表同时喂给绑定逻辑和说明弹窗（导出是为了能单独自测）
+    SHORTCUT_GO: SHORTCUT_GO,
+    SHORTCUT_ROWS: SHORTCUT_ROWS,
+    isTypingTarget: isTypingTarget,
+    openKeysHelp: openKeysHelp,
+    closeKeysHelp: closeKeysHelp,
+    toggleKeysHelp: toggleKeysHelp,
 
     // 意见反馈
     sendFeedback: sendFeedback,
