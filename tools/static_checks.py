@@ -2324,9 +2324,11 @@ check("R34: 头像 44px（字号 17px 时 40px 会挤）",
       "height: 44px" in _a1_block(r34_css, ".avatar"))
 check("R34: 底栏中间那颗 56px",
       "height: 56px" in _a1_block(r34_css, ".tabbar-center .tabbar-icon"))
-check("R34: 底部留白 112px（底栏随字号变高了）",
-      re.search(r"(?m)^body\s*\{([^}]*)\}", r34_css) is not None and
-      "padding-bottom: 112px" in re.search(r"(?m)^body\s*\{([^}]*)\}", r34_css).group(1))
+_r34_body_block = re.search(r"(?m)^body\s*\{([^}]*)\}", r34_css)
+_r34_pb = re.search(r"padding-bottom:\s*([^;]+);", _r34_body_block.group(1) if _r34_body_block else "")
+_r34_pb_val = " ".join((_r34_pb.group(1) if _r34_pb else "").split())
+check("R34: 底部留白 112px（底栏随字号变高了）—— 第 46 轮起在它之上再加安全区",
+      _r34_pb_val.startswith("calc(112px + env(safe-area-inset-bottom))"), _r34_pb_val)
 check("R34: 锚点让开 64px 页头（scroll-margin 76px）",
       "scroll-margin-top: 76px" in r34_css)
 
@@ -2919,6 +2921,62 @@ check("R45: the hint is a real control - pointer, ring on focus, nothing pinned 
 _r45_html = sorted(f for f in os.listdir(ROOT) if f.endswith(".html"))
 check("R45: no new page was added for this",
       _r45_html == sorted(PAGES), _r45_html)
+
+
+print()
+print("R46) 44px 的热区 / 手机底部安全区 / 标题不跳级 / 更高对比的一档")
+
+_r46_more = re.sub(r"\s+", " ", _r43_block(".post-more-btn"))
+check("R46: 帖子角上的「⋯」视觉还是 30×30（分量没被放大）",
+      "width: 30px" in _r46_more and "height: 30px" in _r46_more
+      and "position: relative" in _r46_more,
+      _r46_more[:80])
+_r46_more_hit = re.sub(r"\s+", " ", _r43_block(".post-more-btn::after"))
+check("R46: ...但可点区域按 44×44 撑开（30 + 7 + 7）",
+      "position: absolute" in _r46_more_hit and "inset: -7px" in _r46_more_hit,
+      _r46_more_hit[:80])
+
+_r46_sec = re.sub(r"\s+", " ", _r43_block(".section-more"))
+check("R46: 「查看全部」的胶囊视觉也没动（padding 仍是 3px 12px）",
+      "padding: 3px 12px" in _r46_sec and "position: relative" in _r46_sec,
+      _r46_sec[:90])
+_r46_sec_hit = re.sub(r"\s+", " ", _r43_block(".section-more::after"))
+check("R46: ...热区同样补到 45px（31.5 + 7 + 7）",
+      "position: absolute" in _r46_sec_hit and "inset: -7px" in _r46_sec_hit,
+      _r46_sec_hit[:80])
+
+_r46_body = re.search(r"(?m)^body\s*\{([^}]*)\}", css).group(1)
+_r46_pb = re.search(r"padding-bottom:\s*([^;]+);", _r46_body)
+_r46_pb_val = " ".join((_r46_pb.group(1) if _r46_pb else "").split())
+check("R46: 底部留白是「112px 加上手机的安全区」，不是二选一",
+      _r46_pb_val == "calc(112px + env(safe-area-inset-bottom))", _r46_pb_val)
+
+_r46_pc = re.search(r"@media \(prefers-contrast: more\)\s*\{([\s\S]*?)\n\}", css)
+_r46_pc_body = _r46_pc.group(1) if _r46_pc else ""
+check("R46: 「更喜欢高对比」时三档小字各加深一档",
+      all(k in _r46_pc_body for k in ("--text-muted: #6B5847",
+                                      "--text-faint: #644F3E",
+                                      "--brand-text: #A8340F")),
+      _r46_pc_body[:120])
+check("R46: ...压在金色画布上的那档墨色也从 .78 提到 .95",
+      "--ink-faint: rgba(59, 42, 27, 0.95)" in _r46_pc_body,
+      _r46_pc_body[:120])
+check("R46: 这一档只改文字颜色，不去动分隔线",
+      "--line:" not in _r46_pc_body, _r46_pc_body[:120])
+
+_r46_about = re.search(r'<section class="section" id="about">([\s\S]*?)</section>', read(os.path.join(ROOT, "index.html")))
+_r46_about_h = re.search(r"<h([1-6])[\s>]", _r46_about.group(1)) if _r46_about else None
+check("R46: 「这里是一个什么样的地方？」是一颗 h2，不再是「最新分享」的子标题",
+      bool(_r46_about_h) and _r46_about_h.group(1) == "2",
+      _r46_about_h.group(0) if _r46_about_h else "no heading in #about")
+
+_r46_skips = []
+for _p in PAGES:
+    _hs = [int(m) for m in re.findall(r"<h([1-6])[\s>]", read(os.path.join(ROOT, _p)))]
+    for _a, _b in zip(_hs, _hs[1:]):
+        if _b > _a + 1:
+            _r46_skips.append((_p, "h%d -> h%d" % (_a, _b)))
+check("R46: 8 个页面里没有跳级的标题（h2 不会直接接 h4）", not _r46_skips, _r46_skips)
 
 
 print()

@@ -157,7 +157,9 @@ body {
     linear-gradient(180deg, var(--sky-haze) 0%, rgba(251, 242, 227, 0) 58%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
-  padding-bottom: 112px; /* 给底部导航留位置（第 34 轮字号变大后加高） */
+  /* 第 46 轮：112px 是底栏自己的高度，手机还有一条 home 横条要躲 ——
+     坐实的那 112px 一分不少，安全区是加在它下面的。 */
+  padding-bottom: calc(112px + env(safe-area-inset-bottom));
 }
 
 /* 第 36 轮：视口底部那道远景 —— 一层远山、一层草坡、坡上几棵松树，天上三只鸟。
@@ -622,7 +624,10 @@ main:focus { outline: none; }
   gap: 8px;
 }
 
+/* 第 46 轮：「查看全部」只有 31.5px 高，手指一抖就点空。
+   胶囊的大小不变，热区补到 45px（31.5 + 7 + 7）。 */
 .section-more {
+  position: relative;
   font-size: var(--fs-sm);
   font-weight: 700;
   color: var(--ink);
@@ -630,6 +635,12 @@ main:focus { outline: none; }
   border-radius: var(--radius-pill);
   padding: 3px 12px;
   white-space: nowrap;
+}
+.section-more::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: var(--radius-pill);
 }
 .section-more:hover { text-decoration: none; background: rgba(255, 253, 251, 0.85); }
 
@@ -2168,7 +2179,11 @@ body.modal-open { overflow: hidden; }
   flex: 0 0 auto;
 }
 
+/* 第 46 轮：「⋯」点开就是举报 / 删除，是整张卡片上最不该点错的地方。
+   视觉维持 30×30（那是我想要的分量），可点区域按 44×44 撑开 ——
+   多出来的 7px 落在卡片内边距里，不挡旁边的东西。 */
 .post-more-btn {
+  position: relative;
   width: 30px;
   height: 30px;
   display: grid;
@@ -2189,6 +2204,12 @@ body.modal-open { overflow: hidden; }
   color: var(--text-muted);
 }
 .post-more-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.post-more-btn::after {
+  content: "";
+  position: absolute;
+  inset: -7px;              /* 30 + 7 + 7 = 44 */
+  border-radius: var(--radius-pill);
+}
 
 .post-menu {
   position: absolute;
@@ -2505,5 +2526,23 @@ body.modal-open { overflow: hidden; }
   .empty,
   .skip-link {
     border: 1px solid CanvasText;
+  }
+}
+
+/* ------------------- 第 46 轮：更喜欢高对比的人，再给一档 ------------------- */
+/* 第 43 轮把三档小字拉到 4.5:1 线上（白卡 / 暖白卡）：--text-muted 5.37 / 5.04、
+   --text-faint 4.99 / 4.68、--brand-text 5.14 / 4.81。刚好过线，没有余量。
+   系统里开了「更高对比」的人（Windows 对比度主题、macOS 增强对比度）本来就
+   在要求一件事：把余量给我。于是这里各加深一次 —— 6.75 / 6.32、7.69 / 7.21、
+   6.64 / 6.22。
+   --ink-faint 是直接压在金色画布上的那档墨色，透明度 .78 只有 3.47:1；
+   这一档里提到 .95（4.67:1）。
+   只动文字，不动装饰线：--line 是分隔线不是内容，加深只会让整页发脏。 */
+@media (prefers-contrast: more) {
+  :root {
+    --text-muted: #6B5847;
+    --text-faint: #644F3E;
+    --brand-text: #A8340F;
+    --ink-faint: rgba(59, 42, 27, 0.95);
   }
 }
