@@ -1709,7 +1709,7 @@ window.Campus = (function () {
     for (var i = 0; i < btns.length; i++) {
       if (btns[i].getAttribute("data-comments") !== postId) continue;
       var num = btns[i].querySelector(".comment-count");
-      if (num) num.textContent = count;
+      if (num) num.textContent = countText(count);
     }
   }
 
@@ -2142,9 +2142,42 @@ window.Campus = (function () {
     return /^[0-9A-F]{6}$/.test(raw) ? raw : "";
   }
 
-  /** U2：计数格子里该印什么 —— 拿到数字印数字，还没拿到就印占位符（不是 0） */
+  /** U2：计数格子里该印什么 —— 拿到数字印数字，还没拿到就印占位符（不是 0）。
+   *  R49：四位数起收成「x.xk」（Fizz 的写法）——校园站点赞 / 评论上几千后，
+   *  卡片一行也要放得下；999 以内保持原样，一位小数去尾零（2000 → "2k"）。 */
   function countText(n) {
-    return (typeof n === "number" && isFinite(n)) ? String(n) : COUNT_PLACEHOLDER;
+    if (!(typeof n === "number" && isFinite(n))) return COUNT_PLACEHOLDER;
+    if (n >= 1000) {
+      return String(parseFloat((n / 1000).toFixed(1))) + "k";
+    }
+    return String(n);
+  }
+
+  /* ---- R49：GOV.UK 式「错误清单」----
+   * 校验不过的字段一次全列在表单顶部，每项都是锚点，点一下跳到对应输入框；
+   * role=alert 的容器由页面提供，这里只管填内容。 */
+  function renderFieldErrors(container, issues) {
+    if (!container) return 0;
+    if (!issues || !issues.length) {
+      container.hidden = true;
+      container.innerHTML = "";
+      return 0;
+    }
+    var html = ['<p class="form-errors-title">有 ' + issues.length + ' 处要改：</p>',
+                '<ul class="form-errors-list">'];
+    for (var i = 0; i < issues.length; i++) {
+      html.push('<li><a href="#' + issues[i].id + '">' + issues[i].msg + "</a></li>");
+    }
+    html.push("</ul>");
+    container.innerHTML = html.join("");
+    container.hidden = false;
+    return issues.length;
+  }
+
+  function clearFieldErrors(container) {
+    if (!container) return;
+    container.hidden = true;
+    container.innerHTML = "";
   }
 
   /* ================= F1：卡片「⋯」菜单 + 分享直链（B4） =================
@@ -3219,6 +3252,9 @@ window.Campus = (function () {
     // F1：分享直链 / U2：计数占位 / F6：本机隐藏（导出是为了能单独自测）
     postShareUrl: postShareUrl,
     countText: countText,
+    // R49：表单错误清单（登录 / 注册页所有校验不过的字段一次列出来）
+    renderFieldErrors: renderFieldErrors,
+    clearFieldErrors: clearFieldErrors,
     isPostHidden: isPostHidden,
     hidePost: hidePost,
     unhidePost: unhidePost,

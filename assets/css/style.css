@@ -2561,3 +2561,46 @@ body.modal-open { overflow: hidden; }
     --ink-faint: rgba(59, 42, 27, 0.95);
   }
 }
+
+/* ------------------- 第 49 轮：#about 的承诺抽成三条短句 ------------------- */
+/* 从 Fizz 的页脚抄来的做法：核心承诺不做成散文，而是并列的三行，一眼读完。
+   文案本身没变 —— 长段还在下面，这里只是把最要紧的三条提前。 */
+.about-promises {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.about-promises li {
+  line-height: 1.9;
+}
+.about-promises li::before {
+  content: "·";
+  margin-right: 6px;
+  color: var(--brand-text);
+}
+
+/* ----------------- 第 49 轮：表单失败给「清单」而不是一句（GOV.UK） ----------------- */
+/* 借 GOV.UK 的 error summary：校验不过的字段一次全列出来，每项都是锚点，
+   点一下跳到对应的输入框；role=alert 让读屏一进来就宣布，不用逐格去猜。 */
+.form-errors {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--brand-text);
+  border-radius: var(--radius-sm);
+  background: var(--brand-ghost);
+  color: var(--brand-text);
+}
+.form-errors-title {
+  margin: 0 0 6px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.form-errors-list {
+  margin: 0;
+  padding-left: 18px;
+}
+.form-errors-list a {
+  color: var(--brand-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

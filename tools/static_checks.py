@@ -1463,7 +1463,8 @@ check("R18/U2: ...an en dash, not a stand-in zero",
       'COUNT_PLACEHOLDER = "0"' not in r18_app)
 check("R18/U2: countText is what decides: a real number, or the placeholder",
       "function countText(n)" in r18_app
-      and '(typeof n === "number" && isFinite(n)) ? String(n) : COUNT_PLACEHOLDER' in r18_app)
+      and '(typeof n === "number" && isFinite(n))' in r18_app
+      and 'return COUNT_PLACEHOLDER' in r18_app)
 check("R18/U2: the card prints both counts through countText, never a raw field",
       r18_foot.count("countText(") == 2
       and "countText(post.like_count)" in r18_foot
@@ -3068,6 +3069,58 @@ check("R48: 切换逻辑本体没动 —— 类名、面板显隐、地址栏那
       'className = "chip"' in f2_pro
       and 'panelComments.hidden' in f2_pro
       and 'history.replaceState' in f2_pro)
+
+# ====================================================================
+# R49）借 Fizz / GOV.UK 的三个顺手件：
+#      ① 底栏计数四位数起收成 x.xk（countText）—— 一张卡一行放得下；
+#      ② #about 的核心承诺抽成三条短句并列（不再只有一段散文）；
+#      ③ 登录 / 注册校验不过时，顶部列出「N 处要改」清单，每项可点跳
+#         （GOV.UK error summary，role=alert 容器由页面提供）。
+# ====================================================================
+_r49_app   = read(os.path.join(ROOT, "assets/js/app.js"))
+_r49_auth  = read(os.path.join(ROOT, "assets/js/auth.js"))
+_r49_login = read(os.path.join(ROOT, "login.html"))
+_r49_idx   = read(os.path.join(ROOT, "index.html"))
+
+check("R49/个数: 四位数起收成 x.xk —— countText 有一档紧凑分支",
+      "function countText(n)" in _r49_app
+      and ".toFixed(1)" in _r49_app
+      and ' + "k"' in _r49_app,
+      [l for l in _r49_app.splitlines() if "countText" in l and "toFixed" in l][:1])
+check("R49/个数: 评论数刷新也走 countText，不能漏出裸数字",
+      "num.textContent = countText(count)" in _r49_app)
+check("R49/个数: U2 的占位符语义没被紧凑分支吃掉",
+      "return COUNT_PLACEHOLDER" in _r49_app)
+
+_prom = _r49_idx[_r49_idx.find('<ul class="about-promises'):]
+_prom = _prom[:_prom.find("</ul>") + 5]
+check("R49/承诺: #about 在正文长段之前并列三条短句",
+      '<ul class="about-promises text-sm text-muted">' in _r49_idx
+      and _r49_idx.index('<ul class="about-promises') < _r49_idx.index("每条分享会先经过一次人工审核"),
+      _r49_idx[_r49_idx.find("about-promises"):][:40])
+check("R49/承诺: 三条短句的字样就在那里 —— 审核 / 举报 / 只存在这台设备",
+      all(k in _prom for k in ("人工审核", "举报", "这台设备")),
+      _prom[:60])
+
+check("R49/清单: 登录页在表单区给了一格 role=alert 的错误摘要容器",
+      'id="auth-errors"' in _r49_login
+      and 'role="alert"' in _r49_login
+      and 'class="form-errors"' in _r49_login)
+check("R49/清单: app.js 提供渲染与清空两个成员并导出",
+      "function renderFieldErrors(container, issues)" in _r49_app
+      and "function clearFieldErrors(container)" in _r49_app
+      and "renderFieldErrors: renderFieldErrors" in _r49_app
+      and "clearFieldErrors: clearFieldErrors" in _r49_app)
+check("R49/清单: 摘要标题是「N 处要改」、每项都是锚点（GOV.UK 形态）",
+      "处要改" in _r49_app and 'href="#' in _r49_app)
+check("R49/清单: 登录与注册的校验都走同一个摘要，不再各飘一句",
+      "C.renderFieldErrors(authErrors, [{ id: \"login-phone\"" in _r49_auth
+      and "C.renderFieldErrors(authErrors, issues)" in _r49_auth)
+check("R49/清单: 切换登录/注册面板时清空旧摘要",
+      "C.clearFieldErrors(authErrors)" in _r49_auth)
+check("R49/清单: 错误摘要的样式在场（容器 / 标题 / 列表）",
+      ".form-errors {" in css and ".form-errors-list" in css,
+      [l for l in css.splitlines() if ".form-errors" in l][:3])
 
 
 print()

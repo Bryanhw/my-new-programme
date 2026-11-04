@@ -441,8 +441,8 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），1062 项
-python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），908 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），1073 项
+python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），913 项
 ```
 
 > **用哪个 Python**：这两套工具依赖 `dukpy` / `esprima`，目前是在 **Python 3.14** 上跑通的
@@ -962,6 +962,29 @@ python tools\make_icons.py --check    # 只校验（CI 也靠它）
 护栏 1000 → **1005**（+5），故意破坏自测 **6/6** 全红（右上那束光没了、一束光加浓成色块、
 一束光偏冷发蓝、页头退回纯 rgba、底栏改成上深下亮、页头两端金拼绿），还原逐字节一致。
 运行测试 **887/0** 不变；零新图、零外部请求、零动画（所以不碰 `prefers-reduced-motion`）。
+
+### 三个都借来的顺手件：计数 1.2k、首页三句承诺、登录错误一次列全
+
+第 49 轮站主点了 `outputs/a11y-benchmark-r44.md` 第五部分「还能借的」里的三件，
+都来自日常产品的顺手手势：
+
+- **底栏计数四位数起收成 x.xk（Fizz 的写法）**：`countText()` 加一档紧凑分支
+  —— `1000 → 1k`、`1234 → 1.2k`、`10500 → 10.5k`，小于 1000 原样；评论数刷新
+  （`updateCommentCount`）也走同一个 `countText`，不会漏出裸数字。
+- **首页核心承诺抽成三条短句**：`#about` 原来是一段散文，现在在正文长段之前并列
+  三条短句——每条分享先经人工审核、不合适的内容在「⋯」菜单里举报、圈子只存在
+  你这台设备上（长段保留在后面）。
+- **登录 / 注册校验失败一次列全（GOV.UK error summary）**：不再各飘一句，而是顶部
+  `#auth-errors`（`role=alert`）列出「有 N 处要改：」清单，每项都是锚点、点一下
+  跳到对应输入框，并自动聚焦第一处；切换登录 / 注册面板时清空旧摘要。
+
+护栏 1062 → **1073**（+11：R49 一组——计数 3 / 承诺 2 / 清单 6）；运行冒烟
+908 → **913**（+5：千分位紧凑 + 登录 1 处要改 + 注册 5 处一次列全）；破坏自测
+**7/7** 全红、还原逐字节一致。
+
+一处测试真相：错误提示原先飘在 `#notice`，现在走 `#auth-errors` 错误清单，两处旧断言
+（坏手机号、空学校各一句）从读 `#notice` 改成读错误清单；stub 的 DOM 不解析静态 HTML，
+错误清单的 `innerHTML` 由 IIFE 直接取。
 
 ### 我的三格：半套 tab 语义诚实降级成普通按钮
 

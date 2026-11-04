@@ -7,6 +7,7 @@
   var C = window.Campus;
 
   var noticeEl    = document.getElementById("notice");
+  var authErrors  = document.getElementById("auth-errors");
   var tabsEl      = document.getElementById("tabs");
   var panelLogin  = document.getElementById("panel-login");
   var panelReg    = document.getElementById("panel-register");
@@ -94,6 +95,7 @@
     panelLogin.classList.toggle("hidden", name !== "login");
     panelReg.classList.toggle("hidden", name !== "register");
     C.hideNotice(noticeEl);
+    C.clearFieldErrors(authErrors);
   }
 
   /* 登录面板里的「先去注册」：直接切到注册面板，省得自己找 */
@@ -113,10 +115,11 @@
     C.hideNotice(noticeEl);
 
     if (!C.isValidPhone(loginPhone.value)) {
-      C.showNotice(noticeEl, "warn", "请输入 11 位手机号");
+      C.renderFieldErrors(authErrors, [{ id: "login-phone", msg: "请输入 11 位手机号" }]);
       loginPhone.focus();
       return;
     }
+    C.clearFieldErrors(authErrors);
 
     setLoading(loginBtn, true, "正在登录…");
 
@@ -149,32 +152,21 @@
     e.preventDefault();
     C.hideNotice(noticeEl);
 
-    if (!C.isValidPhone(regPhone.value)) {
-      C.showNotice(noticeEl, "warn", "请输入 11 位手机号");
-      regPhone.focus();
-      return;
-    }
-    if (!regSchool.value.trim()) {
-      C.showNotice(noticeEl, "warn", "请填写你的学校");
-      regSchool.focus();
-      return;
-    }
-    if (!regPass.value || regPass.value.length < 6) {
-      C.showNotice(noticeEl, "warn", "密码至少 6 位");
-      regPass.focus();
-      return;
-    }
+    // R49：校验不过的字段一次全列出来（GOV.UK 式错误清单），再指到第一个
+    var issues = [];
+    if (!C.isValidPhone(regPhone.value)) issues.push({ id: "reg-phone", msg: "请输入 11 位手机号" });
+    if (!regSchool.value.trim()) issues.push({ id: "reg-school", msg: "请填写你的学校" });
+    if (!regPass.value || regPass.value.length < 6) issues.push({ id: "reg-password", msg: "密码至少 6 位" });
     // 密保是唯一的自助找回通道，所以注册时必填（不想填就自己去「我的」补）
-    if (!regSecQ || !regSecQ.value) {
-      C.showNotice(noticeEl, "warn", "选一个密保问题：忘密码时只能靠它");
-      if (regSecQ) regSecQ.focus();
+    if (!regSecQ || !regSecQ.value) issues.push({ id: "reg-security-q", msg: "选一个密保问题：忘密码时只能靠它" });
+    if (!regSecA.value.replace(/\s/g, "")) issues.push({ id: "reg-security-a", msg: "填一下密保答案（忘密码时要用）" });
+    if (issues.length) {
+      C.renderFieldErrors(authErrors, issues);
+      var firstErr = document.getElementById(issues[0].id);
+      if (firstErr) firstErr.focus();
       return;
     }
-    if (!regSecA.value.replace(/\s/g, "")) {
-      C.showNotice(noticeEl, "warn", "填一下密保答案（忘密码时要用）");
-      regSecA.focus();
-      return;
-    }
+    C.clearFieldErrors(authErrors);
 
     setLoading(regBtn, true, "正在注册…");
 

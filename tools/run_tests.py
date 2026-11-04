@@ -640,7 +640,8 @@ def run_b():
            " { target: document.getElementById('register-form'), preventDefault: function(){} });")
     calls = json.loads(js(it, "JSON.stringify(__calls)"))
     check("bad phone blocked before network", not any(c[0] == "signUp" for c in calls), calls)
-    check("validation notice shown", "notice" in js(it, "document.getElementById('notice').className"))
+    reg_err = js(it, "document.getElementById('auth-errors').innerHTML")
+    check("the gaps are listed in the error summary", "处要改" in reg_err and "请输入 11 位手机号" in reg_err, reg_err[:120])
 
     it = load("login.html", "mock-login")
     js(it, PICK_SEC_JS +
@@ -1925,9 +1926,9 @@ js(it, "document.getElementById('reg-phone').value = '13900139003';"
        " { target: document.getElementById('register-form'), preventDefault: function(){} });")
 calls = json.loads(js(it, "JSON.stringify(__calls)"))
 check("a blank school is still refused", not any(c[0] == "signUp" for c in calls), calls)
-check("the refusal keeps the old wording",
-      ZH_EMPTY_SCHOOL in js(it, "document.getElementById('notice').textContent"),
-      js(it, "document.getElementById('notice').textContent"))
+reg_err = js(it, "(function(){var el=document.getElementById('auth-errors');return el?el.innerHTML:'';})()")
+check("the refusal shows the school gap in the error summary",
+      ZH_EMPTY_SCHOOL in reg_err, reg_err[:120])
 
 print("- pages that do not load campuses.js degrade quietly")
 it = dukpy.JSInterpreter()
@@ -2352,6 +2353,12 @@ def q_blob(it):
                    for v in res["elements"].values())
 
 
+def auth_errors_html(it):
+    """R49：登录页错误摘要（#auth-errors）渲染出来的内容，没容器就返回空串。"""
+    return js(it, "(function(){var el=document.getElementById('auth-errors');"
+                  "return el ? el.innerHTML : '';})()")
+
+
 def q_fetch(it):
     return [c for c in q_calls(it) if c[0] == "fetch"]
 
@@ -2471,14 +2478,14 @@ it = load("login.html", "mock-login")
 reg_submit(it, "", "")
 check("no account is created without a question",
       not any(c[0] == "signUp" for c in q_calls(it)))
-check("and the page asks for one", ZH_SEC in q_blob(it))
+check("and the error summary asks for one", ZH_SEC in auth_errors_html(it))
 
 it = load("login.html", "mock-login")
 reg_submit(it, "home_city", "   ")
 check("no account is created without an answer either",
       not any(c[0] == "signUp" for c in q_calls(it)))
-blob = q_blob(it)
-check("and the page says which field is missing",
+blob = auth_errors_html(it)
+check("and the error summary lists the two missing security fields",
       ZH_SEC in blob and ZH_ANSWER in blob)
 
 it = load("login.html", "mock-login")
@@ -2504,6 +2511,30 @@ blob = q_blob(it)
 check("the page warns instead of pretending it worked",
       ZH_SEC in blob and "supabase-security-question.sql" in blob)
 check("and says where to add it later", ZH_MINE in blob)
+
+print("- R49: the login / register errors are one GOV.UK-style summary, not one line")
+it = load("login.html", "mock-login")
+js(it, "document.getElementById('login-phone').value = '123';"
+       "document.getElementById('login-form').dispatch('submit',"
+       " { target: document.getElementById('login-form'), preventDefault: function(){} });")
+err = auth_errors_html(it)
+check("a login with a bad phone lists the one field",
+      "1 处要改" in err and "请输入 11 位手机号" in err, err[:120])
+check("...and the alert container is shown (role=alert gets announced)",
+      js(it, "document.getElementById('auth-errors').hidden") is False)
+
+it = load("login.html", "mock-login")
+js(it, "document.getElementById('reg-phone').value = '123';"
+       "document.getElementById('register-form').dispatch('submit',"
+       " { target: document.getElementById('register-form'), preventDefault: function(){} });")
+err = auth_errors_html(it)
+check("a register with all five gaps lists them all at once",
+      "5 处要改" in err and "请输入 11 位手机号" in err
+      and "请填写你的学校" in err and "密码至少 6 位" in err
+      and "选一个密保问题" in err and "填一下密保答案" in err,
+      err[:160])
+check("...and no account is attempted while the form is invalid",
+      not any(c[0] == "signUp" for c in q_calls(it)))
 
 print("- the mine page: set / change the security question")
 it = load("profile.html", "mock-anon")
@@ -2956,6 +2987,13 @@ check("an unknown count prints the placeholder, not 0",
       js(it, "Campus.countText(undefined)"))
 check("a real count (a real 0 included) still prints the number",
       js(it, "Campus.countText(0)") == "0" and js(it, "Campus.countText(12)") == "12")
+check("(R49) thousands turn into x.xk, trailing zero cut, small stays literal",
+      js(it, "Campus.countText(1000)") == "1k"
+      and js(it, "Campus.countText(1234)") == "1.2k"
+      and js(it, "Campus.countText(1062)") == "1.1k"
+      and js(it, "Campus.countText(10500)") == "10.5k"
+      and js(it, "Campus.countText(999)") == "999",
+      js(it, "Campus.countText(1234)"))
 js(it, "__before_hide = __calls.length;")
 js(it, "Campus.hidePost('p-1');")
 check("hiding is recorded on this device", js(it, "Campus.isPostHidden('p-1')") is True)
