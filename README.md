@@ -441,8 +441,8 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），1056 项
-python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），906 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），1062 项
+python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），908 项
 ```
 
 > **用哪个 Python**：这两套工具依赖 `dukpy` / `esprima`，目前是在 **Python 3.14** 上跑通的
@@ -962,6 +962,35 @@ python tools\make_icons.py --check    # 只校验（CI 也靠它）
 护栏 1000 → **1005**（+5），故意破坏自测 **6/6** 全红（右上那束光没了、一束光加浓成色块、
 一束光偏冷发蓝、页头退回纯 rgba、底栏改成上深下亮、页头两端金拼绿），还原逐字节一致。
 运行测试 **887/0** 不变；零新图、零外部请求、零动画（所以不碰 `prefers-reduced-motion`）。
+
+### 我的三格：半套 tab 语义诚实降级成普通按钮
+
+「我的」页（`profile.html`）那三格——我的发布 / 我的评论 / 我的收藏——曾经挂过半套
+选项卡（tab）语义：`role="tablist"`、`role="tab"`、`aria-selected`、`role="tabpanel"`
+都写了，却没有方向键、没有 roving tabindex、也没有 `aria-controls`。结果对读屏用户是
+灾难性的：读屏宣布「选项卡 ・ 第 1 项，共 3 项」之后，按左右键却毫无反应——
+比完全不用 ARIA 更让人困惑（这是 `outputs/a11y-benchmark-r44.md` 里 P2-1 的原话）。
+按 P2-1 的建议，选了成本最低的诚实降级：那三格本来就是「三个并列的切换按钮」，
+不需要选项卡模式。
+
+- 去掉全部 tab 角色；三颗按钮各自有一个 `id`（`mine-tab-posts` 等）+ `aria-pressed`
+  （恰好一颗 `true`、两颗 `false`）；
+- `profile.js` 里 `aria-selected` 换成 `aria-pressed`，随点击切换同步——
+  类名、面板显隐、地址栏 hash 那一套一个没动；
+- 三块面板不再假装 `tabpanel`，改用 `aria-labelledby` 指回对应按钮——
+  读屏进面板就知道「这是『我的评论』的区域」；
+- 键盘：Tab 键照常一颗颗走，不用特判左右键（普通按钮本来就该这样）。
+
+护栏 1056 → **1062**（+6：R48 一组——tab 角色一个不留、`aria-pressed` 恰好一颗 true、
+按钮有 id、面板 `aria-labelledby` 一一挂回、JS 同步且无 `aria-selected` 孤儿、
+切换逻辑本体还在）；运行冒烟 906 → **908**（+2：点击后面板切换的同时，
+按下状态要跟着一起走）；破坏自测 **7/7** 全红、还原逐字节一致。
+
+一处测试真相：stub 的 DOM 不解析静态 HTML、`querySelectorAll` 天然是空数组，
+而 `profile.js` 恰好靠 `mineTabs.querySelectorAll("[data-mine-tab]")` 遍历那三颗按钮。
+这一角由测试段给 `#mine-tabs` 补了一个局部的替身（返回手工登记的三颗按钮），
+`aria-pressed` 的同步才是**真的被执行、真的被断言**；行为级的破坏自测
+（删掉 JS 里同步 `aria-pressed` 的那一行）让第 908 项当场变红。
 
 ### 字号交给了浏览器：底栏顺手收窄 9px，11 档字阶从 px 换成 rem
 

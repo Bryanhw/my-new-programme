@@ -1853,8 +1853,8 @@ check("F2: the 我的 page is split into three tabs",
       all(('data-mine-tab="%s"' % _t) in f2_html for _t in ("posts", "comments", "saves")))
 check("F2: three panels exist, and only the first one starts visible",
       'id="mine-panel-posts"' in f2_html
-      and 'id="mine-panel-comments" role="tabpanel" hidden' in f2_html
-      and 'id="mine-panel-saves" role="tabpanel" hidden' in f2_html)
+      and 'id="mine-panel-comments" aria-labelledby="mine-tab-comments" hidden' in f2_html
+      and 'id="mine-panel-saves" aria-labelledby="mine-tab-saves" hidden' in f2_html)
 check("F2: the post list keeps its old id, so nothing else had to change",
       'id="mine-list"' in f2_html and 'id="mine-comments-list"' in f2_html
       and 'id="mine-saves-list"' in f2_html)
@@ -1989,8 +1989,10 @@ check("R31: a long count cannot push a cell open",
 check("R31: the plaza topic bar keeps its own wrapping behaviour (the change is scoped)",
       "flex-wrap: wrap" in _a1_block(r31_css, ".chips"))
 r31_profile = read(os.path.join(ROOT, "profile.html"))
-check("R31: the grid's 'three' still matches the page: three tabs, each with aria-selected",
-      r31_profile.count('role="tab"') == 3 and r31_profile.count('aria-selected=') == 3)
+check("R31: the grid's 'three' still matches the page: three toggle buttons + aria-pressed",
+      r31_profile.count('role="tab"') == 0
+      and r31_profile.count('role="tablist"') == 0
+      and r31_profile.count('aria-pressed="') == 3)
 check("R31: no new page, no new dependency, no new file was needed for this",
       not [f for f in os.listdir(os.path.join(ROOT, "assets", "css")) if f != "style.css"])
 
@@ -3034,6 +3036,38 @@ check("R47: 正文留白跟着降到 100px，且安全区仍加在它上面",
       _r46_pb_val == "calc(100px + env(safe-area-inset-bottom))", _r46_pb_val)
 _r47_px_fs = sorted(set(re.findall(r"font-size:\s*[0-9.]+px", css)))
 check("R47: 整份样式表里没有一处 font-size 用 px 兜底", not _r47_px_fs, _r47_px_fs)
+
+
+print()
+print("R48) 我的三格：半套 tab 语义诚实降级为切换按钮")
+
+# P2-1：profile.html 那三格曾挂过 role=tablist/tab/tabpanel，但没有方向键、
+# 没有 roving tabindex、也没有 aria-controls —— 读屏宣布「选项卡」后按左右键毫无反应，
+# 比完全不用 ARIA 更让人困惑。降级成普通按钮 + aria-pressed：Tab 键照常走，
+# 按下的那颗用 aria-pressed 报状态，面板用 aria-labelledby 挂回按钮。
+_r48_html = read(os.path.join(ROOT, "profile.html"))
+check("R48: 不再有卡在中间状态的 tab 角色（tablist/tab/tabpanel 一个不留）",
+      _r48_html.count('role="tablist"') == 0
+      and _r48_html.count('role="tab"') == 0
+      and _r48_html.count('role="tabpanel"') == 0,
+      _r48_html[_r48_html.find("mine-tabs"):][:80])
+check("R48: 三颗按钮都是切换按钮 —— aria-pressed 恰好一颗按下、两颗松开",
+      _r48_html.count('aria-pressed="true"') == 1
+      and _r48_html.count('aria-pressed="false"') == 2,
+      ("true=%d false=%d" % (_r48_html.count('aria-pressed="true"'),
+                              _r48_html.count('aria-pressed="false"'))))
+check("R48: 三颗按钮各自有 id（面板的 aria-labelledby 要挂回来）",
+      all(('id="mine-tab-%s"' % _t) in _r48_html for _t in ("posts", "comments", "saves")))
+check("R48: 三个面板不再假装是 tabpanel，改用 aria-labelledby 指回按钮",
+      all(('id="mine-panel-%s" aria-labelledby="mine-tab-%s"' % (_t, _t)) in _r48_html
+          for _t in ("posts", "comments", "saves")))
+check("R48: 按下的那颗由 JS 同步 aria-pressed，不残留 aria-selected 的孤儿",
+      'setAttribute("aria-pressed", on ? "true" : "false")' in f2_pro
+      and "aria-selected" not in f2_pro)
+check("R48: 切换逻辑本体没动 —— 类名、面板显隐、地址栏那一套都还在",
+      'className = "chip"' in f2_pro
+      and 'panelComments.hidden' in f2_pro
+      and 'history.replaceState' in f2_pro)
 
 
 print()

@@ -242,7 +242,7 @@
     for (var i = 0; i < chips.length; i++) {
       var on = chips[i].getAttribute("data-mine-tab") === want;
       chips[i].className = "chip" + (on ? " chip-on" : "");
-      chips[i].setAttribute("aria-selected", on ? "true" : "false");
+      chips[i].setAttribute("aria-pressed", on ? "true" : "false");
     }
 
     if (panelPosts)    panelPosts.hidden    = (want !== "posts");

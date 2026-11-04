@@ -3296,6 +3296,24 @@ seed_comments(it)
 js(it, '__ls["%s"] = JSON.stringify([%r, %r, %r]);' % (SAVED_KEY, S1, S2, S_GONE))
 ev(it, read(os.path.join(ROOT, "assets", "js", "profile.js")))
 ev(it, "__drain();")
+# stub 不解析静态 HTML（querySelectorAll 天然为空），而 setMineTab 恰恰靠
+# mineTabs.querySelectorAll("[data-mine-tab]") 遍历按钮。这里只给 #mine-tabs
+# 补一个局部的替身：返回手工登记的三颗按钮，让下面的 aria-pressed 行为是真的。
+js(it, "!function(){"
+       "['posts','comments','saves'].forEach(function(t){"
+       "var b=__elements['mine-tab-'+t]||document.createElement('BUTTON');"
+       "b.id='mine-tab-'+t;"
+       "b.setAttribute('data-mine-tab',t);"
+       "b.setAttribute('aria-pressed', t==='posts'?'true':'false');"
+       "b.className='chip'+(t==='posts'?' chip-on':'');"
+       "__elements['mine-tab-'+t]=b;"
+       "});"
+       "document.getElementById('mine-tabs').querySelectorAll=function(sel){"
+       "var o=[];"
+       "if(sel==='[data-mine-tab]'){['posts','comments','saves'].forEach(function(t){"
+       "var b=__elements['mine-tab-'+t]; if(b){o.push(b);}});}"
+       "return o;};"
+       "}()")
 check("the collection count is on the tab from the start (it is local)",
       js(it, "document.getElementById('mine-count-saves').textContent") == "3",
       js(it, "document.getElementById('mine-count-saves').textContent"))
@@ -3315,6 +3333,10 @@ mine_comments = js(it, "document.getElementById('mine-comments-list').innerHTML"
 check("opening the comments tab swaps the panel",
       js(it, "document.getElementById('mine-panel-comments').hidden") is False
       and js(it, "document.getElementById('mine-panel-posts').hidden") is True)
+check("...and the pressed state moves with it (aria-pressed says which one is on)",
+      js(it, "document.getElementById('mine-tab-comments').getAttribute('aria-pressed')") == "true"
+      and js(it, "document.getElementById('mine-tab-posts').getAttribute('aria-pressed')") == "false",
+      js(it, "document.getElementById('mine-tab-comments').getAttribute('aria-pressed')"))
 check("...and lists the comment I wrote", "mine" in mine_comments, mine_comments[:200])
 check("...not somebody else's comment",
       "first comment" not in mine_comments and "a reply" not in mine_comments)
@@ -3331,6 +3353,9 @@ saves_html = js(it, "document.getElementById('mine-saves-list').innerHTML")
 check("opening the saves tab swaps the panel",
       js(it, "document.getElementById('mine-panel-saves').hidden") is False
       and js(it, "document.getElementById('mine-panel-comments').hidden") is True)
+check("...and the pressed state moves to the saves tab",
+      js(it, "document.getElementById('mine-tab-saves').getAttribute('aria-pressed')") == "true"
+      and js(it, "document.getElementById('mine-tab-comments').getAttribute('aria-pressed')") == "false")
 check("...and renders the saved posts from the server", "saved one" in saves_html
       and "saved two" in saves_html, saves_html[:220])
 check("...the newest save first, in the order they were collected",
