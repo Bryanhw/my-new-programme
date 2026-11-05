@@ -2775,10 +2775,20 @@ window.Campus = (function () {
    * ------------------------------------------------------------------ */
   (function initHeaderLogin() {
     if (typeof document.querySelectorAll !== "function") return;
+    var outs = document.querySelectorAll(".header-signout");
+    for (var oi = 0; oi < outs.length; oi++) {
+      outs[oi].addEventListener("click", function () {
+        if (!confirm("确定要退出登录吗？")) return;
+        signOut().then(function () {
+          window.location.href = "index.html";
+        });
+      });
+    }
     function sync() {
       var nodes = document.querySelectorAll(".header-login");
-      if (!nodes.length || !client) return;
+      if ((!nodes.length && !outs.length) || !client) return;
       getIdentity().then(function (id) {
+        var signedIn = !!id.user;
         for (var i = 0; i < nodes.length; i++) {
           var el = nodes[i];
           var label = el.querySelector ? el.querySelector(".header-login-text") : null;
@@ -2788,6 +2798,9 @@ window.Campus = (function () {
             el.hidden = false;
             if (label) label.textContent = id.user ? "注册账号" : "登录 / 注册";
           }
+        }
+        for (var j = 0; j < outs.length; j++) {
+          outs[j].hidden = !signedIn;              /* 有会话（登录或匿名）才显示退出 */
         }
       });
     }

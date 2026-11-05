@@ -3753,6 +3753,80 @@ check("clicking the hint opens the same sheet",
       js(it, "document.getElementById('keys-modal').hidden") is False)
 
 
+# ====================================================================
+# Round 50 - the sign-out button now lives in every page header and is
+# driven by one shared binding in app.js (before, it only existed as a
+# small "link-plain" button on the profile page, easy to miss).
+# ====================================================================
+print("- R50: sign-out lives in every header, one binding drives them all")
+
+
+def _r50_pre():
+    # The stub does not parse static HTML, so register the header button
+    # the real pages ship and let app.js (run later in load()) bind to it.
+    return (
+        "window.__signoutBtn = __el('header-signout');"
+        "window.__signoutBtn.hidden = true;"
+        "window._qsa = document.querySelectorAll;"
+        "window._qs = document.querySelector;"
+        "document.querySelectorAll = function (sel) {"
+        "   return String(sel).indexOf('header-signout') >= 0 ? [window.__signoutBtn] : window._qsa();"
+        "};"
+        "document.querySelector = function (sel) {"
+        "   return String(sel).indexOf('header-signout') >= 0 ? window.__signoutBtn : window._qs();"
+        "};"
+    )
+
+
+it = load("index.html", "mock-logged", pre=_r50_pre())
+check("signed-in user sees the header sign-out on the index",
+      js(it, "window.__signoutBtn.hidden") is False, js(it, "window.__signoutBtn.hidden"))
+
+it = load("profile.html", "mock-anon", pre=_r50_pre())
+check("an anonymous session still sees it (it can leave the anon session)",
+      js(it, "window.__signoutBtn.hidden") is False, js(it, "window.__signoutBtn.hidden"))
+
+it = load("faq.html", "mock-login", pre=_r50_pre())
+check("a signed-out visitor never sees it (button stays hidden)",
+      js(it, "window.__signoutBtn.hidden") is True, js(it, "window.__signoutBtn.hidden"))
+
+it = load("profile.html", "mock-logged", pre=_r50_pre())
+_before = json.loads(js(it, "JSON.stringify(__calls.map(function(c){return c[0]}))"))
+js(it, "window.__signoutBtn.click()")
+_after = json.loads(js(it, "JSON.stringify(__calls.map(function(c){return c[0]}))"))
+check("clicking sign-out routes through client.auth.signOut (exactly once)",
+      "signOut" not in _before and _after.count("signOut") == 1, _after)
+check("then it navigates back to the index page",
+      js(it, "String(window.location.href)") == "index.html",
+      js(it, "String(window.location.href)"))
+
+# The login page no longer flash-bounces an account to the feed: a real
+# account gets an "already signed in" card (with its own sign-out), while
+# anonymous visitors still reach the register / login forms.
+it = load("login.html", "mock-anon")
+check("anon visitor to the login page is not bounced away",
+      js(it, "String(window.location.href)") == "",
+      js(it, "String(window.location.href)"))
+check("anon visitor keeps the register / login panel available",
+      js(it, "document.getElementById('panel-login').classList.contains('hidden')") is False,
+      js(it, "document.getElementById('panel-login').classList.contains('hidden')"))
+
+it = load("login.html", "mock-logged")
+check("a real account gets the already-in card instead of a flash bounce",
+      js(it, "document.getElementById('already-in').hidden") is False
+      and js(it, "document.getElementById('panel-login').classList.contains('hidden')") is True
+      and js(it, "String(window.location.href)") == "",
+      js(it, "String(window.location.href)"))
+_line = json.loads(js(it, "JSON.stringify(__calls.map(function(c){return c[0]}))"))
+js(it, "document.getElementById('already-out').click()")
+_lout = json.loads(js(it, "JSON.stringify(__calls.map(function(c){return c[0]}))"))
+check("the card's sign-out goes through client.auth.signOut",
+      _lout.count("signOut") == _line.count("signOut") + 1, _lout)
+check("then lands back on the index",
+      js(it, "String(window.location.href)") == "index.html",
+      js(it, "String(window.location.href)"))
+
+
 print()
 print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

@@ -69,12 +69,32 @@
     C.blockIfNotReady(noticeEl);
     [loginBtn, regBtn, anonBtn].forEach(function (b) { b.disabled = true; });
   } else {
-    /* 已经登录的话直接回广场，避免重复登录 */
+    /* 已经用真实账号登录：不再一秒闪走（那是坏体验，还会让想退出的人
+       一头撞进死胡同），改成原地换成「已登录」卡片；要退出先在卡上退。
+       匿名会话照常放行 —— 匿名用户本来就靠这页去注册 / 登录。 */
     C.getIdentity().then(function (id) {
-      if (id.user) {
-        C.showNotice(noticeEl, "info", "你已经登录了，正在回到广场…");
-        setTimeout(function () { window.location.href = "feed.html"; }, 600);
+      if (!id.user || id.isAnonymous) return;
+      var card = document.getElementById("already-in");
+      if (card) {
+        tabsEl.classList.add("hidden");
+        panelLogin.classList.add("hidden");
+        panelReg.classList.add("hidden");
+        card.hidden = false;
+      } else {
+        C.showNotice(noticeEl, "info", "你已经登录了，正在回到我的页…");
+        setTimeout(function () { window.location.href = "profile.html"; }, 1200);
       }
+    });
+  }
+
+  /* 「已登录」卡片上的退出按钮：一处绑定，和全站页头的退出行为一致 */
+  var alreadyOut = document.getElementById("already-out");
+  if (alreadyOut) {
+    alreadyOut.addEventListener("click", function () {
+      if (!confirm("确定要退出登录吗？")) return;
+      C.signOut().then(function () {
+        window.location.href = "index.html";
+      });
     });
   }
 

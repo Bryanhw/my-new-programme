@@ -45,7 +45,6 @@
   var savesDirty     = false;     // 期间收藏有变化（比如在别处点了 🔖）
   var lastMissing    = [];        // 上一次渲染时「读不到」的收藏 id（清掉按钮只认这些）
 
-  var signOutBtn = document.getElementById("signout");
   var anonTip    = document.getElementById("anon-tip");
 
   var secCard    = document.getElementById("security-card");
@@ -90,7 +89,6 @@
       nickCard.classList.add("hidden");
       mineCard.classList.add("hidden");
       reportsCard.classList.add("hidden");
-      signOutBtn.classList.add("hidden");
       if (secCard) secCard.classList.add("hidden");
       return;
     }
@@ -107,7 +105,6 @@
         nickCard.classList.add("hidden");
         mineCard.classList.add("hidden");
         reportsCard.classList.add("hidden");
-        signOutBtn.classList.add("hidden");
         if (secCard) secCard.classList.add("hidden");
         return;
       }
@@ -567,16 +564,6 @@
       });
     });
   }
-
-  /* ---------------------------------------------------------------
-   * 退出登录
-   * --------------------------------------------------------------- */
-  signOutBtn.addEventListener("click", function () {
-    if (!confirm("确定要退出登录吗？")) return;
-    C.signOut().then(function () {
-      window.location.href = "index.html";
-    });
-  });
 
   boot();
 })();

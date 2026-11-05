@@ -28,7 +28,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>登录 / 注册 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=7d291d8e">
+<link rel="stylesheet" href="assets/css/style.css?v=f18ad56a">
 </head>
 <body>
 
@@ -181,6 +181,18 @@
     </p>
   </div>
 
+  <!-- R50：真实账号已登录时整卡替换成这个「已登录」卡片 —— 不再一秒闪回
+       广场（那会让想退出的人一头撞进死胡同），想退出在卡上直接退。 -->
+  <div class="auth-card mt-16" id="already-in" hidden>
+    <div class="auth-head">
+      <h1 class="auth-title">你已经登录了</h1>
+      <p class="auth-sub">这个浏览器里已经有一个真实账号的会话。<br>要换号或回到未登录状态，先退出；想看看自己的东西，去「我的」。</p>
+    </div>
+    <a class="btn btn-primary btn-block" href="profile.html" id="already-go">去「我的」页</a>
+    <button class="btn btn-ghost btn-block mt-8" type="button" id="already-out">退出登录</button>
+    <p class="hint text-center mt-16">退出后回到首页，随时可以再登录。</p>
+  </div>
+
 </main>
 
 <footer class="site-footer">
@@ -196,7 +208,7 @@
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
 <script src="assets/js/campuses.js?v=43cddca3"></script>
-<script src="assets/js/app.js?v=4f063006"></script>
-<script src="assets/js/auth.js?v=5800abfa"></script>
+<script src="assets/js/app.js?v=1e8fbcc1"></script>
+<script src="assets/js/auth.js?v=f3648f28"></script>
 </body>
 </html>

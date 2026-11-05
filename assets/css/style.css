@@ -346,6 +346,35 @@ main:focus { outline: none; }
   .header-login .header-login-text { display: none; }
 }
 
+/* 页头「退出登录」：只在这台设备有会话（登录或匿名）时出现，由 app.js 驱动。
+   金底上做成本文描边幽灵钮，比「登录」主入口弱一档，但按压区域足够大；
+   平时藏在 [hidden] 里，不占导航位置。 */
+.header-signout {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(74, 52, 35, 0.35);
+  background: transparent;
+  color: #4A3423;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.18s var(--ease), background 0.18s var(--ease);
+}
+.header-signout:hover { background: rgba(74, 52, 35, 0.08); transform: translateY(-1px); }
+.header-signout:active { transform: translateY(0); }
+.header-signout:focus-visible { outline: 2px solid var(--ink-solid); outline-offset: 2px; }
+.header-signout[hidden] { display: none; }
+
+@media (max-width: 520px) {
+  .header-signout { padding: 0 10px; }
+}
+
 /* 页头右上角的「更多」入口：一级按钮 + 向下展开的二级菜单 */
 .nav-more {
   position: relative;

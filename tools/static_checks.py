@@ -3124,6 +3124,51 @@ check("R49/清单: 错误摘要的样式在场（容器 / 标题 / 列表）",
 
 
 print()
+print("R50) 全站「退出登录」：登录后页头可见，一处绑定全局生效")
+
+# 站主反馈「找不到退出登录」：入口只藏在「我的」页的小字链接里。
+# 把按钮放进每个页头，有会话（登录或匿名）就显示；驱动与点击处理
+# 都收敛到 app.js 一处，profile.js 不再自己绑（避免点一下弹两个确认框）。
+_r50_app = read(os.path.join(ROOT, "assets/js/app.js"))
+_r50_pro = read(os.path.join(ROOT, "assets/js/profile.js"))
+_r50_pages = {"index.html", "feed.html", "post.html", "profile.html", "faq.html", "feedback.html"}
+_r50_auth = {"login.html", "reset.html"}
+_r50_btn = 'class="header-signout" type="button" hidden>退出登录</button>'
+_r50_missing = [p for p in _r50_pages if _r50_btn not in read(os.path.join(ROOT, p))]
+_r50_leak = [p for p in _r50_auth if 'class="header-signout"' in read(os.path.join(ROOT, p))]
+check("R50: 六个页头页面都有统一退出按钮，认证页没有",
+      not _r50_missing and not _r50_leak, _r50_missing + _r50_leak)
+check("R50: app.js 一处驱动显隐 —— 有会话（登录或匿名）才显示，点了回首页",
+      'document.querySelectorAll(".header-signout")' in _r50_app
+      and "outs[j].hidden = !signedIn" in _r50_app
+      and 'window.location.href = "index.html"' in _r50_app
+      and any(re.match(r"\s*signOut\(\)\.then\(function \(\) \{", l)
+              for l in _r50_app.splitlines()),
+      "see app.js initHeaderLogin")
+check("R50: 确认文案在 app.js 一处；profile.js 不再自己绑，防双弹窗",
+      'confirm("确定要退出登录吗？")' in _r50_app
+      and 'getElementById("signout")' not in _r50_pro
+      and "signOutBtn" not in _r50_pro,
+      [l for l in _r50_pro.splitlines() if "signout" in l.lower() or "signOut" in l][:6])
+check("R50: 按钮样式在场，[hidden] 全身而退",
+      ".header-signout {" in css and ".header-signout[hidden] { display: none; }" in css,
+      [l for l in css.splitlines() if "header-signout" in l][:4])
+
+_r50_authjs = read(os.path.join(ROOT, "assets/js/auth.js"))
+_r50_login = read(os.path.join(ROOT, "login.html"))
+check("R50/登录页: 匿名来访照常放行，真实账号不再一秒闪退（换成已登录卡片）",
+      "if (!id.user || id.isAnonymous) return;" in _r50_authjs
+      and 'getElementById("already-in")' in _r50_authjs
+      and 'setTimeout(function () { window.location.href = "feed.html"; }, 600)' not in _r50_authjs,
+      [l for l in _r50_authjs.splitlines() if "already" in l or "setTimeout" in l][:6])
+check("R50/登录页: 「已登录」卡片与它的退出按钮都在页面里",
+      'id="already-in"' in _r50_login
+      and 'id="already-out"' in _r50_login
+      and 'id="already-go"' in _r50_login,
+      "see login.html auth-card")
+
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)

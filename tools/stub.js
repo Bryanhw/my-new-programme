@@ -847,7 +847,7 @@ function __makeClient(opts) {
         session = { user: { id: 'u-anon', is_anonymous: true } };
         return P.resolve({ data: { session: session, user: session.user }, error: null });
       },
-      signOut: function () { session = null; return P.resolve({ error: null }); },
+      signOut: function () { __calls.push(['signOut']); session = null; return P.resolve({ error: null }); },
       onAuthStateChange: function () {
         return { data: { subscription: { unsubscribe: function () {} } } };
       }
