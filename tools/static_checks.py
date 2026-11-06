@@ -58,9 +58,9 @@ for name in js_files:
         check("parse " + name, False, str(e)[:200])
 # The shipped script set is pinned on purpose: adding a file is a decision
 # (it must be loaded by a page and covered by a test), not an accident.
-EXPECTED_JS = ["app.js", "auth.js", "campuses.js", "circles.js", "config.js",
-               "faq.js", "feed.js", "feedback.js", "home.js", "hotwords.js",
-               "post.js", "profile.js", "reset.js"]
+EXPECTED_JS = ["app.js", "auth.js", "campus-picker.js", "campuses.js", "circles.js",
+               "config.js", "faq.js", "feed.js", "feedback.js", "home.js",
+               "hotwords.js", "post.js", "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
       js_files)
 
@@ -1027,27 +1027,37 @@ if os.path.exists(observe_path):
           "#[0-9a-f]{6}" in observe_sql and "public.comments" in observe_sql)
     check("readme points at the observation script", "docs/s1-observe.sql" in readme_src)
 
-# D2 学校字段规范化：注册页给的是「带补全的受控列表」（<datalist>），不是裸文本框。
+# D2 学校字段规范化：注册页给的是「带补全的受控列表」，V4-4/M3 从 <datalist>
+# 升级成 CampusPicker 组件（搜索 + 首字母索引 + 标签筛选）。
 # 为什么不做三级 <select>：换成下拉就等于禁止手输，全国高校收不全，
 # 学生会被卡住；而「找不到自己的学校」恰恰是最需要保留自由输入的场景。
 login_live = read(os.path.join(ROOT, "login.html"))
 campus_src = sources.get("campuses.js", "")
 app_src = sources.get("app.js", "")
 auth_src = sources.get("auth.js", "")
+picker_src = sources.get("campus-picker.js", "")
 check("the school list file ships with the project", "campuses.js" in js_files)
-check("the register page offers the list",
-      'id="school-list"' in login_live and 'list="school-list"' in login_live)
+check("the register page offers the picker container",
+      'id="school-picker-box"' in login_live and 'id="reg-school"' in login_live)
 check("the register field is still a text input",
       re.search(r'id="reg-school"[^>]*type="text"', login_live) is not None)
+check("the datalist is gone from the register field",
+      'list="school-list"' not in login_live and 'id="school-list"' not in login_live)
 check("the list loads before the shared module",
       login_live.index("campuses.js") < login_live.index("app.js"),
+      "script order in login.html")
+check("the picker loads before auth wiring",
+      login_live.index("campus-picker.js") < login_live.rindex("auth.js"),
       "script order in login.html")
 check("the page says a missing school can still be typed",
       "照原样" in login_live)
 check("the list covers the school we already store",
       "电子科技大学" in campus_src and "成都市" in campus_src)
-_rows = re.findall(r'^\s*\["[^"]+", "[^"]+", "[^"]+"\],?\s*$', campus_src, re.M)
-check("every school row carries a province and a city", len(_rows) >= 100, len(_rows))
+_listbody = re.search(r'var LIST = \[(.*?)\];', campus_src, re.S)
+_rows = re.findall(r'^\s*\[[^\]]+\],?\s*$', _listbody.group(1), re.M) if _listbody else []
+check("every LIST row carries a province and a city", len(_rows) >= 100, len(_rows))
+check("the LIST block has exactly the master row count",
+      len(_rows) == 157, len(_rows))
 check("the list keeps the short names people actually type",
       '"电子科大":' in campus_src and '"uestc":' in campus_src)
 check("nicknames that name two different schools are not guessed",
@@ -1058,8 +1068,13 @@ check("the shared module survives a page without the list",
       "window.CampusList ||" in app_src)
 check("the shared module exposes the school helpers for the same-city filter",
       "schoolOf: canonicalSchool" in app_src and "cityOf: cityOfSchool" in app_src)
-check("the login page fills the datalist from the shared list",
-      'getElementById("school-list")' in auth_src and ".appendChild(opt)" in auth_src)
+check("the picker component ships and is used by the login page",
+      "CampusPicker" in picker_src and picker_src and "attach" in picker_src)
+check("the login page wires the picker to the register field",
+      'getElementById("school-picker-box")' in auth_src
+      and "CampusPicker.attach" in auth_src and 'getElementById("reg-school")' in auth_src)
+check("the picker degrades to a plain text box when missing",
+      "window.CampusPicker" in auth_src)
 check("readme documents the controlled school list", "campuses.js" in readme_src)
 
 # D1 稳定洞号：编号改成数据库的生成列 posts.anon_code。
@@ -3166,6 +3181,46 @@ check("R50/登录页: 「已登录」卡片与它的退出按钮都在页面里"
       and 'id="already-out"' in _r50_login
       and 'id="already-go"' in _r50_login,
       "see login.html auth-card")
+
+print()
+print("R51) V4：登录三条路收成「完成态」3 秒离开；已登录进登录页 3 秒自动走；页头「先逛逛」不折行")
+
+# V4-1 登录完成态：login.html 要有完成卡（标题 / 副文 / 3 秒提示行），
+# auth.js 三条成功分支都收成同一个 showDone，整张表单卡先收掉。
+# V4-2：页头「先逛逛」不折行只靠一条作用域限定的 CSS 规则，覆盖五个页面。
+_r51_login = read(os.path.join(ROOT, "login.html"))
+_r51_authjs = read(os.path.join(ROOT, "assets/js/auth.js"))
+check("R51/完成态: 登录页有完成卡本体、标题、副文与 3 秒提示行",
+      'id="auth-done"' in _r51_login
+      and 'id="auth-done-title"' in _r51_login
+      and 'id="auth-done-sub"' in _r51_login
+      and "3 秒后自动跳转" in _r51_login,
+      "see login.html auth-done")
+check("R51/完成态: 表单卡带了 id，showDone 先把整张卡收掉再换成完成卡",
+      'id="auth-form-card"' in _r51_login
+      and "formCard.classList.add(\"hidden\")" in _r51_authjs
+      and "doneCard.hidden = false" in _r51_authjs,
+      "see auth.js showDone")
+check("R51/完成态: 登录 / 注册 / 匿名成功都走同一个 showDone，3 秒是时序不是动画",
+      _r51_authjs.count("showDone(") >= 4
+      and "DONE_SECONDS = 3" in _r51_authjs
+      and "window.location.href = target" in _r51_authjs
+      and "setInterval(" not in _r51_authjs,  # 允许注释里提到词，绝不调用它
+      [l for l in _r51_authjs.splitlines() if "showDone" in l or "DONE_SECONDS" in l][:6])
+check("R51/已登录: 已登录用户再进登录页 —— 卡片停留 3 秒后自动回首页，按钮先取消倒计时",
+      "alreadyLeaveTimer = setTimeout(function ()" in _r51_authjs
+      and 'window.location.href = "index.html"' in _r51_authjs
+      and "clearTimeout(alreadyLeaveTimer)" in _r51_authjs,
+      [l for l in _r51_authjs.splitlines() if "alreadyLeaveTimer" in l][:6])
+check("R51/已登录: 「已登录」卡把 3 秒后回首页说出口（id 与文案都在真实文件里）",
+      'id="already-leave"' in _r51_login
+      and "3 秒后将自动回到首页" in _r51_login,
+      "see login.html already-in card")
+check("R51/先逛逛: 页头「先逛逛」不折行是作用域限定的一条规则（.site-header 内，弹层 / 评论里的不受影响）",
+      ".site-header .link-plain {" in css
+      and "white-space: nowrap;" in css
+      and "flex: 0 0 auto;" in css,
+      [l for l in css.splitlines() if ".site-header .link-plain" in l][:4])
 
 
 print()

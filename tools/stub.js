@@ -161,7 +161,15 @@ function __el(id) {
   el.closest = function () { return null; };
   el.focus = function () {};
   el.click = function () { el.dispatch('click', { target: el, preventDefault: function () {} }); };
-  el.appendChild = function (child) { el._children.push(child); return child; };
+  el.appendChild = function (child) {
+    el._children.push(child);
+    /* 第 52 轮：真实 DOM 里父节点的 textContent 会聚合这一整棵子树。
+       替身里子节点文本 = child.textContent（innerHTML 写入的会转成纯文本），
+       追加时并入父节点 _text，这样「list.appendChild(行) 后读 list.textContent
+       含校名」也能按真实语义断言。 */
+    if (child && child.textContent != null) { el._text = String(el._text) + String(child.textContent); }
+    return child;
+  };
   /* 追加渲染（第 30 轮翻页）：真浏览器里 insertAdjacentHTML('beforeend', …)
      只解析新增的那段，**不动**已有的节点（用户点开的评论框还在）。
      这里的替身等价成「接到 innerHTML 尾巴上」，测试直接读 innerHTML 断言。 */

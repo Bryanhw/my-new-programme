@@ -409,6 +409,14 @@ main:focus { outline: none; }
   outline-offset: 2px;
 }
 
+/* V4-2：页头里的「先逛逛」在窄屏会被 flex 挤压折成三行（默认 shrink:1 且
+   没有 nowrap，一个字一行）。把它钉成不收缩、不折行的独立项。
+   只作用于 .site-header 内，不碰别处的 .link-plain（如弹层的「先等等」按钮）。 */
+.site-header .link-plain {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 /* 直接落在金色画布上的链接（卡片外的零星链接） */
 .on-gold a { color: var(--ink-solid); text-decoration: underline; text-underline-offset: 2px; }
 .on-gold a:hover { color: #A8451A; }
@@ -2632,4 +2640,101 @@ body.modal-open { overflow: hidden; }
   color: var(--brand-text);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* =====================================================================
+ *  选学校组件（V4-4 / M3）：搜索 + 首字母索引 + 标签筛选
+ *  类名一律带 campus- 前缀，不跟全站 .chip / .tag 打架。
+ * ===================================================================== */
+.campus-picker {
+  position: relative;
+}
+.campus-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 2px;
+}
+.campus-chip {
+  appearance: none;
+  border: 1px solid var(--ink-soft);
+  background: transparent;
+  color: var(--ink);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.campus-chip.active {
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+  color: #fff;
+}
+.campus-picker-letters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 8px;
+}
+.campus-letter {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 2px 5px;
+  font-size: var(--fs-xs);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.campus-letter:hover,
+.campus-letter:focus-visible {
+  background: var(--brand-ghost);
+  color: var(--brand-text);
+}
+.campus-picker-list {
+  margin-top: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.campus-picker-note {
+  padding: 10px 12px;
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+}
+.campus-opt {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  padding: 9px 12px;
+  cursor: pointer;
+  border-top: 1px solid var(--line);
+}
+.campus-opt:hover,
+.campus-opt.campus-active {
+  background: var(--brand-ghost);
+}
+.campus-opt-name {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+.campus-opt-meta {
+  color: var(--ink-soft);
+  font-size: var(--fs-xs);
+}
+.campus-tag {
+  font-size: var(--fs-xs);
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-ghost);
+  color: var(--brand-text);
+  border: 1px solid transparent;
+}
+.campus-opt-custom {
+  color: var(--brand-text);
 }

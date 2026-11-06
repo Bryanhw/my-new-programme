@@ -30,21 +30,29 @@
   var regSecA     = document.getElementById("reg-security-a");
   var loginToReg  = document.getElementById("login-to-register");
 
+  /* V4-1 完成态：登录 / 注册 / 匿名成功后的整卡替换 */
+  var formCard   = document.getElementById("auth-form-card");
+  var doneCard   = document.getElementById("auth-done");
+  var doneTitle  = document.getElementById("auth-done-title");
+  var doneSub    = document.getElementById("auth-done-sub");
+  var DONE_SECONDS = 3;
+  var alreadyLeaveTimer = null;
+
   document.title = "登录 / 注册 · " + C.SITE_NAME;
   C.markTabbar("");
 
   /* ---------------------------------------------------------------
-   * 学校补全（任务 D2）
-   * 固定列表来自 assets/js/campuses.js，找不到的学校照原样手输，
-   * 所以这里只填 <datalist>，不做任何限制。
+   * 学校选择器（V4-4 / M3）
+   * 注册页选校从 <datalist> 升级成 CampusPicker 组件（搜索 + 首字母索引
+   * + 标签筛选），找不到的学校照原样手输的降级不变。组件缺位时
+   * #reg-school 仍是普通文本框，注册照常 —— 渐进增强。
    * --------------------------------------------------------------- */
-  var schoolList = document.getElementById("school-list");
-  var campusOptions = schoolList && C.schoolOptions ? C.schoolOptions() : [];
-  for (var si = 0; si < campusOptions.length; si++) {
-    var opt = document.createElement("option");
-    opt.value = campusOptions[si].name;
-    opt.label = campusOptions[si].province + " " + campusOptions[si].city;
-    schoolList.appendChild(opt);
+  var regSchoolEl = document.getElementById("reg-school");
+  var regSchoolBox = document.getElementById("school-picker-box");
+  if (regSchoolEl && regSchoolBox && window.CampusPicker) {
+    var pickH = window.CampusPicker.attach(regSchoolBox, { inputEl: regSchoolEl });
+    /* 测试钩子：容器里已挂好的组件 handle */
+    window.CampusPicker.__last = pickH;
   }
 
   /* 密保问题下拉：选项来自 app.js 的单一来源（id 与数据库 CHECK 对齐），
@@ -80,6 +88,11 @@
         panelLogin.classList.add("hidden");
         panelReg.classList.add("hidden");
         card.hidden = false;
+        /* V4-1：已登录用户再进登录页 —— 停留 3 秒后自动离开（默认回首页），
+           卡上「去我的」「退出登录」先动手就会取消这次自动离开。 */
+        alreadyLeaveTimer = setTimeout(function () {
+          window.location.href = "index.html";
+        }, DONE_SECONDS * 1000);
       } else {
         C.showNotice(noticeEl, "info", "你已经登录了，正在回到我的页…");
         setTimeout(function () { window.location.href = "profile.html"; }, 1200);
@@ -87,10 +100,18 @@
     });
   }
 
-  /* 「已登录」卡片上的退出按钮：一处绑定，和全站页头的退出行为一致 */
+  /* 「已登录」卡片上的两颗按钮：先动手就先取消 3 秒后的自动返回，再办正事。
+     退出行为与全站页头一致。 */
+  var alreadyGo  = document.getElementById("already-go");
   var alreadyOut = document.getElementById("already-out");
+  if (alreadyGo) {
+    alreadyGo.addEventListener("click", function () {
+      clearTimeout(alreadyLeaveTimer);
+    });
+  }
   if (alreadyOut) {
     alreadyOut.addEventListener("click", function () {
+      clearTimeout(alreadyLeaveTimer);
       if (!confirm("确定要退出登录吗？")) return;
       C.signOut().then(function () {
         window.location.href = "index.html";
@@ -144,8 +165,7 @@
     setLoading(loginBtn, true, "正在登录…");
 
     var flow = C.signIn(loginPhone.value, loginPass.value).then(function () {
-      C.showNotice(noticeEl, "ok", "登录成功，正在进入广场…");
-      setTimeout(function () { window.location.href = "feed.html"; }, 500);
+      showDone("✅ 您已登录", "正在进入内容广场…", "feed.html");
     }).catch(function (err) {
       var msg = err.message || "登录失败";
       // 登录失败最常见的两种死路：没账号、忘了密码 —— 都指到面板下方的「登不进去？」
@@ -200,14 +220,15 @@
         );
       })
       .then(function (secErr) {
-        if (secErr) {
-          C.showNotice(noticeEl, "warn",
-            "注册成功，但密保没存上：" + secErr + " 请登录后在「我的」里补一次。");
-        } else {
-          C.showNotice(noticeEl, "ok", "注册成功，欢迎来到 " + C.SITE_NAME + "！");
-        }
-        setLoading(regBtn, false, "注 册");
-        setTimeout(function () { window.location.href = "feed.html"; }, secErr ? 3000 : 800);
+        /* 密保是唯一的自助找回通道：没存上要在完成卡上如实提醒去「我的」补，
+           不能让人觉得已经存上了；3 秒由 showDone 统一驱动，别再各写各的。 */
+        showDone(
+          "✅ 您已登录",
+          secErr
+            ? "注册成功，但密保没存上：" + secErr + "。登录后记得在「我的」里补一次。"
+            : "注册成功，欢迎来到 " + C.SITE_NAME + "！",
+          "feed.html"
+        );
       })
       .catch(function (err) {
         C.showNotice(noticeEl, "error", err.message);
@@ -229,8 +250,7 @@
     setLoading(anonBtn, true, "正在进入…");
 
     var flow = C.signInAnonymously().then(function () {
-      C.showNotice(noticeEl, "ok", "已匿名进入，现在就可以分享了（也可以随时注册账号）");
-      setTimeout(function () { window.location.href = "feed.html"; }, 700);
+      showDone("✓ 已匿名进入", "现在就可以浏览和分享（也可以随时注册账号）", "feed.html");
     }).catch(function (err) {
       C.showNotice(noticeEl, "error", err.message);
       setLoading(anonBtn, false, "🌙 先匿名看看，不注册");
@@ -266,5 +286,19 @@
   function setLoading(btn, on, text) {
     btn.disabled = on;
     btn.innerHTML = on ? '<span class="spinner"></span><span>' + text + "</span>" : text;
+  }
+
+  /* V4-1：三条路（登录 / 注册 / 匿名进入）成功后的统一完成态 ——
+     整张表单卡收掉，原地换成一张「您已登录 / 已进入」卡片，3 秒后自动走。
+     3 秒是时序不是动画：只挂一个 setTimeout，不引入会残留的 setInterval，
+     也不做跳动倒计时（克制、降级友好）。 */
+  function showDone(title, sub, target) {
+    C.hideNotice(noticeEl);
+    formCard.classList.add("hidden");
+    authErrors.classList.add("hidden");
+    doneTitle.textContent = title;
+    doneSub.textContent = sub;
+    doneCard.hidden = false;
+    setTimeout(function () { window.location.href = target; }, DONE_SECONDS * 1000);
   }
 })();

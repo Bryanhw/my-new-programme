@@ -441,8 +441,9 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），1079 项
-python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），923 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），1091 项
+python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），929 项
+python tools\campus_compare.py    # 名单差异审计：985/211/港五澳三全覆盖 + 基线 129 行不回删
 ```
 
 > **用哪个 Python**：这两套工具依赖 `dukpy` / `esprima`，目前是在 **Python 3.14** 上跑通的

@@ -28,7 +28,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>登录 / 注册 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=f18ad56a">
+<link rel="stylesheet" href="assets/css/style.css?v=84517746">
 </head>
 <body>
 
@@ -83,7 +83,7 @@
 
   <div class="notice notice-info mt-24" id="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
-  <div class="auth-card mt-16">
+  <div class="auth-card mt-16" id="auth-form-card">
     <div class="auth-head">
       <h1 class="auth-title">欢迎来到校园拾光</h1>
       <p class="auth-sub">注册一个账号，让分享有个名字；<br>或者先匿名看看，随时都能注册。</p>
@@ -135,11 +135,12 @@
 
         <div class="field">
           <label class="label" for="reg-school">学校</label>
-          <input class="input" id="reg-school" name="school" type="text"
-            list="school-list" maxlength="40" placeholder="输入几个字，比如「电子科大」"
-            autocomplete="organization">
-          <datalist id="school-list"></datalist>
-          <p class="hint">列表里选一个会带上城市，方便以后「只看同城」；找不到自己的学校就照原样写，一样能注册。</p>
+          <div id="school-picker-box">
+            <input class="input" id="reg-school" name="school" type="text"
+              maxlength="40" placeholder="输入几个字，比如「电子科大」"
+              autocomplete="organization">
+          </div>
+          <p class="hint">输入时会有建议（可搜名字、拼音，也能按首字母或 985 / 211 筛选）；列表里选一个会带上城市，方便以后「只看同城」；找不到自己的学校就照原样写，一样能注册。</p>
         </div>
 
         <div class="field">
@@ -181,6 +182,16 @@
     </p>
   </div>
 
+  <!-- V4-1：登录 / 注册 / 匿名成功后的「完成态」卡片 —— 整张表单卡收掉，
+       原地换成这个大号提示，停留 3 秒后由 auth.js 自动跳走。 -->
+  <div class="auth-card mt-16" id="auth-done" hidden>
+    <div class="auth-head">
+      <h1 class="auth-title" id="auth-done-title">您已登录</h1>
+      <p class="auth-sub" id="auth-done-sub"></p>
+    </div>
+    <p class="hint text-center mt-16" id="auth-done-countdown">3 秒后自动跳转…</p>
+  </div>
+
   <!-- R50：真实账号已登录时整卡替换成这个「已登录」卡片 —— 不再一秒闪回
        广场（那会让想退出的人一头撞进死胡同），想退出在卡上直接退。 -->
   <div class="auth-card mt-16" id="already-in" hidden>
@@ -190,6 +201,7 @@
     </div>
     <a class="btn btn-primary btn-block" href="profile.html" id="already-go">去「我的」页</a>
     <button class="btn btn-ghost btn-block mt-8" type="button" id="already-out">退出登录</button>
+    <p class="hint text-center mt-8" id="already-leave">3 秒后将自动回到首页</p>
     <p class="hint text-center mt-16">退出后回到首页，随时可以再登录。</p>
   </div>
 
@@ -207,8 +219,9 @@
 
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/campuses.js?v=43cddca3"></script>
+<script src="assets/js/campuses.js?v=c934caf8"></script>
 <script src="assets/js/app.js?v=1e8fbcc1"></script>
-<script src="assets/js/auth.js?v=f3648f28"></script>
+<script src="assets/js/campus-picker.js?v=7bce0953"></script>
+<script src="assets/js/auth.js?v=d659ec40"></script>
 </body>
 </html>

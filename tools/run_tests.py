@@ -20,7 +20,7 @@ PAGES = {
     "index.html": ["assets/js/home.js"],
     "feed.html": ["assets/js/feed.js"],
     "post.html": ["assets/js/post.js"],
-    "login.html": ["assets/js/auth.js"],
+    "login.html": ["assets/js/campus-picker.js", "assets/js/auth.js"],
     "reset.html": ["assets/js/reset.js"],
     "profile.html": ["assets/js/profile.js"],
     "faq.html": ["assets/js/faq.js"],
@@ -631,6 +631,15 @@ def run_b():
           ["signIn", "13800138000@students.local"] in calls, calls)
     js(it, "__r = {}; Campus.getIdentity().then(function(i){ __r.reg = i.isRegistered; });")
     check("identity registered after login", js(it, "__r.reg") is True)
+    # V4-1: a successful login no longer flashes a notice + short jump -- it
+    # hides the whole form card and swaps in the "done" card (the 3-second
+    # auto-leave is a single setTimeout which is queued, never run, in dukpy).
+    check("login success swaps the form card for the done card",
+          js(it, "document.getElementById('auth-form-card').classList.contains('hidden')") is True
+          and js(it, "document.getElementById('auth-done').hidden") is False
+          and "\u5df2\u767b\u5f55" in
+              js(it, "document.getElementById('auth-done-title').textContent"),
+          js(it, "document.getElementById('auth-done').innerHTML"))
 
     it = load("login.html", "mock-login")
     js(it, "document.getElementById('reg-phone').value = '123';"
@@ -1801,6 +1810,8 @@ ZH_SC = "\u56db\u5ddd\u7701"                                          # 四川�
 ZH_UNKNOWN = "\u67d0\u67d0\u804c\u4e1a\u6280\u672f\u5b66\u9662"       # 某某职业技术学院
 ZH_SHANDA = "\u5c71\u5927"                                            # 山大
 ZH_HAIDA = "\u6d77\u5927"                                             # 海大
+ZH_CUHK = "\u9999\u6e2f\u4e2d\u6587\u5927\u5b66"                     # 香港中文大学
+ZH_CUHKSZ = "\u9999\u6e2f\u4e2d\u6587\u5927\u5b66\uff08\u6df1\u5733\uff09"  # 香港中文大学（深圳）
 ZH_EMPTY_SCHOOL = ("\u8bf7\u586b\u5199\u4f60\u7684"
                    "\u5b66\u6821")                                    # 请填写你的学校
 
@@ -1881,17 +1892,64 @@ check("the province comes from the list too",
 check("a school already stored in the database resolves to a city",
       js(it, "Campus.cityOf(%s)" % json.dumps(ZH_UESTC)) == ZH_CD)
 
-print("- the register form offers the list without blocking free text")
-check("the datalist is filled with every school",
-      js(it, "document.getElementById('school-list')._children.length") == js(it, "CampusList.size"),
-      js(it, "document.getElementById('school-list')._children.length"))
-check("the option shows the school as its value",
-      js(it, "(function () { var o = document.getElementById('school-list')._children[0];"
-             " return o.tagName === 'OPTION' && !!o.value; })()") is True)
-check("the option hints at the city",
-      js(it, "(function () { var o = document.getElementById('school-list')._children[0];"
-             " return String(o.label).indexOf(' ') > 0; })()") is True,
-      js(it, "String(document.getElementById('school-list')._children[0].label)"))
+print("- the register form offers the picker without blocking free text")
+check("the picker component is loaded",
+      js(it, "typeof window.CampusPicker === 'object'") is True,
+      js(it, "typeof window.CampusPicker"))
+check("the picker is attached to the register field",
+      js(it, "(function () { var h = window.CampusPicker && window.CampusPicker.__last;"
+             " return !!(h && h.input && h.input.id === 'reg-school'); })()") is True)
+check("typing a nickname lists matching suggestions",
+      js(it, "(function () { var h = window.CampusPicker.__last;"
+             " h.input.value = %s; h.query(h.input.value);"
+             " return String(h.list.textContent).indexOf(%s) >= 0; })()"
+             % (json.dumps(ZH_UESTC_SHORT), json.dumps(ZH_UESTC))) is True,
+      js(it, "String(window.CampusPicker.__last.list.textContent)")[:120])
+check("typing pinyin finds the same school",
+      js(it, "(function () { var h = window.CampusPicker.__last;"
+             " h.input.value = 'dianzi'; h.query(h.input.value);"
+             " var s = String(h.list.textContent);"
+             " return s.indexOf(%s) >= 0; })()"
+             % json.dumps(ZH_UESTC)) is True,
+      js(it, "String(window.CampusPicker.__last.list.textContent)")[:120])
+check("browsing by initial letter shows the special campus",
+      js(it, "(function () { var h = window.CampusPicker.__last; h.browse('X');"
+             " return String(h.list.textContent).indexOf(%s) >= 0; })()"
+             % json.dumps(ZH_CUHKSZ)) is True,
+      js(it, "String(window.CampusPicker.__last.list.textContent)")[:120])
+check("a filter narrows the browse list",
+      js(it, "(function () { var h = window.CampusPicker.__last;"
+             " h.setFilter('\u6e2f\u4e94\u6fb3\u4e09', null); h.browse('');"
+             " var t = String(h.list.textContent);"
+             " return t.indexOf(%s) >= 0 && t.indexOf('\u5317\u4eac\u5927\u5b66') < 0; })()"
+             % json.dumps(ZH_CUHK)) is True,
+      js(it, "String(window.CampusPicker.__last.list.textContent)")[:120])
+check("picking a suggestion fills the canonical name",
+      js(it, "(function () { var h = window.CampusPicker.__last;"
+             " h.setFilter('', null);"
+             " h.input.value = %s; h.query(h.input.value);"
+             " var rows = h.list._children || [];"
+             " var hit = null, i;"
+             " for (i = 0; i < rows.length; i++) {"
+             "   if (rows[i].getAttribute && rows[i].getAttribute('data-name') === %s) hit = rows[i];"
+             " }"
+             " if (!hit) return false; hit.click();"
+             " return h.input.value === %s; })()"
+             % (json.dumps(ZH_UESTC_SHORT), json.dumps(ZH_UESTC), json.dumps(ZH_UESTC))) is True,
+      js(it, "String(window.CampusPicker.__last.input.value)"))
+check("an unknown school can still be typed as-is",
+      js(it, "(function () { var h = window.CampusPicker.__last;"
+             " h.input.value = %s; h.query(h.input.value);"
+             " var t = String(h.list.textContent);"
+             " if (t.indexOf('\u7167\u539f\u6837') < 0) return false;"
+             " var rows = h.list._children || [], i, c = null;"
+             " for (i = 0; i < rows.length; i++) {"
+             "   if (rows[i].className && String(rows[i].className).indexOf('campus-opt-custom') !== -1) c = rows[i];"
+             " }"
+             " if (!c) return false; c.click();"
+             " return h.input.value === %s; })()"
+             % (json.dumps(ZH_UNKNOWN), json.dumps(ZH_UNKNOWN))) is True,
+      js(it, "String(window.CampusPicker.__last.input.value)"))
 
 print("- registration stores the canonical school")
 it = load("login.html", "mock-login")
@@ -3825,6 +3883,10 @@ check("the card's sign-out goes through client.auth.signOut",
 check("then lands back on the index",
       js(it, "String(window.location.href)") == "index.html",
       js(it, "String(window.location.href)"))
+# V4-1: the already-in card's 3-second auto-leave is wired in auth.js (and its
+# cancel-on-button is exercised implicitly above: the click paths still work).
+# The card's static hint text is not seeded into the sandbox DOM, so that
+# markup-side guard lives in static_checks (R51) instead of here.
 
 
 print()
