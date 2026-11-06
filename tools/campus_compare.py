@@ -2,9 +2,9 @@
 """校园名单差异审计：campus_master 权威集合 vs 生成产物 campuses.js。
 
 用途：每次改名单 / 生成 campuses.js 后运行，确认：
-  1) 985(39) / 211(官方 112 立项) / 港五澳三(8) / 点名六所(6) 全覆盖；
+  1) 985(39) / 211(官方 112 立项) / 港五澳三(8) / 点名六所(6) / 知名(16) 全覆盖；
   2) 基线 129 行「只增不删」（导师基线逐行仍在）；
-  3) LIST 行数 = 157，TAGS 与 LIST 一一对应；
+  3) LIST 行数 = 169，TAGS 与 LIST 一一对应；
   4) 211 立项口径：112 = 39 所 985 + 73 所非 985，拆校区不增加立项数。
 
 退出码：0 全部通过；1 有差异。
@@ -25,6 +25,7 @@ SET_985 = CM.SET_985
 SET_211 = CM.SET_211          # 立项名集合（112 = 39 + 73）
 SET_GBA = CM.SET_GBA
 SET_SIX = CM.SET_SIX
+SET_KNOWN = CM.SET_KNOWN      # 知名大学（原点名六所 + V4-4 新增非 985/211）
 SPECIAL_DEFAULT = CM.SPECIAL_DEFAULT
 
 # 基线 129 行（导师名单）——从本仓库 HEAD 固化的只增不删基线。
@@ -91,12 +92,12 @@ def main():
     problems = []
     notes = []
 
-    # 1) 行数约束：基线不删，总量 = 157
+    # 1) 行数约束：基线不删，总量 = 169
     n = len(names)
     if len(tags) != n:
         problems.append("TAGS 行数 %d 与 LIST 行数 %d 不一致" % (len(tags), n))
-    if n != 157:
-        problems.append("LIST 行数 = %d（应为 157）" % n)
+    if n != 169:
+        problems.append("LIST 行数 = %d（应为 169）" % n)
 
     miss_baseline = set(BASELINE_129) - set(names)
     if miss_baseline:
@@ -111,6 +112,7 @@ def main():
         ("211 立项(112=39+73)", SET_211, 112),
         ("港五澳三", SET_GBA, 8),
         ("点名六所", SET_SIX, 6),
+        ("知名", SET_KNOWN, 16),
     ]
     for label, wanted, expect in checks:
         if len(wanted) != expect:
@@ -127,12 +129,12 @@ def main():
             problems.append("第 %d 行 %s 的 tags=%s 与权威推导 %s 不一致"
                             % (i + 1, nm, sorted(tg), sorted(their_tags)))
     if not problems:
-        notes.append("985=39、211 立项=112(985 39+非985 73)、港五澳三=8、点名六所=6")
-        notes.append("基线 129 行全部仍在，总量 157，TAGS 与 LIST 一一对应")
+        notes.append("985=39、211 立项=112(985 39+非985 73)、港五澳三=8、点名六所=6、知名=16")
+        notes.append("基线 129 行全部仍在，总量 169，TAGS 与 LIST 一一对应")
 
     print("校园名单差异审计")
     print("=" * 46)
-    print("LIST 行数：%d（含基线 %d 行 + M3 新增 %d 行）"
+    print("LIST 行数：%d（含基线 %d 行 + 后续新增 %d 行）"
           % (n, len(BASELINE_129), n - len(BASELINE_129)))
     for k in notes:
         print("  OK  " + k)
@@ -140,7 +142,7 @@ def main():
         print("  FAIL " + p)
     print("-" * 46)
     print("checks run: %d   failures: %d"
-          % (4 + len(BASELINE_129) + 1 + n, len(problems)))
+          % (5 + len(BASELINE_129) + 1 + n, len(problems)))
     return 1 if problems else 0
 
 

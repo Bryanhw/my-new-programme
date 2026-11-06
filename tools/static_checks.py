@@ -1057,7 +1057,7 @@ _listbody = re.search(r'var LIST = \[(.*?)\];', campus_src, re.S)
 _rows = re.findall(r'^\s*\[[^\]]+\],?\s*$', _listbody.group(1), re.M) if _listbody else []
 check("every LIST row carries a province and a city", len(_rows) >= 100, len(_rows))
 check("the LIST block has exactly the master row count",
-      len(_rows) == 157, len(_rows))
+      len(_rows) == 169, len(_rows))
 check("the list keeps the short names people actually type",
       '"电子科大":' in campus_src and '"uestc":' in campus_src)
 check("nicknames that name two different schools are not guessed",

@@ -1924,6 +1924,29 @@ check("a filter narrows the browse list",
              " return t.indexOf(%s) >= 0 && t.indexOf('\u5317\u4eac\u5927\u5b66') < 0; })()"
              % json.dumps(ZH_CUHK)) is True,
       js(it, "String(window.CampusPicker.__last.list.textContent)")[:120])
+check("a nickname resolves to a 985 branch campus",
+      js(it, "(function () { var h = window.CampusPicker.__last;"
+             " h.setFilter('', null);"
+             " h.input.value = '\u54c8\u5de5\u6df1'; h.query(h.input.value);"
+             " return String(h.list.textContent).indexOf('\u54c8\u5c14\u6ee8\u5de5\u4e1a\u5927\u5b66\uff08\u6df1\u5733\uff09') >= 0; })()"
+             ) is True,
+      js(it, "String(window.CampusPicker.__last.list.textContent)")[:120])
+check("a nickname resolves to the GZ branch of HKUST",
+      js(it, "(function () { var h = window.CampusPicker.__last;"
+             " h.setFilter('', null);"
+             " h.input.value = '\u6e2f\u79d1\u5e7f'; h.query(h.input.value);"
+             " return String(h.list.textContent).indexOf('\u9999\u6e2f\u79d1\u6280\u5927\u5b66\uff08\u5e7f\u5dde\uff09') >= 0; })()"
+             ) is True,
+      js(it, "String(window.CampusPicker.__last.list.textContent)")[:120])
+check("the known-university filter keeps a branch out but shows the new city schools",
+      js(it, "(function () { var h = window.CampusPicker.__last;"
+             " h.setFilter('\u77e5\u540d', null); h.browse('');"
+             " var t = String(h.list.textContent);"
+             " return t.indexOf('\u4e0a\u6d77\u79d1\u6280\u5927\u5b66') >= 0"
+             "        && t.indexOf('\u9999\u6e2f\u79d1\u6280\u5927\u5b66\uff08\u5e7f\u5dde\uff09') >= 0"
+             "        && t.indexOf('\u54c8\u5c14\u6ee8\u5de5\u4e1a\u5927\u5b66\uff08\u6df1\u5733\uff09') < 0; })()"
+             ) is True,
+      js(it, "String(window.CampusPicker.__last.list.textContent)")[:120])
 check("picking a suggestion fills the canonical name",
       js(it, "(function () { var h = window.CampusPicker.__last;"
              " h.setFilter('', null);"

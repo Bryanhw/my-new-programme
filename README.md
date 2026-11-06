@@ -442,7 +442,7 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
 python tools\static_checks.py     # 静态检查（esprima 解析 JS），1091 项
-python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），929 项
+python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），932 项
 python tools\campus_compare.py    # 名单差异审计：985/211/港五澳三全覆盖 + 基线 129 行不回删
 ```
 
@@ -851,7 +851,7 @@ D1 把编号换成了**数据库的生成列** `posts.anon_code`：
   没加载 `campuses.js` 的页面整体降级（只去空白、城市为空），不会报错。
 - 老数据不用迁移：`电子科技大学` 这类历史值本来就在列表里，能解析出城市；
   空值 `''` 保持为空、不参与筛选。列表是**种子列表**，按需往 `campuses.js` 里加行即可。
-  当前共 **129 校 / 49 城 / 33 个省级区划**，含 57 组无歧义简称（`川大` → 四川大学）。
+   当前共 **169 校 / 55 城 / 33 个省级区划**，含 95 组无歧义简称（`川大` → 四川大学）。
 
 ### 城市圈：改的是「先看什么」，不是「能看什么」
 
