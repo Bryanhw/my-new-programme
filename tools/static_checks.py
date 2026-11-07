@@ -3224,6 +3224,50 @@ check("R51/先逛逛: 页头「先逛逛」不折行是作用域限定的一条�
 
 
 print()
+print("R54) V4-3 hero 场景：两扇打开的窗 + 操场 + 远山 + 第三层云")
+
+# V4-3：主页 hero 从「单张校门图的天空窗」升级为纵深场景。
+# .hero-scene 是纯装饰层（aria-hidden），窗用两个伪元素半开（rotateY ±22°），
+# 操场 + 远山合在一张内联 SVG 背景里，第三层云独立平铺；
+# prefers-reduced-motion 下动画全部静止且窗退回显式半开；小屏窗收到下缘装饰。
+_r54_idx = read(os.path.join(ROOT, "index.html"))
+_r54_css = css
+check("R54: hero 里有一个纯装饰场景层（读屏不读、不挡内容）",
+      'class="hero-scene"' in _r54_idx
+      and 'aria-hidden="true"' in _r54_idx,
+      "see index.html .hero-scene")
+check("R54: 两扇窗是 CSS 伪元素半开（perspective + rotateY ∓22°），不新增图片",
+      ".hero-scene::before" in _r54_css and ".hero-scene::after" in _r54_css
+      and "perspective: 900px" in _r54_css
+      and "rotateY(-22deg)" in _r54_css and "rotateY(22deg)" in _r54_css,
+      "see style.css .hero-scene")
+check("R54: 操场 + 远山都在内联 SVG 背景里（一张 data-uri，无外部请求）",
+      ".hero-scene {" in _r54_css
+      and "%3Cpath" in _r54_css and "%3Cellipse" in _r54_css
+      and "data:image/svg+xml" in _r54_css,
+      "the scene bg is inline SVG")
+check("R54: 第三层云独立平铺漂移（背景位移动画，动效由 reduce 统一停）",
+      ".hero-cloud-far" in _r54_css
+      and "sky-drift-far-3" in _r54_css and "background-position-x" in _r54_css,
+      "see style.css .hero-cloud-far")
+check("R54: 内容层（问候 / 标题 / 副文 / 标签 / CTA）都抬到场景之上可读",
+      ".hero-greeting {" in _r54_css and ".hero-title {" in _r54_css
+      and ".hero-sub {" in _r54_css and ".hero-pills {" in _r54_css
+      and ".cta-row {" in _r54_css
+      and _r54_css.count("z-index: 1") >= 5,
+      "content sits above the scene")
+check("R54: 减弱动态时动画全停，窗退回显式半开而不是全关",
+      ".hero-scene::before { transform: rotateY(-22deg); }" in _r54_css
+      and ".hero-scene::after  { transform: rotateY(22deg); }" in _r54_css,
+      "reduce keeps the window half open")
+check("R54: 小屏（≤520px）窗退到下缘装饰、操场收浅、云收细，不挡标题",
+      "@media (max-width: 520px)" in _r54_css
+      and "animation: none" in _r54_css
+      and "bottom: 4%" in _r54_css,
+      "phone windows move to the lower edge")
+
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)

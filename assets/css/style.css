@@ -499,6 +499,8 @@ main:focus { outline: none; }
 }
 
 .hero-greeting {
+  position: relative;
+  z-index: 1;
   font-size: var(--fs-sm);
   color: var(--ink-faint);
   letter-spacing: 3px;
@@ -506,6 +508,8 @@ main:focus { outline: none; }
 }
 
 .hero-title {
+  position: relative;
+  z-index: 1;
   font-size: var(--fs-display);
   line-height: 1.34;
   font-weight: 900;
@@ -518,6 +522,8 @@ main:focus { outline: none; }
 }
 
 .hero-sub {
+  position: relative;
+  z-index: 1;
   font-size: var(--fs-base);
   line-height: 1.8;
   color: var(--ink-soft);
@@ -527,6 +533,8 @@ main:focus { outline: none; }
 
 /* 「想匿名 / 想署名」两颗小标签：把最大的顾虑直接摆在首屏 */
 .hero-pills {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -555,12 +563,95 @@ main:focus { outline: none; }
   border: 1px solid rgba(43, 29, 17, 0.5);
 }
 
+/* ============================================================================
+ * V4-3 主页 hero 场景：两扇打开的窗 + 操场 + 远山 + 飘云。
+ * ----------------------------------------------------------------------------
+ * 布局（都由 .hero 现成的 overflow:hidden / isolation:isolate 兜底）：
+ *   .hero-scene        绝对层铺满 hero，承载窗的 3D 透视；在背景与文字之间。
+ *   .hero-scene::before 左窗 / ::after 右窗（朝内半开 rotateY ∓22°，入场动画）。
+ *   .hero-scene 的 background = 远山两层 + 操场椭圆 + 跑道环（一张 SVG 分层）。
+ *   .hero-cloud-far    第三层更淡更慢的云（平铺漂移，接续现有两套云）。
+ * 动效只动 transform / background-position-x / opacity，减少动效统一停。
+ * ============================================================================ */
+.hero-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;           /* 在 hero 渐变背景之上、文字（z-index:1）之下 */
+  pointer-events: none;
+  perspective: 900px;
+  transform-style: preserve-3d;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 460'%3E%3Cdefs%3E%3ClinearGradient id='h' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23F3E7CF' stop-opacity='0'/%3E%3Cstop offset='1' stop-color='%23EFE2C6' stop-opacity='0.9'/%3E%3C/linearGradient%3E%3C/defs%3E%3C!-- 远山近层（青灰蓝）--%3E%3Cpath d='M0 236 L120 168 L210 216 L330 150 L430 212 L560 142 L660 210 L800 156 L920 214 L1040 158 L1200 220 L1200 460 L0 460 Z' fill='%23C9CFC8' fill-opacity='0.55'/%3E%3C!-- 远山远层（更淡更浅）--%3E%3Cpath d='M0 208 L150 150 L260 192 L420 132 L560 196 L700 140 L880 204 L1040 148 L1200 200 L1200 460 L0 460 Z' fill='%23DDE3DA' fill-opacity='0.6'/%3E%3C!-- 操场草地（椭圆）--%3E%3Cellipse cx='600' cy='360' rx='470' ry='120' fill='%23EFE9D7' fill-opacity='0.85'/%3E%3C!-- 跑道环（外沿 + 内沿）--%3E%3Cellipse cx='600' cy='360' rx='410' ry='96' fill='none' stroke='%23FBF6EA' stroke-width='16' fill-opacity='0.9'/%3E%3Cellipse cx='600' cy='360' rx='398' ry='88' fill='none' stroke='%23E3DCC2' stroke-width='5'/%3E%3Cpath d='M600 360 L818 360' stroke='%23FBF6EA' stroke-width='10' fill-opacity='0.5'/%3E%3Cpath d='M382 360 L600 360' stroke='%23FBF6EA' stroke-width='10' fill-opacity='0.4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 100% 78%;
+  background-position: 50% 88%;
+  opacity: 0.96;
+}
+
+/* 最远云：第三层，比近云还淡还慢（平铺宽度 900px，186s 走完一圈） */
+.hero-cloud-far {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-repeat: repeat-x;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 70'%3E%3Cg fill='%23FFFFFF' fill-opacity='0.85'%3E%3Cellipse cx='50' cy='48' rx='46' ry='18'/%3E%3Cellipse cx='92' cy='38' rx='40' ry='22'/%3E%3Cellipse cx='138' cy='48' rx='40' ry='16'/%3E%3Crect x='12' y='46' width='158' height='18' rx='9'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 900px auto;
+  background-position: 0 4%;
+  opacity: 0.5;
+  animation: sky-drift-far-3 186s linear infinite;
+}
+@keyframes sky-drift-far-3 {
+  from { background-position-x: 0; }
+  to   { background-position-x: -900px; }
+}
+
+/* 两扇窗：近景深色框 + 玻璃高光，左右各一，朝窗中线半开。
+   入场：从关（0°）开到设定角度一次，之后静止（复习偏好减动效即静止）。 */
+.hero-scene::before,
+.hero-scene::after {
+  content: "";
+  position: absolute;
+  top: 6%;
+  height: 40%;
+  width: min(31%, 380px);
+  border-radius: 20px 20px 8px 8px;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.12) 34%, rgba(122, 102, 84, 0.10) 60%, rgba(255, 255, 255, 0.28) 100%),
+    linear-gradient(180deg, #7a6a57 0%, #57493a 100%);
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 250, 240, 0.5),
+    0 12px 26px rgba(59, 42, 27, 0.22);
+  transform-origin: 50% 0;
+  will-change: transform;
+}
+.hero-scene::before {
+  left: 1%;
+  animation: hero-open-left 900ms cubic-bezier(0.22, 0.8, 0.3, 1.02) both;
+}
+.hero-scene::after {
+  right: 1%;
+  animation: hero-open-right 900ms cubic-bezier(0.22, 0.8, 0.3, 1.02) both;
+}
+
+/* 让窗沿着内（窗中线）开：左窗向左旋转外开、右窗向右旋转外开 */
+@keyframes hero-open-left {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(-22deg); }
+}
+@keyframes hero-open-right {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(22deg); }
+}
+
 /* 学校正门（AI 生成 → 抠掉绿底 → 透明 PNG），替代原来的太阳装饰 */
 .hero-gate {
   display: block;
   width: min(360px, 88%);
   height: auto;
   margin: 0 auto 14px;
+  position: relative;
+  z-index: 1;
   /* 白晕一层，把抠图边缘从暖底上化开，像贴纸那样亮一圈 */
   filter: drop-shadow(0 0 26px rgba(255, 255, 255, 0.92))
           drop-shadow(0 16px 28px rgba(59, 42, 27, 0.24));
@@ -568,6 +659,8 @@ main:focus { outline: none; }
 
 /* ------------------------------ 主行动按钮 ------------------------------ */
 .cta-row {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2195,6 +2288,24 @@ body.modal-open { overflow: hidden; }
     -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 40px, #000 calc(100% - 40px), rgba(0, 0, 0, 0) 100%);
     mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 40px, #000 calc(100% - 40px), rgba(0, 0, 0, 0) 100%);
   }
+  /* V4-3 手机端（D6）：窗收成两侧下缘窄装饰，别站到标题后面挡字；
+     操场压浅、云变细，场景仍在但退到细节位。 */
+  .hero-scene {
+    background-size: 120% 62%;
+    background-position: 50% 96%;
+    opacity: 0.8;
+  }
+  .hero-scene::before,
+  .hero-scene::after {
+    top: auto;
+    bottom: 4%;
+    height: 20%;
+    width: 22%;
+    border-radius: 16px 16px 6px 6px;
+    animation: none;
+    transform: rotateY(0deg);
+  }
+  .hero-cloud-far { background-size: 500px auto; opacity: 0.35; }
   /* 手机上视口矮，远景压到 34vh，别把卡片挤得没地方站 */
   body::before { height: min(34vh, 300px); opacity: 0.5; }
   .hero-gate { width: min(300px, 86%); margin-bottom: 10px; }
@@ -2414,6 +2525,10 @@ body.modal-open { overflow: hidden; }
 /* 减少动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+  /* V4-3：减弱动态时动画被上面停掉，窗失去终态基准会退回 0°（全关）。
+     这里给显式半开态，场景仍是「两扇开着的窗」，只是不动。 */
+  .hero-scene::before { transform: rotateY(-22deg); }
+  .hero-scene::after  { transform: rotateY(22deg); }
 }
 
 /* --------------------- F2：「我的」三格 + 我的评论 --------------------- */

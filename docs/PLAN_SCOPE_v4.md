@@ -258,6 +258,23 @@ V4 的工程红线与其他阶段一致：**纯静态前端（无 npm / 无构�
 
 **基线**：静态检查 **1091/0**、运行测试 **932/0**、名单差异审计 **304/0**；`version_assets.py --check` 通过。
 
-### V4-3（动态 hero）方向稿（第 53 轮起稿，待站主确认）
+### V4-3（动态 hero）方向稿（第 53 轮起稿）
 
-详见 `docs/v4-hero-design.md`：两扇打开窗 → 操场 → 远山 → 飘云的纵深场景，含 D1–D6 六个决策点（校门图去留 / 开合角度 / 操场透视 / 远山层数 / 云量 / 手机端窗处理），确认后落样式与素材。
+详见 `docs/v4-hero-design.md`：两扇打开窗 → 操场 → 远山 → 飘云的纵深场景，含 D1–D6 六个决策点（校门图去留 / 开合角度 / 操场透视 / 远山层数 / 云量 / 手机端窗处理）。
+
+### 第 54 轮（2026-11-06，V4-3 实施：两扇打开的窗 + 操场 + 远山 + 第三层云）
+
+站主确认「D1–D6 全部按推荐」，当轮落码：
+
+- `index.html`：`.hero` 内新增 `<div class="hero-scene" aria-hidden="true">` 纯装饰层（承载窗透视与操场/远山背景，读屏不读、不挡内容）；`.hero-gate` 保留作操场中央锚点。
+- `assets/css/style.css`：
+  - `.hero-scene`：`position:absolute; inset:0; z-index:0; perspective:900px`，背景为**一张内联 SVG data-uri**（远山近层 + 远层 + 操场椭圆草地 + 跑道外沿/内沿 + 中线），无任何外部图片请求。
+  - `.hero-scene::before / ::after`：左右两扇窗（暖深棕渐变 + 斜向玻璃高光 + 内描边 + 投影），`transform-origin:50% 0`，`rotateY(∓22deg)` 朝窗中线半开，入场 `hero-open-left/right` 900ms 一次后静止。
+  - `.hero-cloud-far`：第三层最远云（900px 平铺、186s `sky-drift-far-3`、opacity .5）。
+  - 内容层加固：`.hero-greeting / .hero-title / .hero-sub / .hero-pills / .cta-row` 统一 `position:relative; z-index:1`，始终压在场景之上可读。
+  - `@media (max-width:520px)`（D6）：窗 `animation:none` 收到 `bottom:4%` 下缘窄装饰、操场背景压浅（`opacity:.8`、`100% 62%`）、云收细（500px、.35）。
+  - `prefers-reduced-motion: reduce`：全局动画停掉后，显式给窗 `rotateY(∓22deg)` 基准，保持「两扇开着的窗」静止可读。
+- `tools/static_checks.py`：新增 **R54 七条护栏**（场景层存在且 aria-hidden / 窗为伪元素半开且无新图 / 操场+远山为内联 SVG / 第三层云独立漂移 / 内容层 5 处 z-index:1 抬升 / reduce 下窗显式半开 / 小屏窗下缘装饰），静态检查 1091 → **1098/0**。
+- 版本化：`version_assets.py --check` 全绿（style.css 改动，8 页引用全部盖章）。
+
+**基线**：静态检查 **1098/0**、运行测试 **932/0**、名单差异审计 **304/0**；`version_assets.py --check` 通过。
