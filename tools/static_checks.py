@@ -2382,8 +2382,10 @@ print("R35) 首页的一扇天空窗：蓝天、两层飘云、暖光")
 r35_css = r34_css
 _r35_root = _a1_block(r35_css, ":root")
 _r35_hero = _a1_block(r35_css, ".hero")
-_r35_far = _a1_block(r35_css, ".hero::before")
-_r35_near = _a1_block(r35_css, ".hero::after")
+_r35_far = _a1_block(r35_css, ".page-cloud-far")
+_r35_near = _a1_block(r35_css, ".page-cloud-mid")
+_r35_scene = _a1_block(r35_css, ".page-scene")
+_r35_cloud = _a1_block(r35_css, ".page-cloud")
 _r35_body = re.search(r"(?m)^body\s*\{([^}]*)\}", r35_css)
 _r35_body = _r35_body.group(1) if _r35_body else ""
 
@@ -2393,16 +2395,17 @@ check("R35: 四个天空令牌都声明在 :root",
 # 身份色不能被顺手改掉：天空是一扇窗（只给 .hero），画布仍是金色
 check("R35: 天空只用在首页那一块，body 底色仍是金色画布",
       "background-color: var(--bg)" in _r35_body
-      and r35_css.count("var(--sky-high)") == 1
-      and r35_css.count("var(--sky-low)") == 1
-      and r35_css.count("var(--sky-mid)") == 2,
-      (r35_css.count("var(--sky-high)"), r35_css.count("var(--sky-mid)"), r35_css.count("var(--sky-low)")))
+      and "var(--sky-high)" in _r35_scene
+      and "var(--sky-low)" in _r35_scene,
+      (r35_css.count("var(--sky-high)"), r35_css.count("var(--sky-low)")))
 check("R35: .hero 自成一个隔离层并裁边，云漏不到金色画布上",
       "isolation: isolate" in _r35_hero and "overflow: hidden" in _r35_hero
       and "position: relative" in _r35_hero)
-check("R35: 两层云都压在文字下面、也不吃点击",
-      "z-index: -1" in _r35_far and "z-index: -1" in _r35_near
-      and "pointer-events: none" in _r35_far and "pointer-events: none" in _r35_near)
+check("R35: 云层不吃点击、压在内容之下（全屏场景 z-index: -1 兜底）",
+      "pointer-events: none" in _r35_cloud
+      and "z-index: 0" in _r35_cloud
+      and "z-index: -1" in _r35_scene,
+      "clouds sit under the content on the full-screen scene")
 check("R35: 两朵云都是内联 SVG —— 不新增一张图，也不发外部请求",
       _r35_far.count('url("data:image/svg+xml,') == 1
       and _r35_near.count('url("data:image/svg+xml,') == 1
@@ -2438,9 +2441,10 @@ _r36_body = re.search(r"(?m)^body\s*\{([^}]*)\}", r36_css)
 _r36_body = _r36_body.group(1) if _r36_body else ""
 
 # 衔接的实质：天空窗的最低一档和画布顶上的那层雾是同一个颜色
-check("R36: 画布顶上那层暖雾，和天空窗的下缘是同一个颜色",
-      "var(--sky-haze) 0%" in _r36_body and "var(--sky-haze) 100%" in _r36_hero,
-      (_r36_body.count("--sky-haze"), _r36_hero.count("--sky-haze")))
+check("R36: 画布顶上那层暖雾，和天空场景的下缘是同一个颜色",
+      "var(--sky-haze) 0%" in _r36_body
+      and "var(--sky-haze) 54%" in _a1_block(r36_css, ".page-scene"),
+      (_r36_body.count("--sky-haze"), _a1_block(r36_css, ".page-scene").count("--sky-haze")))
 check("R36: 雾是叠在金色上的，画布底色仍是 var(--bg)",
       "background-color: var(--bg)" in _r36_body)
 check("R36: 远景层钉在视口底部、铺满宽度、不吃点击",
@@ -2556,7 +2560,7 @@ check("R38: 天顶比金色画布亮一倍（亮度比 >= 1.9），窗还是窗�
 # 站主要的是「黄色」，那就不能留一半蓝；旧的三个蓝值 + 旧的冷光晕都不许回来
 check("R38: 蓝天三档与冷光晕一枚不剩（#A5DAF3 / #C3E9FA / #E3F5FE / rgba(165,218,243)）",
       not any(x in r38_css for x in ["#A5DAF3", "#C3E9FA", "#E3F5FE", "165, 218, 243"])
-      and "background-color: var(--sky-mid)" in _r38_hero,
+      and "var(--sky-mid)" in _a1_block(r38_css, ".page-scene"),
       [x for x in ["#A5DAF3", "#C3E9FA", "#E3F5FE", "165, 218, 243"] if x in r38_css])
 # 「黄」得是暖黄：色相落在橙到金（25-65 度），而且 r > g > b
 check("R38: 三档天都是暖黄（色相 25-65 度、r > g > b），不是发绿的土黄",
@@ -2668,43 +2672,36 @@ check("R41: 也没有拿 filter: drop-shadow 换个马甲把边加回来",
 # 窗和画布靠同一个颜色接上：窗底缘 --sky-haze，画布顶上也是 --sky-haze
 _r41_body = re.search(r"(?m)^body\s*\{([^}]*)\}", r38_css)
 _r41_body = _r41_body.group(1) if _r41_body else ""
-check("R41: 窗底缘与画布顶雾仍是同一个 --sky-haze（没有影子也能接住，不是靠明暗差硬拼）",
-      "var(--sky-haze) 100%" in _r41_hero and "var(--sky-haze) 0%" in _r41_body
+check("R41: 天空在 --sky-haze 处化进金色画布（第 56 轮起接缝交给页级场景，hero 已无面板）",
+      "var(--sky-haze) 54%" in _a1_block(r38_css, ".page-scene")
+      and "var(--sky-haze) 0%" in _r41_body
       and "--glow-sky" not in r38_css and "--shadow-land" not in r38_css,
-      (_r41_hero.count("--sky-haze"), _r41_body.count("--sky-haze"), r38_css.count("--glow-sky")))
+      (_a1_block(r38_css, ".page-scene").count("--sky-haze"), _r41_body.count("--sky-haze"),
+       r38_css.count("--glow-sky")))
 
 print()
-print("R42) 天空窗四边羽化：面板的轮廓自己化掉，画布和窗之间没有边")
+print("R42) 面板边界的处理：第 56 轮改全屏场景后，羽化蒙版整体退休")
 
 _r42_hero = re.sub(r"/\*.*?\*/", "", _a1_block(r38_css, ".hero"), flags=re.S)
 _r42_flat = re.sub(r"\s+", " ", _r42_hero)
-# 两轴两张蒙版，必须取交集。默认是并集：两张各自 0..1 的蒙版并起来几乎是全不透明，
-# 羽化就白做了 —— 所以 composite 一定要钉死。
-check("R42: 窗的四边都羽化（横 72px / 顶 28px / 底 56px），且两轴蒙版取交集",
-      "linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 72px, #000 calc(100% - 72px), rgba(0, 0, 0, 0) 100%)" in _r42_flat
-      and "linear-gradient(180deg, rgba(0, 0, 0, 0) 0, #000 28px, #000 calc(100% - 56px), rgba(0, 0, 0, 0) 100%)" in _r42_flat
-      and "mask-composite: intersect" in _r42_flat
-      and "-webkit-mask-composite: source-in" in _r42_flat,
-      [k for k in ("90deg", "180deg", "mask-composite: intersect",
-                   "-webkit-mask-composite: source-in") if k not in _r42_flat])
-# 羽化宽度要有下限（太小看不出、还是硬边）和上限（太大就吃掉云、吃到文字）
-_r42_h = re.search(r"90deg, rgba\(0, 0, 0, 0\) 0, #000 (\d+)px, #000 calc\(100% - (\d+)px\)", _r42_flat)
-_r42_w = [int(x) for x in _r42_h.groups()] if _r42_h else []
-_r42_top = re.search(r"180deg, rgba\(0, 0, 0, 0\) 0, #000 (\d+)px", _r42_flat)
-check("R42: 羽化宽度在 48-96px 之间，顶边 <= 40px（再深就吃到校门顶上的红旗）",
-      len(_r42_w) >= 2 and all(48 <= w <= 96 for w in _r42_w)
-      and bool(_r42_top) and int(_r42_top.group(1)) <= 40,
-      (_r42_w, _r42_top.group(1) if _r42_top else None))
-# 小屏只有 354px 宽，72px 的羽化会切进文字；窄屏那条必须单独收窄到 40px。
-_r42_narrow = [b for b in re.findall(r"\.hero\s*\{([^}]*)\}", r38_css)
-               if "padding: 30px 14px 26px;" in b]
-_r42_narrow = _r42_narrow[0] if _r42_narrow else ""
-_r42_narrow_decl = re.sub(r"/\*.*?\*/", "", _r42_narrow, flags=re.S)
-check("R42: 小屏羽化收窄到 40px（不让羽化切进标题和按钮的字边）",
-      re.search(r"(?m)^\s*mask-image: linear-gradient\(90deg, rgba\(0, 0, 0, 0\) 0, #000 40px", _r42_narrow_decl) is not None
-      and re.search(r"(?m)^\s*-webkit-mask-image: linear-gradient\(90deg, rgba\(0, 0, 0, 0\) 0, #000 40px", _r42_narrow_decl) is not None
-      and "72px" not in _r42_narrow_decl,
-      _r42_narrow_decl.count("40px"))
+# 第 56 轮：站主要求全屏场景，hero 不再是「一块面板」，箱影和羽化蒙版都撤了。
+# 这条护栏反过来钉住「别把蒙版加回来」——蒙版会连文字边缘一起吃掉。
+check("R42: hero 面板与羽化蒙版已撤掉（background: none，无 mask-image / mask-composite）",
+      "background: none" in _r42_flat
+      and "mask-image" not in _r42_flat
+      and "mask-composite" not in _r42_flat,
+      [k for k in ("background: none", "mask-image", "mask-composite") if k not in _r42_flat])
+# 天空与画布的接缝改由页级场景的渐变承担，参数要钉死。
+_r42_scene = re.sub(r"\s+", " ", _a1_block(r38_css, ".page-scene"))
+check("R42: 接缝参数钉在页级场景上（--sky-haze 54% → 全透明 64%）",
+      "var(--sky-haze) 54%" in _r42_scene
+      and "rgba(251, 242, 227, 0) 64%" in _r42_scene,
+      "sky seam lives on .page-scene")
+# 小屏也不再需要蒙版：hero 本来就没有面板了。
+_r42_hero_blocks = re.findall(r"\.hero\s*\{([^}]*)\}", r38_css)
+check("R42: 小屏也不再挂蒙版（面板已撤，蒙版只会切字边）",
+      all("mask-image" not in re.sub(r"/\*.*?\*/", "", b, flags=re.S) for b in _r42_hero_blocks),
+      "no mask on any .hero block")
 # 羽化是「让边缘化掉」，不是「把窗裁掉」：圆角与 overflow: hidden 还得留着，
 # 云是靠 overflow 裁在窗里的，不然云会铺到画布上。
 check("R42: 圆角与 overflow: hidden 仍在（羽化没有顶替裁剪云层的职责）",
@@ -3224,52 +3221,72 @@ check("R51/先逛逛: 页头「先逛逛」不折行是作用域限定的一条�
 
 
 print()
-print("R54) V4-3 hero 场景：两扇打开的窗 + 操场 + 远山 + 第三层云")
+print("R56) 全屏场景：窗贴视口边缘、云铺满全屏、hero 只做内容容器")
 
-# V4-3：主页 hero 从「单张校门图的天空窗」升级为纵深场景。
-# .hero-scene 是纯装饰层（aria-hidden），窗用两个伪元素半开（rotateY ±22°），
-# 操场 + 远山合在一张内联 SVG 背景里，第三层云独立平铺；
-# prefers-reduced-motion 下动画全部静止且窗退回显式半开；小屏窗收到下缘装饰。
-_r54_idx = read(os.path.join(ROOT, "index.html"))
-_r54_css = css
-check("R54: hero 里有一个纯装饰场景层（读屏不读、不挡内容）",
-      'class="hero-scene"' in _r54_idx
-      and 'aria-hidden="true"' in _r54_idx,
-      "see index.html .hero-scene")
-check("R54: 两扇窗是 CSS 伪元素半开（perspective + rotateY ∓22°），不新增图片",
-      ".hero-scene::before" in _r54_css and ".hero-scene::after" in _r54_css
-      and "perspective: 900px" in _r54_css
-      and "rotateY(-22deg)" in _r54_css and "rotateY(22deg)" in _r54_css,
-      "see style.css .hero-scene")
-check("R54: 操场 + 远山都在内联 SVG 背景里（一张 data-uri，无外部请求）",
-      ".hero-scene {" in _r54_css
-      and "%3Cpath" in _r54_css and "%3Cellipse" in _r54_css
-      and "data:image/svg+xml" in _r54_css,
-      "the scene bg is inline SVG")
-check("R54: 第三层云在 CSS 里定义、HTML 里也真有节点（防单边定义不渲染）",
-      'class="hero-cloud-far"' in _r54_idx
-      and ".hero-cloud-far" in _r54_css
-      and "sky-drift-far-3" in _r54_css and "background-position-x" in _r54_css,
-      "see index.html .hero-cloud-far + style.css")
-_scene_uris = re.findall(r'url\("data:image/svg\+xml,([^"]+)"\)', _r54_css)
-check("R54: 内联 SVG 全部纯 ASCII（data-uri 不吃中文，防编码踩坑）",
+# 第 56 轮：站主要求把窗挪到整个页面的边缘、动态铺满全屏。
+# 做法：.page-scene 是 fixed 全屏层（天空渐变 + 三层云 + 两扇边缘窗）；
+# hero 撤掉面板背景与羽化蒙版（第 41/42 轮的约束就此退休）；
+# 手机端两扇窗整段不画（站主同意），操场仍留在 hero 里。
+_r56_idx = read(os.path.join(ROOT, "index.html"))
+_r56_css = css
+_r56_scene = _a1_block(_r56_css, ".page-scene")
+_r56_cloud = _a1_block(_r56_css, ".page-cloud")
+_r56_hero_decl = re.sub(r"/\*.*?\*/", "", _a1_block(_r56_css, ".hero"), flags=re.S)
+check("R56: 首页有一个全屏固定场景层，纯装饰（aria-hidden + 不吃点击）",
+      'class="page-scene"' in _r56_idx
+      and 'aria-hidden="true"' in _r56_idx
+      and "position: fixed" in _r56_scene
+      and "inset: 0" in _r56_scene
+      and "pointer-events: none" in _r56_scene,
+      "see index.html .page-scene + style.css")
+check("R56: 两扇窗贴在视口左右边缘、通到地，向内半开（rotateY ±32°），不新增图片",
+      ".page-scene::before," in _r56_css and ".page-scene::after {" in _r56_css
+      and "left: 0;" in _r56_css and "right: 0;" in _r56_css
+      and "height: 100%;" in _r56_css
+      and "rotateY(32deg)" in _r56_css and "rotateY(-32deg)" in _r56_css,
+      "windows sit on the viewport edges")
+check("R56: 三层云全屏平铺漂移，HTML 里三个节点都在（防单边定义不渲染）",
+      _r56_idx.count('class="page-cloud ') == 3
+      and ".page-cloud-far" in _r56_css
+      and ".page-cloud-mid" in _r56_css
+      and ".page-cloud-near" in _r56_css
+      and "sky-drift-far" in _r56_css
+      and "sky-drift-near" in _r56_css
+      and "sky-drift-far-3" in _r56_css,
+      "three clouds across the full viewport")
+check("R56: 天空在 --sky-haze 54% 处化进金色画布（64% 全透明，交给 body::before 的山景）",
+      "var(--sky-haze) 54%" in _r56_scene
+      and "rgba(251, 242, 227, 0) 64%" in _r56_scene,
+      "sky gradient melts into the gold canvas")
+check("R56: hero 已撤掉面板背景与羽化蒙版，只当内容容器",
+      re.search(r"(?m)^\s*background:\s*none\s*;", _r56_hero_decl) is not None
+      and "mask-image" not in _r56_hero_decl
+      and "mask-composite" not in _r56_hero_decl,
+      "hero is a content container now")
+check("R56: 操场 + 远山仍在内联 SVG 背景里（一张 data-uri，无外部请求）",
+      ".hero-scene {" in _r56_css
+      and "%3Cpath" in _r56_css and "%3Cellipse" in _r56_css
+      and "data:image/svg+xml" in _r56_css,
+      "the playground bg is inline SVG")
+_scene_uris = re.findall(r'url\("data:image/svg\+xml,([^"]+)"\)', _r56_css)
+check("R56: 内联 SVG 全部纯 ASCII（data-uri 不吃中文，防编码踩坑）",
       bool(_scene_uris) and all(all(ord(ch) < 128 for ch in u) for u in _scene_uris),
       "%d data-uri" % len(_scene_uris))
-check("R54: 内容层（问候 / 标题 / 副文 / 标签 / CTA）都抬到场景之上可读",
-      ".hero-greeting {" in _r54_css and ".hero-title {" in _r54_css
-      and ".hero-sub {" in _r54_css and ".hero-pills {" in _r54_css
-      and ".cta-row {" in _r54_css
-      and _r54_css.count("z-index: 1") >= 5,
+check("R56: 内容层（问候 / 标题 / 副文 / 标签 / CTA）仍抬在场景之上可读",
+      ".hero-greeting {" in _r56_css and ".hero-title {" in _r56_css
+      and ".hero-sub {" in _r56_css and ".hero-pills {" in _r56_css
+      and ".cta-row {" in _r56_css
+      and _r56_css.count("z-index: 1") >= 5,
       "content sits above the scene")
-check("R54: 减弱动态时动画全停，窗退回显式半开而不是全关",
-      ".hero-scene::before { transform: rotateY(-22deg); }" in _r54_css
-      and ".hero-scene::after  { transform: rotateY(22deg); }" in _r54_css,
-      "reduce keeps the window half open")
-check("R54: 小屏（≤520px）窗退到下缘装饰、操场收浅、云收细，不挡标题",
-      "@media (max-width: 520px)" in _r54_css
-      and "animation: none" in _r54_css
-      and "bottom: 4%" in _r54_css,
-      "phone windows move to the lower edge")
+check("R56: 减弱动态时窗退回显式半开，而不是全关",
+      ".page-scene::before { transform: rotateY(32deg); }" in _r56_css
+      and ".page-scene::after  { transform: rotateY(-32deg); }" in _r56_css,
+      "reduce keeps both windows half open")
+check("R56: 手机端（≤520px）两扇窗整段不画、第三层云收掉（站主同意）",
+      ".page-scene::before," in _r56_css
+      and ".page-cloud-near { display: none; }" in _r56_css
+      and re.search(r"\.page-scene::after\s*\{\s*display:\s*none;", _r56_css) is not None,
+      "phone drops the two windows")
 
 
 print()

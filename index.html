@@ -28,7 +28,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>校园拾光 · 分享今天的日常</title>
-<link rel="stylesheet" href="assets/css/style.css?v=b03255d8">
+<link rel="stylesheet" href="assets/css/style.css?v=99c13290">
 </head>
 <body>
 
@@ -91,12 +91,9 @@
 <main class="wrap" id="main" tabindex="-1">
 
   <section class="hero">
-    <div class="hero-cloud-far" aria-hidden="true"></div>
     <div class="hero-scene" aria-hidden="true">
-      <!-- V4-3：两扇打开的窗 + 操场 + 远山 + 云。纯装饰层，全部用 CSS/SVG。
-           窗框：.hero-scene::before / ::after（左/右）；
-           远山 + 操场跑道：.hero-scene 的内联 SVG 背景；
-           最远第三层云：上一层 .hero-cloud-far。 -->
+      <!-- 第 56 轮：窗与云已升到全屏的 .page-scene（见 body 开头）。
+           这一层只画远山两层 + 操场椭圆 + 跑道环。 -->
     </div>
     <img class="hero-gate" src="assets/img/school-gate.png" width="779" height="466"
          decoding="async" alt="" aria-hidden="true">
@@ -215,5 +212,14 @@
 <script src="assets/js/hotwords.js?v=631fd476"></script>
 <script src="assets/js/app.js?v=1e8fbcc1"></script>
 <script src="assets/js/home.js?v=9ea6312a"></script>
+
+<!-- 第 56 轮：全屏场景层。窗贴在视口左右边缘、云在全屏飘，天空从顶部化进金色画布。
+     放在 body 末尾是为了让 skip link 仍是第一个元素；fixed 定位，DOM 顺序不影响显示。
+     纯装饰，读屏不读、不吃点击；手机上两扇窗由 CSS 隐藏（屏幕太窄会挤掉正文）。 -->
+<div class="page-scene" aria-hidden="true">
+  <span class="page-cloud page-cloud-far"></span>
+  <span class="page-cloud page-cloud-mid"></span>
+  <span class="page-cloud page-cloud-near"></span>
+</div>
 </body>
 </html>
