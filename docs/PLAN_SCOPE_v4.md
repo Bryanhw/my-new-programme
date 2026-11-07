@@ -277,4 +277,13 @@ V4 的工程红线与其他阶段一致：**纯静态前端（无 npm / 无构�
 - `tools/static_checks.py`：新增 **R54 七条护栏**（场景层存在且 aria-hidden / 窗为伪元素半开且无新图 / 操场+远山为内联 SVG / 第三层云独立漂移 / 内容层 5 处 z-index:1 抬升 / reduce 下窗显式半开 / 小屏窗下缘装饰），静态检查 1091 → **1098/0**。
 - 版本化：`version_assets.py --check` 全绿（style.css 改动，8 页引用全部盖章）。
 
-**基线**：静态检查 **1098/0**、运行测试 **932/0**、名单差异审计 **304/0**；`version_assets.py --check` 通过。
+### 第 55 轮（2026-11-07，V4-3 自查修复：第三层云补节点 + 操场接校门）
+
+自查发现两处实现缺陷并修掉：
+
+- **第三层云原本不渲染**：`.hero-cloud-far` 只有 CSS 没有 DOM 节点，等于白写。`index.html` 补 `<div class="hero-cloud-far" aria-hidden="true"></div>`（置于 `.hero-scene` 之前，按 DOM 顺序压在窗与操场之下）。同时清掉 hero 注释里并不存在的 `.hero-window-sky` / `.hero-playground` 类名。
+- **护栏只管 CSS 才漏掉它**：R54 的第三层云检查升级为「CSS 有定义 **且** HTML 有节点」；另新增一条「内联 SVG 全部纯 ASCII」，并把 `.hero-scene` 背景里的中文注释与未使用的 `<defs><linearGradient>` 清掉（6 张 data-uri 全部 XML 可解析、非 ASCII 计数 0）。护栏 1098 → **1099/0**。
+- **操场与校门脱节**：`.hero-scene` 的 `background-position` 由 `50% 88%` 收到 `50% 72%`，远山与操场上移到校门脚下，草椭圆的顶沿正好接住门底，视觉上成为「门立在操场前沿」而不是浮在天上（落实 D1 的锚点意图）。
+- 版本化：8 页引用全部重新盖章，`--check` 通过。
+
+**基线**：静态检查 **1099/0**、运行测试 **932/0**、名单差异审计 **304/0**；`version_assets.py --check` 通过。

@@ -581,10 +581,12 @@ main:focus { outline: none; }
   perspective: 900px;
   transform-style: preserve-3d;
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 460'%3E%3Cdefs%3E%3ClinearGradient id='h' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23F3E7CF' stop-opacity='0'/%3E%3Cstop offset='1' stop-color='%23EFE2C6' stop-opacity='0.9'/%3E%3C/linearGradient%3E%3C/defs%3E%3C!-- 远山近层（青灰蓝）--%3E%3Cpath d='M0 236 L120 168 L210 216 L330 150 L430 212 L560 142 L660 210 L800 156 L920 214 L1040 158 L1200 220 L1200 460 L0 460 Z' fill='%23C9CFC8' fill-opacity='0.55'/%3E%3C!-- 远山远层（更淡更浅）--%3E%3Cpath d='M0 208 L150 150 L260 192 L420 132 L560 196 L700 140 L880 204 L1040 148 L1200 200 L1200 460 L0 460 Z' fill='%23DDE3DA' fill-opacity='0.6'/%3E%3C!-- 操场草地（椭圆）--%3E%3Cellipse cx='600' cy='360' rx='470' ry='120' fill='%23EFE9D7' fill-opacity='0.85'/%3E%3C!-- 跑道环（外沿 + 内沿）--%3E%3Cellipse cx='600' cy='360' rx='410' ry='96' fill='none' stroke='%23FBF6EA' stroke-width='16' fill-opacity='0.9'/%3E%3Cellipse cx='600' cy='360' rx='398' ry='88' fill='none' stroke='%23E3DCC2' stroke-width='5'/%3E%3Cpath d='M600 360 L818 360' stroke='%23FBF6EA' stroke-width='10' fill-opacity='0.5'/%3E%3Cpath d='M382 360 L600 360' stroke='%23FBF6EA' stroke-width='10' fill-opacity='0.4'/%3E%3C/svg%3E");
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 460'%3E%3Cpath d='M0 236 L120 168 L210 216 L330 150 L430 212 L560 142 L660 210 L800 156 L920 214 L1040 158 L1200 220 L1200 460 L0 460 Z' fill='%23C9CFC8' fill-opacity='0.55'/%3E%3Cpath d='M0 208 L150 150 L260 192 L420 132 L560 196 L700 140 L880 204 L1040 148 L1200 200 L1200 460 L0 460 Z' fill='%23DDE3DA' fill-opacity='0.6'/%3E%3Cellipse cx='600' cy='360' rx='470' ry='120' fill='%23EFE9D7' fill-opacity='0.85'/%3E%3Cellipse cx='600' cy='360' rx='410' ry='96' fill='none' stroke='%23FBF6EA' stroke-width='16'/%3E%3Cellipse cx='600' cy='360' rx='398' ry='88' fill='none' stroke='%23E3DCC2' stroke-width='5'/%3E%3Cpath d='M600 360 L818 360' stroke='%23FBF6EA' stroke-width='10' fill-opacity='0.5'/%3E%3Cpath d='M382 360 L600 360' stroke='%23FBF6EA' stroke-width='10' fill-opacity='0.4'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-size: 100% 78%;
-  background-position: 50% 88%;
+  /* 72% 让远山与操场上移到校门脚下：校门底边正好压在草地前沿，
+     看起来是「门立在操场前面」而不是浮在天上（D1 的视觉锚点）。 */
+  background-position: 50% 72%;
   opacity: 0.96;
 }
 

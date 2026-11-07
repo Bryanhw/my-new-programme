@@ -3246,10 +3246,15 @@ check("R54: 操场 + 远山都在内联 SVG 背景里（一张 data-uri，无外
       and "%3Cpath" in _r54_css and "%3Cellipse" in _r54_css
       and "data:image/svg+xml" in _r54_css,
       "the scene bg is inline SVG")
-check("R54: 第三层云独立平铺漂移（背景位移动画，动效由 reduce 统一停）",
-      ".hero-cloud-far" in _r54_css
+check("R54: 第三层云在 CSS 里定义、HTML 里也真有节点（防单边定义不渲染）",
+      'class="hero-cloud-far"' in _r54_idx
+      and ".hero-cloud-far" in _r54_css
       and "sky-drift-far-3" in _r54_css and "background-position-x" in _r54_css,
-      "see style.css .hero-cloud-far")
+      "see index.html .hero-cloud-far + style.css")
+_scene_uris = re.findall(r'url\("data:image/svg\+xml,([^"]+)"\)', _r54_css)
+check("R54: 内联 SVG 全部纯 ASCII（data-uri 不吃中文，防编码踩坑）",
+      bool(_scene_uris) and all(all(ord(ch) < 128 for ch in u) for u in _scene_uris),
+      "%d data-uri" % len(_scene_uris))
 check("R54: 内容层（问候 / 标题 / 副文 / 标签 / CTA）都抬到场景之上可读",
       ".hero-greeting {" in _r54_css and ".hero-title {" in _r54_css
       and ".hero-sub {" in _r54_css and ".hero-pills {" in _r54_css
