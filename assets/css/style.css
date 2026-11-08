@@ -1583,6 +1583,17 @@ input[type="file"] { display: none; }
 .birthday-wish-cake { font-size: var(--fs-lg); flex: none; }
 .birthday-wish-text { flex: 1; min-width: 0; }
 .birthday-wish-main { font-weight: 800; color: var(--brand-text); font-size: var(--fs-md); }
+.birthday-wish-day {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: rgba(203, 146, 67, 0.2);
+  color: var(--brand-text);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  vertical-align: 1px;
+}
 .birthday-wish-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
 .birthday-wish-close {
   flex: none;

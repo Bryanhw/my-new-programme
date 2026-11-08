@@ -36,7 +36,14 @@ window.BirthdayWish = (function () {
     return b;
   }
 
-  function render(name) {
+  /* 把登记的生日 "MM-DD" 解析成标在祝福条上的 「M 月 D 日」。 */
+  function monthDayText(mmd) {
+    var m = /^(\d{2})-(\d{2})$/.exec(mmd || "");
+    if (!m) return "";
+    return (+m[1]) + "月" + (+m[2]) + "日";
+  }
+
+  function render(name, label) {
     var wrap = document.createElement("aside");
     wrap.className = "birthday-wish";
     wrap.setAttribute("role", "status");
@@ -50,9 +57,14 @@ window.BirthdayWish = (function () {
     text.className = "birthday-wish-text";
     var main = document.createElement("p");
     main.className = "birthday-wish-main";
-    main.textContent = name
-      ? "生日快乐，" + name + "！"
-      : "生日快乐！";
+    if (label) {
+      var day = document.createElement("span");   // 月份 + 日期的小标记
+      day.className = "birthday-wish-day";
+      day.textContent = label;
+      main.appendChild(day);
+    }
+    main.appendChild(document.createTextNode(
+      name ? "生日快乐，" + name + "！" : "生日快乐！"));
     var sub = document.createElement("p");
     sub.className = "birthday-wish-sub";
     sub.textContent = "今天也是普通的一天，但因为有你而特别。校园拾光愿你被光温柔包围。";
@@ -80,7 +92,7 @@ window.BirthdayWish = (function () {
     C.getProfile().then(function (p) {
       if (!C.isBirthdayToday(p)) return;
       markGreeted();                     // 先记账再展示：下次进来不再判断
-      render((p && p.nickname) || "");
+      render((p && p.nickname) || "", monthDayText(p && p.birthday));
     }).catch(function () {
       /* 读不到资料就不打扰：生日祝福是锦上添花，不是理所当然 */
     });
