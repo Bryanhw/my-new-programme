@@ -28,7 +28,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>我的 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=99c13290">
+<link rel="stylesheet" href="assets/css/style.css?v=7e8c3ef7">
 </head>
 <body>
 
@@ -98,6 +98,15 @@
 
   <section class="card profile-hero" id="profile-hero">
     <div class="profile-avatar" id="profile-avatar">…</div>
+    <div class="profile-avatar-actions" id="avatar-actions" hidden>
+      <label class="btn btn-ghost btn-sm" for="avatar-file">📷 更换头像</label>
+      <button class="btn btn-ghost btn-sm" type="button" id="avatar-remove" hidden>移除头像</button>
+      <input class="visually-hidden" id="avatar-file" type="file" accept="image/*"
+        aria-label="选择头像图片">
+    </div>
+    <p class="hint" id="avatar-tip" hidden>
+      头像是公开的，只显示在这里；帖子卡片和匿名内容不上头像，匿名依然安全。
+    </p>
     <div class="profile-name" id="profile-name">加载中…</div>
     <div class="profile-sub" id="profile-sub"></div>
 
@@ -130,6 +139,25 @@
     <p class="hint mt-16" id="anon-nick-tip">
       匿名访客也能设置昵称：设置后，没有勾选匿名的分享就会用这个名字署名。
     </p>
+  </section>
+
+  <section class="card" id="profile-card">
+    <h3 class="section-title mb-16">🧑 个人资料</h3>
+    <div class="field">
+      <span class="label" id="birthday-label">生日<span class="text-muted">（选填，登记后生日当天会送上祝福；仅自己可见）</span></span>
+      <div class="row">
+        <label class="visually-hidden" for="birthday-month">生日月份</label>
+        <select class="input" id="birthday-month" aria-labelledby="birthday-label"></select>
+        <label class="visually-hidden" for="birthday-day">生日日期</label>
+        <select class="input" id="birthday-day" aria-labelledby="birthday-label"></select>
+      </div>
+    </div>
+    <div class="field">
+      <label class="label" for="major-input">专业<span class="text-muted">（选填，仅自己可见）</span></label>
+      <input class="input" id="major-input" type="text" maxlength="30"
+        placeholder="例如：信息与计算科学">
+    </div>
+    <button class="btn btn-primary btn-block" type="button" id="profile-save">保存资料</button>
   </section>
 
   <section class="card" id="security-card">
@@ -240,7 +268,8 @@
 
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/app.js?v=1e8fbcc1"></script>
-<script src="assets/js/profile.js?v=bc663a5c"></script>
+<script src="assets/js/app.js?v=68998efc"></script>
+<script src="assets/js/profile.js?v=2671a9ca"></script>
+<script src="assets/js/birthday.js?v=4020823c"></script>
 </body>
 </html>

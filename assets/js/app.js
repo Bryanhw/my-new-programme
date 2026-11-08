@@ -24,6 +24,13 @@ window.Campus = (function () {
   var SITE_NAME = cfg.SITE_NAME || "校园拾光";
   var BUCKET = cfg.BUCKET || "post-images";
 
+  /* 第 57 轮：头像桶（见 docs/supabase-avatar-profile.sql）。
+     头像路径用随机段、与账号无关 —— 和帖子图同一条 P0 铁律：
+     图片是公开的，路径一旦带上 uuid 就会被反查身份（匿名帖的命根子）。
+     头像**只**在本人「我的」页展示，绝不挂到帖子卡片上（理由见 saveAvatar 注释）。 */
+  var AVATAR_BUCKET = "avatars";
+  var AVATAR_MAX_EDGE = 320;   // 头像压成 320×320 正方形 JPEG，够清晰又不上传原图
+
   /* U2：计数占位符。点赞数 / 评论数还没回来时，数字位先显示它。
      「0」的含义是「一个赞也没有」—— 在还不知道的时候先印 0，等于替同学说了
      一句不成立的话；这一条是第 17 轮「先渲染后补计数」的收尾。 */
@@ -2694,6 +2701,204 @@ window.Campus = (function () {
   }
 
   /* ------------------------------------------------------------------
+   * 8b. 资料 2：头像（第 57 轮）+ 个人资料（生日/专业，第 58 轮）
+   *    数据库侧见 docs/supabase-avatar-profile.sql（profiles 加列 + avatars 桶）。
+   *    ⚠ 隐私红线：真实头像**绝不**挂到帖子卡片上。帖子对前端只暴露署名快照，
+   *    posts 表读不出 author_id —— 一旦帖子卡片显示发帖人头像，匿名帖和
+   *    「这个账号上传的新头像」之间就搭起了桥，作者身份会顺着头像流出去
+   *    （D1 红线的图片版）。所以头像只在本人「我的」页展示；全站帖子卡片的
+   *    avatarHtml 保持首字母 / 匿名月亮不变。
+   * ------------------------------------------------------------------ */
+
+  /**
+   * 头像压缩：中心裁剪成正方形，缩到 AVATAR_MAX_EDGE，输出 JPEG。
+   * 相比帖子图（等比压缩），头像要的是规整的圆形头像，边长一致更自然。
+   * @param {File} file
+   * @returns {Promise<Blob|File>} 压缩失败 / 不需要压缩时退回原文件
+   */
+  function compressAvatar(file) {
+    if (!file || !file.type || file.type.indexOf("image/") !== 0) {
+      return Promise.reject(new Error("请选择图片文件"));
+    }
+    return Promise.resolve()
+      .then(function () { return loadImage(file); })
+      .then(function (src) {
+        var w = src.width || src.naturalWidth || 0;
+        var h = src.height || src.naturalHeight || 0;
+        if (!w || !h) throw new Error("拿不到图片尺寸");
+        var side = Math.min(w, h);
+        var sx = Math.floor((w - side) / 2);
+        var sy = Math.floor((h - side) / 2);
+        var canvas = document.createElement("canvas");
+        canvas.width = AVATAR_MAX_EDGE;
+        canvas.height = AVATAR_MAX_EDGE;
+        var ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas 不可用");
+        ctx.fillStyle = "#fff";  // JPEG 没有透明通道，先垫白底
+        ctx.fillRect(0, 0, AVATAR_MAX_EDGE, AVATAR_MAX_EDGE);
+        ctx.drawImage(src, sx, sy, side, side, 0, 0, AVATAR_MAX_EDGE, AVATAR_MAX_EDGE);
+        if (typeof src.close === "function") src.close();
+        return canvasToBlob(canvas, "image/jpeg", 0.85);
+      })
+      .then(function (blob) {
+        return (blob && blob.size) ? blob : file;
+      })
+      .catch(function () { return file; });
+  }
+
+  /**
+   * 上传并设置为自己的头像。
+   * 路径 av/<随机段>/<时间戳>-<随机段>.jpg —— 不带 uid，防枚举防反查（同第 29 轮 P0）。
+   * 新头像写好 profiles.avatar_path 之后才删旧图，避免改到一半丢图。
+   * @param {File} file
+   * @returns {Promise<{avatar_path: string}>}
+   */
+  function saveAvatar(file) {
+    if (!client) return Promise.reject(new Error(configError));
+    if (!file) return Promise.reject(new Error("请选择图片文件"));
+    if (file.size > 5 * 1024 * 1024) {
+      return Promise.reject(new Error("头像图片请选择 5MB 以内的"));
+    }
+    return getIdentity().then(function (id) {
+      if (!id.user) throw new Error("请先登录或匿名进入，再设置头像");
+      return compressAvatar(file).then(function (payload) {
+        var path = "av/" + randomPathToken() + "/" + Date.now() +
+          "-" + Math.random().toString(36).slice(2, 8) + ".jpg";
+        return client.storage.from(AVATAR_BUCKET).upload(path, payload, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: "image/jpeg"
+        }).then(function (res) {
+          if (res.error) {
+            var em = String(res.error.message || "");
+            if (/bucket|not found|does not exist/i.test(em)) {
+              throw new Error("头像上传失败：好像还没建 avatars 桶 —— 请在 Supabase 的 SQL Editor 执行 docs/supabase-avatar-profile.sql（详见 README）");
+            }
+            throw new Error("头像上传失败：" + em);
+          }
+          return path;
+        });
+      }).then(function (path) {
+        return client.from("profiles")
+          .select("avatar_path").eq("id", id.user.id).maybeSingle()
+          .then(function (sel) {
+            var oldPath = (sel && sel.data && sel.data.avatar_path) || "";
+            return client.from("profiles")
+              .update({ avatar_path: path, updated_at: new Date().toISOString() })
+              .eq("id", id.user.id)
+              .then(function (res) {
+                if (res.error) throw new Error("头像没保存上：" + res.error.message);
+                if (oldPath) {
+                  client.storage.from(AVATAR_BUCKET).remove([oldPath]).catch(function () {});
+                }
+                return { avatar_path: path };
+              });
+          });
+      });
+    });
+  }
+
+  /**
+   * 移除自己的头像（删桶内文件 + 清空 avatar_path 列）。
+   * @returns {Promise<{avatar_path: null}>}
+   */
+  function clearAvatar() {
+    if (!client) return Promise.reject(new Error(configError));
+    return getIdentity().then(function (id) {
+      if (!id.user) throw new Error("请先登录或匿名进入");
+      return client.from("profiles")
+        .select("avatar_path").eq("id", id.user.id).maybeSingle()
+        .then(function (sel) {
+          var oldPath = (sel && sel.data && sel.data.avatar_path) || "";
+          return client.from("profiles")
+            .update({ avatar_path: null, updated_at: new Date().toISOString() })
+            .eq("id", id.user.id)
+            .then(function (res) {
+              if (res.error) throw new Error("头像没清除：" + res.error.message);
+              if (oldPath) {
+                client.storage.from(AVATAR_BUCKET).remove([oldPath]).catch(function () {});
+              }
+              return { avatar_path: null };
+            });
+        });
+    });
+  }
+
+  /** 头像的公开地址（path 为空返回空串）。 */
+  function avatarUrl(path) {
+    if (!path) return "";
+    if (/^https?:\/\//i.test(String(path))) return String(path);
+    if (!client) return "";
+    var res = client.storage.from(AVATAR_BUCKET).getPublicUrl(String(path));
+    return (res && res.data && res.data.publicUrl) || "";
+  }
+
+  /* ---------------- 第 58 轮：生日 / 专业 + 生日祝福 ---------------- */
+
+  /** MM-DD 格式 + 取值（月份 01-12、日 01-31）；具体某月有没有那一天交给 isValidBirthday */
+  var BIRTHDAY_RE_MMDD = /^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
+  var BIRTHDAY_DIM = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // 02 按闰年 29 天
+
+  /**
+   * 校验 MM-DD 是不是真实存在的日期（空串合法，代表未登记）。
+   * 数据库侧（supabase-avatar-profile.sql）只锁格式与取值范围，
+   * 这里补一道：具体某月到底有没有那一天（比如 02-30 会被拒）。
+   * @param {string} mmd
+   * @returns {boolean}
+   */
+  function isValidBirthday(mmd) {
+    mmd = String(mmd == null ? "" : mmd).trim();
+    if (!mmd) return true;
+    var m = BIRTHDAY_RE_MMDD.exec(mmd);
+    if (!m) return false;
+    return (+m[2]) <= BIRTHDAY_DIM[+m[1] - 1];
+  }
+
+  /** 本地时区的「今天」= MM-DD（补零）。 */
+  function todayMMDD(now) {
+    var d = now ? new Date(now) : new Date();
+    return ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+
+  /** 今天是不是这个人的生日（birthday 用 MM-DD 存，不含年份）。 */
+  function isBirthdayToday(profile) {
+    if (!profile || !profile.birthday) return false;
+    return todayMMDD() === String(profile.birthday).trim();
+  }
+
+  /**
+   * 保存个人资料（生日 / 专业，均可选、可清空）。
+   * @param {{birthday?: string, major?: string}} fields 传了哪个存哪个
+   * @returns {Promise<{birthday: string, major: string}>} 生效后的值
+   */
+  function saveProfile(fields) {
+    if (!client) return Promise.reject(new Error(configError));
+    fields = fields || {};
+    var row = {};
+
+    if (Object.prototype.hasOwnProperty.call(fields, "birthday")) {
+      var b = String(fields.birthday == null ? "" : fields.birthday).trim();
+      if (!isValidBirthday(b)) return Promise.reject(new Error("生日格式不对：请选择真实的月日"));
+      row.birthday = b || "";   // 列为 NOT NULL，用空串表示「未登记」
+    }
+    if (Object.prototype.hasOwnProperty.call(fields, "major")) {
+      var maj = String(fields.major == null ? "" : fields.major).trim();
+      if (maj.length > 30) return Promise.reject(new Error("专业最多写 30 个字"));
+      row.major = maj;          // 空串 = 未填
+    }
+    if (Object.keys(row).length === 0) return Promise.resolve({});
+    row.updated_at = new Date().toISOString();
+
+    return getIdentity().then(function (id) {
+      if (!id.user) throw new Error("请先登录或匿名进入，再填写个人资料");
+      return client.from("profiles").update(row).eq("id", id.user.id).then(function (res) {
+        if (res.error) throw new Error("资料没保存上：" + res.error.message);
+        return row;
+      });
+    });
+  }
+
+  /* ------------------------------------------------------------------
    * 9. 意见反馈
    *    任何访客都能提交 —— 不要求登录，也不要求先「匿名进入」。
    *    数据库那边（docs/supabase-feedback.sql）只给 feedback 表开了
@@ -3322,6 +3527,19 @@ window.Campus = (function () {
     saveSecurityAnswer: saveSecurityAnswer,
     getSecurityQuestion: getSecurityQuestion,
     resetPasswordWithAnswer: resetPasswordWithAnswer,
-    SECURITY_ANSWER_MAX: SECURITY_ANSWER_MAX
+    SECURITY_ANSWER_MAX: SECURITY_ANSWER_MAX,
+
+    // 第 57 轮：头像（avatars 桶，随机路径防枚举；**只**给本人「我的」页用，不挂帖子卡片）
+    saveAvatar: saveAvatar,
+    clearAvatar: clearAvatar,
+    avatarUrl: avatarUrl,
+    compressAvatar: compressAvatar,
+    AVATAR_BUCKET: AVATAR_BUCKET,
+
+    // 第 58 轮：个人资料（生日/专业）+ 生日祝福
+    saveProfile: saveProfile,
+    isValidBirthday: isValidBirthday,
+    todayMMDD: todayMMDD,
+    isBirthdayToday: isBirthdayToday
   };
 })();

@@ -332,6 +332,23 @@ window.CAMPUS_CONFIG = {
 > `Enforce JWT Verification` 还开着（匿名请求会在网关就被挡下来，浏览器只会说
 > 「Failed to fetch」）。上面两步做完再试一次即可。
 
+### 第 5 步：头像 + 个人资料（生日祝福）（可跳过，开启后请站主复核）
+
+这一步给「我的」页加两个能力：**上传 / 更换 / 移除头像**（只显示在本人「我的」页，
+帖子卡片不上头像，匿名不被击穿）和**个人资料**（生日月日 + 专业，登记的账号在生日当天
+收到首页祝福条）。不做不影响其它功能。开启只需一次：
+
+- 在 Supabase 的 **SQL Editor** 里新建一条查询，把 `docs/supabase-avatar-profile.sql`
+  （脚本可反复执行，全 `if not exists`）粘进去执行。它给 `profiles` 表加三列
+  （`avatar_path` / `birthday` / `major`）、建 `storage` 公开桶 `avatars`（上传 + 本人删除策略），
+  并在 `birthday` 上加 `MM-DD` 格式约束。
+- 该 SQL **只授权本人上传 / 本人删除**，桶对匿名只读不列举；`avatar_path` 与 `birthday`
+  默认列不可读，页面拿的是本人所见视图，其余用户（含匿名）看不到生日，头像路径为随机段
+  且不含账号 id（防反查）。
+- ⚠️ 本功能 2026-11-08 提交，**需站主在线上复核**：执行 SQL → 设置里开一个真实账号 →
+  上传头像、保存生日/专业 → 用一个非当天生日的账号确认首页不弹祝福、用当天生日的账号
+  确认弹一次且关掉后本会话不再弹（刷新也不重出）。
+
 ### 本地预览
 
 因为要用到浏览器的存储和网络能力，建议用本地服务器打开（直接双击 `index.html` 也可以，
@@ -441,7 +458,7 @@ python tools\privacy_probe.py --write     # 额外验证一次「发帖 → 只�
 
 ```powershell
 python -m pip install -r tools\requirements-dev.txt
-python tools\static_checks.py     # 静态检查（esprima 解析 JS），1101 项
+python tools\static_checks.py     # 静态检查（esprima 解析 JS），1117 项
 python tools\run_tests.py         # 运行冒烟测试（duktape 跑页面脚本），932 项
 python tools\campus_compare.py    # 名单差异审计：985/211/港五澳三全覆盖 + 基线 129 行不回删
 ```

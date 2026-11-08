@@ -58,7 +58,7 @@ for name in js_files:
         check("parse " + name, False, str(e)[:200])
 # The shipped script set is pinned on purpose: adding a file is a decision
 # (it must be loaded by a page and covered by a test), not an accident.
-EXPECTED_JS = ["app.js", "auth.js", "campus-picker.js", "campuses.js", "circles.js",
+EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "campus-picker.js", "campuses.js", "circles.js",
                "config.js", "faq.js", "feed.js", "feedback.js", "home.js",
                "hotwords.js", "post.js", "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
@@ -3287,6 +3287,119 @@ check("R56: 手机端（≤520px）两扇窗整段不画、第三层云收掉（
       and ".page-cloud-near { display: none; }" in _r56_css
       and re.search(r"\.page-scene::after\s*\{\s*display:\s*none;", _r56_css) is not None,
       "phone drops the two windows")
+
+
+print()
+print("R57) 用户头像：头像只出现在本人「我的」页，帖子卡片不上头像（隐私红线）")
+
+# 站主第 56 轮验收后提出。头像文件公开，路径必须随机与账号无关（P0 头像版），
+# 帖子侧一律不得引用头像（posts 表读不出 author_id，头像一旦上卡片匿名就破了）。
+_r57_app  = read(os.path.join(ROOT, "assets/js/app.js"))
+_r57_pro  = read(os.path.join(ROOT, "assets/js/profile.js"))
+_r57_html = read(os.path.join(ROOT, "profile.html"))
+_r57_sql  = read(os.path.join(ROOT, "docs/supabase-avatar-profile.sql"))
+
+check("R57/挂点: 「我的」页有上传 / 移除 / 提示三个挂点，文件框是视觉隐藏的",
+      'id="avatar-actions"' in _r57_html
+      and 'id="avatar-file"' in _r57_html
+      and 'id="avatar-remove"' in _r57_html
+      and 'id="avatar-tip"' in _r57_html
+      and 'class="visually-hidden" id="avatar-file"' in _r57_html,
+      "see profile.html profile-hero")
+check("R57/API: app.js 提供上传 / 移除 / 取址 / 压缩四个成员并导出",
+      "function saveAvatar(file)" in _r57_app
+      and "function clearAvatar()" in _r57_app
+      and "function avatarUrl(path)" in _r57_app
+      and "function compressAvatar(file)" in _r57_app
+      and "saveAvatar: saveAvatar" in _r57_app
+      and "AVATAR_BUCKET: AVATAR_BUCKET" in _r57_app,
+      [l for l in _r57_app.splitlines() if "saveAvatar" in l or "AVATAR_BUCKET" in l][:5])
+check("R57/路径: 上传路径 av/<随机段>/... 与账号无关（path 赋值行不含 user.id）",
+      '"av/" + randomPathToken()' in _r57_app
+      and "id.user.id" not in [l for l in _r57_app.splitlines() if '"av/" + randomPathToken()' in l][:1][0],
+      "see app.js saveAvatar path")
+check("R57/压缩: 头像是中心裁切成正方形再压 JPEG（垫白底，透明不会变黑）",
+      'ctx.fillStyle = "#fff";' in _r57_app
+      and '"image/jpeg", 0.85' in _r57_app
+      and "AVATAR_MAX_EDGE" in _r57_app,
+      "see app.js compressAvatar")
+_r57_posts = \
+    read(os.path.join(ROOT, "assets/js/home.js")) + \
+    read(os.path.join(ROOT, "assets/js/feed.js")) + \
+    read(os.path.join(ROOT, "assets/js/post.js")) + \
+    read(os.path.join(ROOT, "assets/js/faq.js"))
+_r57_leak = [kw for kw in ("avatar_path", "avatarUrl(", "saveAvatar", "C.avatar") if kw in _r57_posts]
+check("R57/红线: 帖子卡片侧（home / feed / post / faq）绝不出现头像关键字 —— 匿名不被头像击穿",
+      not _r57_leak, _r57_leak)
+_r57_elsewhere = [p for p in ("index.html", "feed.html", "post.html", "faq.html", "feedback.html")
+                  if 'id="profile-card"' in read(os.path.join(ROOT, p))]
+check("R57/红线: 资料卡只存在于 profile.html，其它页面没有头像 / 资料区",
+      not _r57_elsewhere, _r57_elsewhere)
+check("R57/SQL: 增量脚本建 avatars 公开桶 + profiles 三列 + 生日格式约束，不给 anon 开列举",
+      "insert into storage.buckets" in _r57_sql
+      and "'avatars', 'avatars', true" in _r57_sql
+      and "add column if not exists avatar_path" in _r57_sql
+      and "add column if not exists birthday text not null default '" in _r57_sql
+      and "add column if not exists major text not null default '" in _r57_sql
+      and "profiles_birthday_format_check" in _r57_sql
+      and "for select" not in _r57_sql[_r57_sql.find("-- 3. avatars"):],
+      "see docs/supabase-avatar-profile.sql")
+
+
+print()
+print("R58) 个人资料（生日 / 专业）+ 生日当天送上祝福")
+
+_r58_app  = read(os.path.join(ROOT, "assets/js/app.js"))
+_r58_pro  = read(os.path.join(ROOT, "assets/js/profile.js"))
+_r58_html = read(os.path.join(ROOT, "profile.html"))
+_r58_bday = read(os.path.join(ROOT, "assets/js/birthday.js"))
+
+check("R58/API: app.js 提供保存 / 格式校验 / 是否今天三个成员并导出",
+      "function saveProfile(fields)" in _r58_app
+      and "function isValidBirthday(mmd)" in _r58_app
+      and "function isBirthdayToday(profile)" in _r58_app
+      and "function todayMMDD(now)" in _r58_app
+      and "saveProfile: saveProfile" in _r58_app
+      and "isBirthdayToday: isBirthdayToday" in _r58_app,
+      "see app.js section 8b")
+check("R58/校验: 生日 MM-DD 按月份核对天数（02-30 这类非法日期会被拒）",
+      "BIRTHDAY_RE_MMDD" in _r58_app
+      and "BIRTHDAY_DIM" in _r58_app
+      and "BIRTHDAY_DIM[+m[1] - 1];" in _r58_app,
+      "see app.js isValidBirthday")
+check("R58/表单: 「我的」页有生日月日两个下拉、专业输入与保存按钮",
+      'id="profile-card"' in _r58_html
+      and 'id="birthday-month"' in _r58_html
+      and 'id="birthday-day"' in _r58_html
+      and 'id="major-input"' in _r58_html
+      and 'id="profile-save"' in _r58_html,
+      "see profile.html profile-card")
+_r58_others = [p for p in ("index.html", "feed.html", "post.html", "faq.html", "feedback.html")
+               if 'id="birthday-month"' in read(os.path.join(ROOT, p))]
+check("R58/隐私: 生日资料表单只存在于「我的」页 —— 生日不对外展示",
+      not _r58_others, _r58_others)
+check("R58/接线: profile.js 生日下拉联动，保存前先过 isValidBirthday，成功有提示",
+      "function syncBirthdayDays()" in _r58_pro
+      and "C.isValidBirthday(birthday)" in _r58_pro
+      and "C.saveProfile({" in _r58_pro
+      and "C.showNotice(noticeEl, \"ok\", \"个人资料已保存\")" in _r58_pro,
+      "see profile.js events")
+check("R58/祝福: birthday.js 只在「生日当天」渲染，本会话一次、可关闭、status 播报",
+      "C.isBirthdayToday(p)" in _r58_bday
+      and "sessionStorage.getItem(SESSION_KEY)" in _r58_bday
+      and "markGreeted()" in _r58_bday
+      and 'setAttribute("aria-label", "关闭生日祝福")' in _r58_bday
+      and 'setAttribute("role", "status")' in _r58_bday,
+      "see assets/js/birthday.js")
+_r58_wired = [p for p in ("index.html", "feed.html", "profile.html")
+              if "assets/js/birthday.js" not in read(os.path.join(ROOT, p))]
+check("R58/接入: 首页 / 广场 / 我的 三页都引入 birthday.js",
+      not _r58_wired, _r58_wired)
+check("R58/样式: 祝福条与头像直图、操作钮样式都在 style.css",
+      ".birthday-wish {" in css
+      and ".profile-avatar.has-image img {" in css
+      and ".profile-avatar-actions {" in css,
+      "see style.css birthday-wish / profile-avatar")
 
 
 print()

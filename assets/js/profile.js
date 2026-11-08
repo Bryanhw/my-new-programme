@@ -55,6 +55,20 @@
   var secSave    = document.getElementById("sec-save");
   var secEdit    = document.getElementById("sec-edit");
 
+  /* 第 57 轮：头像（只在「我的」页展示，帖子卡片不上头像——见 app.js saveAvatar 的注释） */
+  var avatarActions = document.getElementById("avatar-actions");
+  var avatarRemove  = document.getElementById("avatar-remove");
+  var avatarFile    = document.getElementById("avatar-file");
+  var avatarTip     = document.getElementById("avatar-tip");
+
+  /* 第 58 轮：个人资料（生日 / 专业） */
+  var profileCard = document.getElementById("profile-card");
+  var birthMonth  = document.getElementById("birthday-month");
+  var birthDay    = document.getElementById("birthday-day");
+  var majorInput  = document.getElementById("major-input");
+  var profileSave = document.getElementById("profile-save");
+  var BIRTH_DAYS_PER_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // 02 按闰年 29 天
+
   var currentUser = null;
   var currentProfile = null;
   var currentIsAnon = false;
@@ -90,6 +104,7 @@
       mineCard.classList.add("hidden");
       reportsCard.classList.add("hidden");
       if (secCard) secCard.classList.add("hidden");
+      if (profileCard) profileCard.classList.add("hidden");
       return;
     }
 
@@ -106,6 +121,7 @@
         mineCard.classList.add("hidden");
         reportsCard.classList.add("hidden");
         if (secCard) secCard.classList.add("hidden");
+        if (profileCard) profileCard.classList.add("hidden");
         return;
       }
 
@@ -121,6 +137,8 @@
         currentProfile = p;
         renderHero(id, p);
         nickInput.value = (p && p.nickname) || "";
+        if (profileCard) profileCard.classList.remove("hidden");
+        populateProfileForm(p);
       });
 
       loadMyPosts();
@@ -133,13 +151,57 @@
     });
   }
 
+  /** 头像：有 avatar_path 就显示真图，没有才回退首字母 / 月亮（帖子卡片永远用回退态） */
+  function paintAvatar(p) {
+    var path = (p && p.avatar_path) || "";
+    var nick = (p && p.nickname) || "";
+    var fallback = (currentIsAnon && !nick) ? "🌙" : C.initial(nick || currentUserLabel());
+
+    avatarEl.textContent = "";
+    avatarEl.classList.remove("has-image");
+    if (path) {
+      var url = C.avatarUrl(path);
+      if (url) {
+        avatarEl.innerHTML = '<img src="' + C.escapeHtml(url) + '" alt="我的头像">';
+        avatarEl.classList.add("has-image");
+      } else {
+        avatarEl.textContent = fallback;   // 客户端没就绪时兜底
+      }
+    } else {
+      avatarEl.textContent = fallback;
+    }
+
+    if (avatarActions) avatarActions.hidden = false;
+    if (avatarRemove)  avatarRemove.hidden = !path;
+    if (avatarTip)     avatarTip.hidden = !path;
+  }
+
+  function currentUserLabel() {
+    var p = currentProfile || {};
+    var nick = p.nickname || "";
+    if (currentIsAnon) return nick ? nick + "（匿名访客）" : "匿名访客";
+    return nick || "还没设置昵称";
+  }
+
+  /* 生日 / 专业表单回填（从 MM-DD 拆成两个月日下拉） */
+  function populateProfileForm(p) {
+    if (!birthMonth || !birthDay) return;
+    p = p || {};
+    var mm = String(p.birthday || "").trim();
+    var m = /^(\d{2})-(\d{2})$/.exec(mm);
+    birthMonth.value = m ? m[1] : "";
+    syncBirthdayDays();
+    birthDay.value = m ? m[2] : "";
+    if (majorInput) majorInput.value = p.major || "";
+  }
+
   function renderHero(id, p) {
     var nick = (p && p.nickname) || "";
     var label;
     if (id.isAnonymous) label = nick ? nick + "（匿名访客）" : "匿名访客";
     else label = nick || "还没设置昵称";
 
-    avatarEl.textContent = (id.isAnonymous && !nick) ? "🌙" : C.initial(nick || label);
+    paintAvatar(p);
     nameEl.textContent = label;
 
     var parts = [];
@@ -561,6 +623,113 @@
       }).then(function () {
         secSave.disabled = false;
         secSave.textContent = "保存密保";
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------------
+   * 第 57/58 轮：头像上传 / 移除 + 生日下拉 + 保存个人资料
+   *   说明：资料卡只在已登录 / 已匿名进入时可见（boot 里控制）。
+   *   头像只在本页展示，帖子卡片不上头像（隐私红线，见 app.js saveAvatar 注释）。
+   * --------------------------------------------------------------- */
+
+  /* 往 select 里填 01..NN 的选项；pad=true 时补零到两位 */
+  function fillSelect(sel, from, to, pad) {
+    if (!sel) return;
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    var first = document.createElement("option");
+    first.value = "";
+    first.textContent = "--";
+    sel.appendChild(first);
+    for (var i = from; i <= to; i++) {
+      var o = document.createElement("option");
+      o.value = pad ? ("0" + i).slice(-2) : String(i);
+      o.textContent = pad ? ("0" + i).slice(-2) : String(i);
+      sel.appendChild(o);
+    }
+  }
+
+  /* 日期选项跟随月份（2 月给到 29，非闰年多出的 02-29 由 app.js isValidBirthday 兜底） */
+  function syncBirthdayDays() {
+    if (!birthMonth || !birthDay) return;
+    var m = parseInt(birthMonth.value, 10);
+    var max = (m >= 1 && m <= 12) ? BIRTH_DAYS_PER_MONTH[m - 1] : 31;
+    var keep = birthDay.value;
+    fillSelect(birthDay, 1, max, true);
+    if (keep && parseInt(keep, 10) <= max) birthDay.value = keep;
+  }
+
+  fillSelect(birthMonth, 1, 12, true);
+  if (birthMonth && birthDay) {
+    birthMonth.addEventListener("change", syncBirthdayDays);
+  }
+
+  /* 头像：换了图片就压缩上传，成功后重画并提示 */
+  if (avatarFile) {
+    avatarFile.addEventListener("change", function () {
+      var file = avatarFile.files && avatarFile.files[0];
+      if (!file) return;
+      C.hideNotice(noticeEl);
+      C.showNotice(noticeEl, "ok", "正在上传头像…");
+      C.saveAvatar(file).then(function (res) {
+        currentProfile = currentProfile || {};
+        currentProfile.avatar_path = res.avatar_path || null;
+        paintAvatar(currentProfile);
+        C.showNotice(noticeEl, "ok", "头像已更新");
+      }).catch(function (err) {
+        C.showNotice(noticeEl, "error", err.message);
+      }).then(function () {
+        avatarFile.value = "";   // 允许重选同一张图
+      });
+    });
+  }
+
+  /* 移除头像 */
+  if (avatarRemove) {
+    avatarRemove.addEventListener("click", function () {
+      if (!confirm("确定要移除头像吗？")) return;
+      C.hideNotice(noticeEl);
+      C.clearAvatar().then(function () {
+        currentProfile = currentProfile || {};
+        currentProfile.avatar_path = null;
+        paintAvatar(currentProfile);
+        C.showNotice(noticeEl, "ok", "已移除头像");
+      }).catch(function (err) {
+        C.showNotice(noticeEl, "error", err.message);
+      });
+    });
+  }
+
+  /* 保存个人资料（生日 / 专业） */
+  if (profileSave) {
+    profileSave.addEventListener("click", function () {
+      C.hideNotice(noticeEl);
+
+      var mm = birthMonth ? birthMonth.value : "";
+      var dd = birthDay ? birthDay.value : "";
+      var birthday = (mm && dd) ? (mm + "-" + dd) : "";
+      if (birthday && !C.isValidBirthday(birthday)) {
+        C.showNotice(noticeEl, "warn", "生日不合法：请重新选择月份和日期");
+        return;
+      }
+
+      profileSave.disabled = true;
+      profileSave.innerHTML = '<span class="spinner"></span>';
+
+      C.saveProfile({
+        birthday: birthday,
+        major: majorInput ? majorInput.value : ""
+      }).then(function (row) {
+        currentProfile = currentProfile || {};
+        currentProfile.birthday = row.birthday || "";
+        currentProfile.major = row.major || "";
+        populateProfileForm(currentProfile);
+        C.showNotice(noticeEl, "ok", "个人资料已保存");
+      }).catch(function (err) {
+        C.showNotice(noticeEl, "error", "保存失败：" + err.message);
+      }).then(function () {
+        profileSave.disabled = false;
+        profileSave.textContent = "保存资料";
       });
     });
   }

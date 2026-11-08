@@ -307,3 +307,68 @@ V4 的工程红线与其他阶段一致：**纯静态前端（无 npm / 无构�
 - 版本化：8 页引用重新盖章，`--check` 通过。
 
 **基线**：静态检查 **1101/0**、运行测试 **932/0**、名单差异审计 **304/0**；`version_assets.py --check` 通过。
+
+
+### 待办：第 57 轮（用户头像）与第 58 轮（个人资料 + 生日祝福）
+
+站主在第 56 轮验收后提出两个功能需求。两者都会改 profiles 表结构、并首次引入「真实头像」，
+属于影响面较大的改动 —— 按站主要求，**开发完成后需站主审核**，审核点包括：隐私设计、
+增量 SQL 的正确性、以及站点在 Supabase 后台的落地配置（见文末「审核清单」）。
+
+**功能 1：用户上传自己的头像（第 57 轮）**
+
+- 需求：登录用户（含匿名访客）都能在「我的」页设置自己的头像；头像在「我的」页即时展示。
+- 关键隐私约束：**帖子卡片的头像保持现状**（首字母假头像 / 匿名月亮）。理由：posts 表对
+  前端不可读 author_id、帖子只有署名快照（docs/supabase-setup.sql 第 12 节），动画片头像是
+  匿名帖的命根子 —— 头像一旦挂上帖子卡片，就等于把「新头像 ↔ 匿名帖」搭出桥，作者身份
+  会跟着头像流出去。这一条写进护栏 R57 钉死。
+- 方案：
+  - 新增公开存储桶 `avatars`（增量脚本 docs/supabase-avatar-profile.sql，可重复执行）；
+  - 上传路径 `av/<随机段>/<时间戳>-<随机段>.<ext>`，**与账号无关**（防枚举 / 防反查身份，
+    同 post-images 的哲学）；
+  - `profiles` 加列 `avatar_path text`；头像文件走公开 URL 展示，路径只本人可读（profiles
+    的 RLS 已是 select_self / update_self）；
+  - 前端压缩后上传（复用 app.js 的 compressImage，头像版压得更小），支持更换（删旧图）与移除。
+- 验收（可执行 SQL 后）：上传成功 → 我的页立即显示；刷新仍在；移除后回到首字母假头像。
+
+**功能 2：个人资料（生日 / 专业）+ 生日祝福（第 58 轮）**
+
+- 需求：「我的」页新增个人资料区块 —— 生日（月日，可选）、专业（可选）；登记了生日的用户，
+  在生日当天系统送上祝福。
+- 方案：
+  - `profiles` 加列 `birthday text`（存 `MM-DD`，CHECK 只允空串或该格式）、`major text`；
+  - 前端表单校验（月份 1-12、日期按月份天数核对），两字段都能清空；
+  - 生日祝福：新模块 assets/js/birthday.js，登录用户在首页 / 广场等页读取 profile，若今天
+    等于生日月日，顶部渲染**可关闭**的祝福条（本次会话内只送一次，sessionStorage 记住，
+    刷新不重复）；
+  - 生日只在本人「我的」页可见可改，**不对外展示**（延续站点隐私偏好，写进护栏 R58）。
+- 验收（可执行 SQL 后）：填生日 + 专业 → 保存 → 读回；清空生效；模拟当天生日 → 祝福条出现且可关。
+
+**审核清单（交付后站主执行 / 确认）**
+1. 在 Supabase SQL Editor 执行 docs/supabase-avatar-profile.sql（建 avatars 桶 + profiles 加列 + 更新建档触发器）；
+2. 后台 Storage 确认 avatars 桶为 public、无 select 策略（禁列举）；
+3. 真机上传头像、填生日专业、模拟生日各验一遍（见上两节验收）。
+
+---
+
+## 第 57/58 轮完成记录（2026-11-08）
+
+**状态：开发完成、护栏落地、待站主执行 SQL + 审核。**
+
+- R57 用户头像：`assets/js/app.js` 8b 节新增 `saveAvatar` / `clearAvatar` / `avatarUrl` /
+  `compressAvatar`（中心裁方、320px、JPEG 0.85、垫白），上传 `av/<随机段>/<时间戳>-<随机>.jpg`
+  （路径不含账号 id，防反查）；`profile.html` 「我的」页加 `#avatar-actions`（更换 / 移除 / 提示），
+  `profile.js` 的 `paintAvatar` 即时回显；**帖子卡片不上头像**（home / feed / post / faq 全文无头像关键字）。
+- R58 个人资料 + 生日祝福：`#profile-card`（生日月日双下拉 + 专业 + 保存），`saveProfile` 存
+  空串非 null（`birthday` / `major` 均 `NOT NULL DEFAULT ''`），`isValidBirthday` 按 `BIRTHDAY_DIM`
+  拒非法日期（02-30 等）；新模块 `assets/js/birthday.js` 首页 / 广场 / 我的三页接入，生日当天
+  顶部渲染可关闭祝福条（`sessionStorage` 本会话只送一次，`role=status` 播报，`aria-label` 可关）。
+- 增量脚本 `docs/supabase-avatar-profile.sql`（可重复执行）：建 `avatars` 公开桶 +
+  `avatars_auth_insert`（authenticated WITH CHECK bucket='avatars'）+ `avatars_owner_delete`
+  （owner = auth.uid()），**无 select 策略**；`profiles` 加 `avatar_path`/`birthday`（CHECK
+  `MM-DD`）/`major`；`select_self` / `update_self` 按列放行新列本人可见。
+- 回归：static **1117/0**（新增 R57×7、R58×8 护栏，1101→1117）、run_tests **932/0**、
+  campus_compare **304/0**；`version_assets.py` 盖章 8 页 / 20 引用（含 birthday.js?v=4020823c）；
+  新增文件 `assets/js/birthday.js` 已钉入 EXPECTED_JS 清单。
+- 提交：第 57/58 轮（头像 + 个人资料 / 生日祝福）—— 补充版本资产与文档；V4-55 基线更新。
+
