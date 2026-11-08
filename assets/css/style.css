@@ -1598,11 +1598,17 @@ input[type="file"] { display: none; }
   display: inline-block;
   padding: 2px 10px;
   border-radius: 999px;
+  background: rgba(122, 103, 88, 0.14);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+.birthday-pick.has-value {
   background: rgba(203, 146, 67, 0.2);
   color: var(--brand-text);
-  font-size: var(--fs-xs);
   font-weight: 800;
-  white-space: nowrap;
 }
 .birthday-wish-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
 .birthday-wish-close {

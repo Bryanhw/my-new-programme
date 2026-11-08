@@ -662,14 +662,18 @@
     syncBirthdayPick();
   }
 
-  /* 登记生日一栏：月、日都选好就标出「M 月 D 日」徽标，缺任选一边则收起 */
+  /* 登记生日一栏：月、日都选好就标出真实「MM/DD」（金色）；缺任选一边则回占位 「MM/DD」（灰色） */
   function syncBirthdayPick() {
     if (!birthMonth || !birthDay || !birthdayPick) return;
     var m = parseInt(birthMonth.value, 10);
     var d = parseInt(birthDay.value, 10);
-    if (!m || !d) { birthdayPick.hidden = true; return; }
-    birthdayPick.textContent = m + "月" + d + "日";
-    birthdayPick.hidden = false;
+    if (!m || !d) {
+      birthdayPick.textContent = "MM/DD";
+      birthdayPick.classList.remove("has-value");
+      return;
+    }
+    birthdayPick.textContent = (m < 10 ? "0" + m : "" + m) + "/" + (d < 10 ? "0" + d : "" + d);
+    birthdayPick.classList.add("has-value");
   }
 
   fillSelect(birthMonth, 1, 12, true);
