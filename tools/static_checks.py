@@ -3374,6 +3374,13 @@ check("R58/表单: 「我的」页有生日月日两个下拉、专业输入与�
       and 'id="major-input"' in _r58_html
       and 'id="profile-save"' in _r58_html,
       "see profile.html profile-card")
+check("R58/登记: 生日下拉旁有「M 月 D 日」合并标记，随选择实时出现 / 收起",
+      'id="birthday-pick"' in _r58_html
+      and "function syncBirthdayPick()" in _r58_pro
+      and 'birthDay.addEventListener("change", syncBirthdayPick)' in _r58_pro
+      and "syncBirthdayPick();" in _r58_pro.rstrip()
+      and ".birthday-pick {" in css,
+      "see profile.html / profile.js syncBirthdayPick / style.css")
 _r58_others = [p for p in ("index.html", "feed.html", "post.html", "faq.html", "feedback.html")
                if 'id="birthday-month"' in read(os.path.join(ROOT, p))]
 check("R58/隐私: 生日资料表单只存在于「我的」页 —— 生日不对外展示",

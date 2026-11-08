@@ -65,6 +65,7 @@
   var profileCard = document.getElementById("profile-card");
   var birthMonth  = document.getElementById("birthday-month");
   var birthDay    = document.getElementById("birthday-day");
+  var birthdayPick = document.getElementById("birthday-pick");
   var majorInput  = document.getElementById("major-input");
   var profileSave = document.getElementById("profile-save");
   var BIRTH_DAYS_PER_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // 02 按闰年 29 天
@@ -192,6 +193,7 @@
     birthMonth.value = m ? m[1] : "";
     syncBirthdayDays();
     birthDay.value = m ? m[2] : "";
+    syncBirthdayPick();                 // 回填后立即把「M 月 D 日」标记亮出来
     if (majorInput) majorInput.value = p.major || "";
   }
 
@@ -657,11 +659,23 @@
     var keep = birthDay.value;
     fillSelect(birthDay, 1, max, true);
     if (keep && parseInt(keep, 10) <= max) birthDay.value = keep;
+    syncBirthdayPick();
+  }
+
+  /* 登记生日一栏：月、日都选好就标出「M 月 D 日」徽标，缺任选一边则收起 */
+  function syncBirthdayPick() {
+    if (!birthMonth || !birthDay || !birthdayPick) return;
+    var m = parseInt(birthMonth.value, 10);
+    var d = parseInt(birthDay.value, 10);
+    if (!m || !d) { birthdayPick.hidden = true; return; }
+    birthdayPick.textContent = m + "月" + d + "日";
+    birthdayPick.hidden = false;
   }
 
   fillSelect(birthMonth, 1, 12, true);
   if (birthMonth && birthDay) {
     birthMonth.addEventListener("change", syncBirthdayDays);
+    birthDay.addEventListener("change", syncBirthdayPick);
   }
 
   /* 头像：换了图片就压缩上传，成功后重画并提示 */
