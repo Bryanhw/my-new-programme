@@ -454,37 +454,64 @@ main:focus { outline: none; }
   background-repeat: repeat-x;
 }
 
-/* 两扇窗：贴视口左右边缘、一路通到底，向室内半开（左窗铰链在左、右窗在右）。
-   入场从关（0°）开到 32°，之后静止。手机屏幕太窄，≤520px 里整段不画。 */
-.page-scene::before,
-.page-scene::after {
-  content: "";
+/* 两扇窗（第 59 轮重做）：从 CSS 伪元素升为真实节点 .page-window-l / -r，
+   贴视口左右边缘、一路通到底。形状/花纹做成校园旧窗：
+   - 拱形顶（上缘收圆）+ 木色立窗底子 + 玻璃高光（全用 background 渐变，不引外部图）；
+   - 中央竖棂把窗分成左右两扇，拱下横梁再分上下（棂靠 ::before/::after 画）。
+   开场动画（进场）：窗先正对观众（0°），页面加载后自动向两侧推开（±88°），
+   先露出整片天空 / 远山 / 操场的风景，约 0.9 秒后 hero 文字序列再依次淡入。
+   手机 ≤520px 整段不画；减弱动态时退回显式半开 ±32°（见文件末尾）。 */
+.page-window {
   position: absolute;
   top: 0;
   height: 100%;
-  width: clamp(64px, 11vw, 168px);
+  width: clamp(80px, 13.5vw, 204px);
   z-index: 1;
+  box-sizing: border-box;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.10) 32%, rgba(122, 102, 84, 0.12) 60%, rgba(255, 255, 255, 0.24) 100%),
-    linear-gradient(180deg, #7a6a57 0%, #57493a 64%, #44372a 100%);
+    /* 玻璃高光：窗面一道斜斜的反光 */
+    linear-gradient(115deg,
+      rgba(255, 255, 255, 0.30) 0%,
+      rgba(255, 255, 255, 0.07) 30%,
+      rgba(255, 255, 255, 0.00) 48%),
+    /* 木色窗底：上浅下深的立窗 */
+    linear-gradient(180deg, #8a7557 0%, #6e5b43 46%, #574a3b 78%, #4c3e32 100%);
   box-shadow:
-    inset 0 0 0 3px rgba(255, 250, 240, 0.5),
-    inset 0 0 70px rgba(59, 42, 27, 0.26),
-    0 20px 44px rgba(59, 42, 27, 0.18);
+    inset 0 0 0 3px rgba(255, 248, 236, 0.55),
+    inset 0 0 26px rgba(62, 43, 28, 0.35),
+    0 26px 52px rgba(56, 40, 26, 0.22);
   will-change: transform;
+  border-radius: 48px 48px 0 0;   /* 拱形顶 */
 }
-.page-scene::before {
-  left: 0;
-  transform-origin: left center;
-  animation: page-open-left 1100ms cubic-bezier(0.22, 0.8, 0.3, 1.02) 200ms both;
+/* 中央竖棂：把窗分成左右两扇 */
+.page-window::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: 0;
+  left: 50%;
+  width: 5px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #4a3a2d 0%, #7a664d 30%, #a08a66 60%, #6d5b41 90%),
+              linear-gradient(180deg, rgba(255, 251, 242, 0.55) 0 1px, transparent 1px);
 }
-.page-scene::after {
-  right: 0;
-  transform-origin: right center;
-  animation: page-open-right 1100ms cubic-bezier(0.22, 0.8, 0.3, 1.02) 200ms both;
+/* 拱下横梁：拱顶压一条梁把窗分成上下两扇（立体感靠渐变自带，不写手写色阴影） */
+.page-window::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 34%;
+  height: 5px;
+  background: linear-gradient(90deg, #4a3a2d 0%, #7a664d 30%, #a08a66 60%, #6d5b41 90%),
+              linear-gradient(180deg, rgba(255, 251, 242, 0.55) 0 1px, transparent 1px);
+  border-radius: 3px;
 }
-@keyframes page-open-left  { from { transform: rotateY(0deg); }  to { transform: rotateY(32deg); } }
-@keyframes page-open-right { from { transform: rotateY(0deg); }  to { transform: rotateY(-32deg); } }
+.page-window-l { left: 0; transform-origin: left center;  animation: page-open-l 1500ms cubic-bezier(0.16, 0.8, 0.28, 1) 260ms both; }
+.page-window-r { right: 0; transform-origin: right center; animation: page-open-r 1500ms cubic-bezier(0.16, 0.8, 0.28, 1) 260ms both; }
+/* 开场：从关着的 0°（正对观众）推开到 ±88°，把风景整片让出来；both 停在打开位，刷新重播 */
+@keyframes page-open-l { from { transform: rotateY(0deg); }  to { transform: rotateY(88deg); } }
+@keyframes page-open-r { from { transform: rotateY(0deg); }  to { transform: rotateY(-88deg); } }
 
 /* ------------------------------ 主页 Hero ------------------------------ */
 .hero {
@@ -525,6 +552,27 @@ main:focus { outline: none; }
   to   { background-position-x: -260px; }
 }
 
+/* 第 59 轮开场：窗推开露出风景之后，文字序列才依次淡入上浮（先景后字）。
+   动画在页面加载时播一次（both，刷新重播）；减弱动态时被文件末尾的统一规则停掉，
+   元素回到 opacity:1 直接可见。 */
+.hero-greeting,
+.hero-title,
+.hero-sub,
+.hero-pills,
+.cta-row {
+  opacity: 0;
+  animation: hero-rise 740ms cubic-bezier(0.22, 0.7, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+.hero-greeting { animation-delay: 900ms; }
+.hero-sub      { animation-delay: 1200ms; }
+.hero-pills    { animation-delay: 1340ms; }
+.cta-row       { animation-delay: 1480ms; }
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .hero-greeting {
   position: relative;
   z-index: 1;
@@ -542,6 +590,7 @@ main:focus { outline: none; }
   font-weight: 900;
   color: var(--ink);
   margin-bottom: 16px;
+  animation-delay: 1060ms;   /* 第 59 轮开场序，与 .hero-greeting 等的动画共用 hero-rise */
 }
 .hero-title .hl {
   background: linear-gradient(180deg, transparent 54%, var(--sky-warm) 54%);
@@ -2353,10 +2402,9 @@ body.modal-open { overflow: hidden; }
     border-radius: 26px;
     /* 第 56 轮：面板已撤掉，这里不再需要羽化蒙版（蒙版会把文字边缘也一起吃掉）。 */
   }
-  /* 第 56 轮手机端：屏幕太窄，两扇大窗会挤掉正文，站主同意整段不画；
+  /* 第 59 轮手机端：屏幕太窄，两扇大窗会挤掉正文，站主同意整段不画；
      场景只留天空 + 两层云，操场压浅。 */
-  .page-scene::before,
-  .page-scene::after { display: none; }
+  .page-window { display: none; }
   .page-cloud-near { display: none; }
   .page-scene {
     background-image: linear-gradient(
@@ -2592,10 +2640,11 @@ body.modal-open { overflow: hidden; }
 /* 减少动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
-  /* 第 56 轮：减弱动态时动画被上面停掉，全屏两扇窗失去终态基准会退回 0°（全关）。
-     这里给显式半开态，场景仍是「两扇开着的窗」，只是不动。 */
-  .page-scene::before { transform: rotateY(32deg); }
-  .page-scene::after  { transform: rotateY(-32deg); }
+  /* 第 59 轮：减弱动态时开场动画与文字序列被上面停掉——窗会退回 0°（全关）、
+     文字停在 opacity 0。这里给显式终态：窗回到半开 ±32°，文字直接可见。 */
+  .page-window-l { transform: rotateY(32deg); }
+  .page-window-r { transform: rotateY(-32deg); }
+  .hero-greeting, .hero-title, .hero-sub, .hero-pills, .cta-row { opacity: 1 !important; }
 }
 
 /* --------------------- F2：「我的」三格 + 我的评论 --------------------- */

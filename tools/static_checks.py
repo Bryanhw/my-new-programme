@@ -3239,12 +3239,29 @@ check("R56: 首页有一个全屏固定场景层，纯装饰（aria-hidden + 不
       and "inset: 0" in _r56_scene
       and "pointer-events: none" in _r56_scene,
       "see index.html .page-scene + style.css")
-check("R56: 两扇窗贴在视口左右边缘、通到地，向内半开（rotateY ±32°），不新增图片",
-      ".page-scene::before," in _r56_css and ".page-scene::after {" in _r56_css
-      and "left: 0;" in _r56_css and "right: 0;" in _r56_css
+check("R56: 两扇窗是真实节点（左右各一、通到底），开盘从关（0°）推到 ±88° 让出风景",
+      _r56_idx.count('class="page-window ') == 2
+      and ".page-window {" in _r56_css
+      and ".page-window-l { left: 0;" in _r56_css
+      and ".page-window-r { right: 0;" in _r56_css
       and "height: 100%;" in _r56_css
-      and "rotateY(32deg)" in _r56_css and "rotateY(-32deg)" in _r56_css,
-      "windows sit on the viewport edges")
+      and "rotateY(0deg)" in _r56_css
+      and "rotateY(88deg)" in _r56_css and "rotateY(-88deg)" in _r56_css,
+      "real window nodes + 0->88 opening")
+check("R56: 窗棂花纹是纯 CSS（拱形顶 + 中央竖棂 + 拱下横梁 + 玻璃高光），不引外部图片",
+      ".page-window::before {" in _r56_css
+      and ".page-window::after {" in _r56_css
+      and "border-radius: 48px 48px 0 0;" in _r56_css
+      and "linear-gradient(115deg," in _r56_css
+      and "url(" not in _a1_block(_r56_css, ".page-window"),
+      "arch + mullion drawn in CSS, no bitmap")
+check("R56: 开场序：窗 260ms 起推开，文字 900ms 起才依次淡入 —— 先景后字",
+      "@keyframes page-open-l" in _r56_css
+      and "@keyframes hero-rise" in _r56_css
+      and "animation: page-open-l 1500ms" in _r56_css
+      and "animation-delay: 900ms;" in _r56_css
+      and "translateY(12px)" in _r56_css,
+      "opening: scene first, text second")
 check("R56: 三层云全屏平铺漂移，HTML 里三个节点都在（防单边定义不渲染）",
       _r56_idx.count('class="page-cloud ') == 3
       and ".page-cloud-far" in _r56_css
@@ -3278,14 +3295,15 @@ check("R56: 内容层（问候 / 标题 / 副文 / 标签 / CTA）仍抬在场�
       and ".cta-row {" in _r56_css
       and _r56_css.count("z-index: 1") >= 5,
       "content sits above the scene")
-check("R56: 减弱动态时窗退回显式半开，而不是全关",
-      ".page-scene::before { transform: rotateY(32deg); }" in _r56_css
-      and ".page-scene::after  { transform: rotateY(-32deg); }" in _r56_css,
-      "reduce keeps both windows half open")
+check("R56: 减弱动态时窗退回显式半开（±32°）、文字序列直接可见，而不是全关全藏",
+      ".page-window-l { transform: rotateY(32deg); }" in _r56_css
+      and ".page-window-r { transform: rotateY(-32deg); }" in _r56_css
+      and "opacity: 1 !important;" in _r56_css,
+      "reduce keeps windows half open + text visible")
 check("R56: 手机端（≤520px）两扇窗整段不画、第三层云收掉（站主同意）",
-      ".page-scene::before," in _r56_css
+      ".page-window { display: none; }" in _r56_css
       and ".page-cloud-near { display: none; }" in _r56_css
-      and re.search(r"\.page-scene::after\s*\{\s*display:\s*none;", _r56_css) is not None,
+      and re.search(r"\.page-window\s*\{\s*display:\s*none;", _r56_css) is not None,
       "phone drops the two windows")
 
 
