@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 r"""Live anonymity-boundary check. Run AFTER the migrations it guards:
 
-    * docs/supabase-anon-privacy.sql    -> sections 1-7
+    * docs/supabase-anon-privacy.sql    -> sections 1-5, 7
     * docs/supabase-likes-privacy.sql   -> section 8
+    * docs/supabase-public-uid.sql      -> section 4b (public-uid red lines)
 
 Read-only by default. With --write it also proves caller isolation end to end:
 as the test user it creates one pending post, checks the visitor view cannot see
@@ -12,10 +13,11 @@ The test accounts' password is deliberately NOT stored in this file (this repo
 is public). Pass it through the environment instead:
 
     $env:E2E_PASSWORD = "<password of the test accounts>"
-    python tools/privacy_probe.py             # read-only, 34 checks
+    python tools/privacy_probe.py             # read-only visitor + public-uid checks
     python tools/privacy_probe.py --write     # + the isolation proof
 
-Without E2E_PASSWORD it still runs the signed-out sections 1-4 and then stops.
+Without E2E_PASSWORD it still runs the signed-out sections 1-4 (plus the
+public-uid red lines in 4b) and then stops.
 
 Optional overrides:
     E2E_PHONE_A    first test account phone   (default 13900000001)
@@ -177,6 +179,68 @@ print()
 print("4) profiles still private (unchanged by this migration)")
 st, body = req("GET", "/rest/v1/profiles?select=id,phone,nickname&limit=5")
 check("visitor sees no profiles", st == 200 and body == [], (st, body))
+
+print()
+print("4b) public-uid red lines (run AFTER supabase-public-uid.sql)")
+# The four public views are public by design, but they must stay thin:
+# public_profiles has no phone, follows only carries public uids, and the
+# post->author views never hand out author_id or an anonymous author.
+PUB_COLS = "public_uid,nickname,school,created_at"
+st, rows = req("GET", "/rest/v1/public_profiles?select=" + PUB_COLS + "&limit=20")
+rows = rows if isinstance(rows, list) else []
+check("the public_profiles view answers 200 (public by design)", st == 200, (st, msg_of(rows)))
+check("public rows carry only uid/nickname/school/created_at (phone is not a column)",
+      all(sorted(r.keys()) == ["created_at", "nickname", "public_uid", "school"] for r in rows),
+      [sorted(r.keys()) for r in rows[:1]])
+check("no public row has an empty uid and none is duplicated (backfill ran)",
+      all(r.get("public_uid") for r in rows)
+      and len({r.get("public_uid") for r in rows}) == len(rows),
+      ([r.get("public_uid") for r in rows[:3]], len(rows)))
+st, body = req("GET", "/rest/v1/public_profiles?select=phone&limit=1")
+check("asking the public view for a phone number is refused",
+      code_of(body) in ("42703", "42501", "PGRST204"), (st, code_of(body), msg_of(body)))
+
+FOLLOW_VIEW_COLS = "follower_uid,followee_uid,created_at"
+st, rows = req("GET", "/rest/v1/follows_public?select=" + FOLLOW_VIEW_COLS + "&limit=20")
+rows = rows if isinstance(rows, list) else []
+check("the follows_public view answers 200 (public by design)", st == 200, (st, msg_of(rows)))
+check("follow rows expose only the two public uids + timestamp",
+      all(sorted(r.keys()) == ["created_at", "followee_uid", "follower_uid"] for r in rows),
+      [sorted(r.keys()) for r in rows[:1]])
+st, body = req("GET", "/rest/v1/follows?select=*&limit=5")
+check("the follows base table is not directly readable (uid view is the only gate)",
+      (st == 200 and body == []) or (st in (400, 401, 403) and code_of(body) == "42501"),
+      (st, code_of(body), msg_of(body)))
+
+st, rows = req("GET", "/rest/v1/post_authors_public?select=post_id,author_public_uid&limit=20")
+rows = rows if isinstance(rows, list) else []
+check("the post->author-uid view answers 200", st == 200, (st, msg_of(rows)))
+check("it carries only post_id + author_public_uid (never author_id)",
+      all(sorted(r.keys()) == ["author_public_uid", "post_id"] for r in rows),
+      [sorted(r.keys()) for r in rows[:1]])
+check("every author uid looks like a public uid (6 alnum, never a uuid or phone)",
+      all(isinstance(r.get("author_public_uid"), str)
+          and re.fullmatch(r"[0-9a-z]{6}", r.get("author_public_uid")) for r in rows),
+      [r.get("author_public_uid") for r in rows[:3]])
+st, body = req("GET", "/rest/v1/post_authors_public?select=author_id&limit=1")
+check("asking it for the raw author id is refused",
+      code_of(body) in ("42703", "42501", "PGRST204"), (st, code_of(body), msg_of(body)))
+
+st, rows = req("GET", "/rest/v1/author_posts_public"
+               + "?select=id,is_anonymous,display_name,school,content,image_path"
+               + ",created_at,status,author_public_uid&limit=20")
+rows = rows if isinstance(rows, list) else []
+check("the author-posts view answers 200", st == 200, (st, msg_of(rows)))
+check("it never returns an anonymous post (the view only emits non-anonymous rows)",
+      all(r.get("is_anonymous") is False for r in rows),
+      [r.get("is_anonymous") for r in rows[:3]])
+check("its author uid is a public uid, never a raw account id/phone",
+      all(isinstance(r.get("author_public_uid"), str)
+          and re.fullmatch(r"[0-9a-z]{6}", r.get("author_public_uid")) for r in rows),
+      [r.get("author_public_uid") for r in rows[:3]])
+st, body = req("GET", "/rest/v1/author_posts_public?select=author_id&limit=1")
+check("asking it for the raw author id is refused",
+      code_of(body) in ("42703", "42501", "PGRST204"), (st, code_of(body), msg_of(body)))
 
 print()
 print("5) signed in as the first test account")

@@ -346,6 +346,18 @@ function __missingColumn(clientOpts, st) {
   return '';
 }
 
+/* 公开 UID（V5-4）：返回指定账号在 store.profiles 里的 public_uid，
+   没有（未见迁移 / 匿名账号永为 null）就返回 null。
+   与真实库一致：匿名会话压根没有 public_uid，公开视图只认它。 */
+function __publicUidOf(store, userId) {
+  if (store && store.profiles) {
+    for (var ui = 0; ui < store.profiles.length; ui++) {
+      if (store.profiles[ui].id === userId) return store.profiles[ui].public_uid || null;
+    }
+  }
+  return null;
+}
+
 function __tableRows(store, table, uid) {
   if (table === 'posts') return store.posts;
   if (table === 'likes') return store.likes;
@@ -429,6 +441,72 @@ function __tableRows(store, table, uid) {
     var lrow = [];
     for (var li = 0; li < aggOrder.length; li++) lrow.push(agg[aggOrder[li]]);
     return lrow;
+  }
+  /* V5-4 视图 public_profiles：只暴露公开 UID / 昵称 / 学校 / 加入时间，
+     绝不含 phone（红线）。匿名账号没有 public_uid，永远进不来。 */
+  if (table === 'public_profiles') {
+    var pubRows = [];
+    for (var ppi = 0; ppi < store.profiles.length; ppi++) {
+      var pp = store.profiles[ppi];
+      if (!pp.public_uid) continue;
+      pubRows.push({
+        public_uid: pp.public_uid,
+        nickname: pp.nickname || null,
+        school: pp.school || null,
+        created_at: pp.created_at || null
+      });
+    }
+    return pubRows;
+  }
+  /* V5-4 视图 follows_public：公开关注关系，只有公开 UID，不含任何匿名映射。 */
+  if (table === 'follows_public') {
+    var foRows = [];
+    for (var fj = 0; fj < (store.follows || []).length; fj++) {
+      var fr = store.follows[fj];
+      foRows.push({
+        follower_uid: fr.follower_uid,
+        followee_uid: fr.followee_uid,
+        created_at: fr.created_at || null
+      });
+    }
+    return foRows;
+  }
+  /* V5-4 视图 post_authors_public：帖子 → 作者公开 UID。
+     只给「已通过 + 非匿名 + 作者有公开 UID」的帖子；离开这个条件的帖子
+     在这里查不到 author_public_uid —— 匿名作者仍是黑盒。 */
+  if (table === 'post_authors_public') {
+    var paRows = [];
+    for (var pi2 = 0; pi2 < store.posts.length; pi2++) {
+      var ppost = store.posts[pi2];
+      if (ppost.status !== 'approved' || ppost.is_anonymous) continue;
+      var apu = __publicUidOf(store, ppost.author_id);
+      if (!apu) continue;
+      paRows.push({ post_id: ppost.id, author_public_uid: apu });
+    }
+    return paRows;
+  }
+  /* V5-4 视图 author_posts_public：公开主页「TA 的发布」。
+     只出「已通过 + 非匿名 + 作者有公开 UID」的帖子，并带上 author_public_uid。 */
+  if (table === 'author_posts_public') {
+    var apRows = [];
+    for (var aj = 0; aj < store.posts.length; aj++) {
+      var apost = store.posts[aj];
+      if (apost.status !== 'approved' || apost.is_anonymous) continue;
+      var apu2 = __publicUidOf(store, apost.author_id);
+      if (!apu2) continue;
+      apRows.push({
+        id: apost.id,
+        is_anonymous: false,
+        display_name: apost.display_name || '',
+        school: apost.school || null,
+        content: apost.content,
+        image_path: apost.image_path || null,
+        created_at: apost.created_at,
+        status: apost.status,
+        author_public_uid: apu2
+      });
+    }
+    return apRows;
   }
   return [];
 }
@@ -821,6 +899,7 @@ function __makeClient(opts) {
   if (!store.reports) store.reports = [];
   if (!store.comments) store.comments = [];
   if (!store.feedback) store.feedback = [];
+  if (!store.follows) store.follows = [];
   var session = opts.session || null;
   /* 当前会话 uid：视图 my_posts 用它模拟 auth.uid() 的服务端过滤 */
   function sessionUid() { return session && session.user ? session.user.id : null; }
@@ -931,6 +1010,84 @@ function __makeClient(opts) {
         }
         if (opts.rpcResult !== undefined) n = opts.rpcResult;
         return P.resolve({ data: n, error: null });
+      }
+      if (name === 'soft_delete_comment') {
+        /* 软删除自己的评论（对齐 docs/supabase-comments-soft-delete.sql 的 RPC，
+           只放行本人，并把内容/署名一并清空，占位不带身份；回复不级联删除）。 */
+        var cargs = arguments[1] || {};
+        var cid = String(cargs.p_comment_id == null ? '' : cargs.p_comment_id);
+        var cuid = sessionUid();
+        var cfound = false;
+        for (var ci = 0; ci < store.comments.length; ci++) {
+          if (String(store.comments[ci].id) === cid) {
+            cfound = true;
+            if (!cuid || store.comments[ci].author_id !== cuid || store.comments[ci].deleted_at) {
+              return P.resolve({ data: null, error: { code: 'P0001', message: '只能删除自己的评论' } });
+            }
+            store.comments[ci].deleted_at = '2026-09-23T12:00:00.000Z';
+            store.comments[ci].content = '';
+            store.comments[ci].display_name = '';
+            store.comments[ci].school = null;
+            break;
+          }
+        }
+        if (!cfound) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '只能删除自己的评论' } });
+        }
+        return P.resolve({ data: null, error: null });
+      }
+      if (name === 'my_public_uid') {
+        /* V5-4：当前登录公开账号的 public_uid；匿名 / 未登录没有公开 UID，返回 null。 */
+        var muid = sessionUid();
+        if (!muid || (session && session.user && session.user.is_anonymous)) {
+          return P.resolve({ data: null, error: null });
+        }
+        return P.resolve({ data: __publicUidOf(store, muid), error: null });
+      }
+      if (name === 'follow_user' || name === 'unfollow_user') {
+        /* V5-4：关注 / 取关 —— 只放行公开账号（匿名拒绝）、不能关注自己、目标必须存在。
+           写只经此 RPC，前端绝不碰 follows 表的 insert/delete（红线）。 */
+        var fargs = arguments[1] || {};
+        var fTarget = String(fargs.p_followee_uid == null ? '' : fargs.p_followee_uid);
+        var fUid = sessionUid();
+        var fMe = (fUid && !(session && session.user && session.user.is_anonymous))
+          ? __publicUidOf(store, fUid) : null;
+        if (!fMe || !fUid) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '需要登录公开账号才能关注' } });
+        }
+        if (fMe === fTarget) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '不能关注自己' } });
+        }
+        var fExists = false;
+        for (var fe = 0; fe < store.profiles.length; fe++) {
+          if (store.profiles[fe].public_uid === fTarget) { fExists = true; break; }
+        }
+        if (!fExists) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '要关注的账号不存在' } });
+        }
+        if (name === 'follow_user') {
+          var already = false;
+          for (var fk = 0; fk < (store.follows || []).length; fk++) {
+            if (store.follows[fk].follower_uid === fMe && store.follows[fk].followee_uid === fTarget) {
+              already = true; break;
+            }
+          }
+          if (!already) {
+            store.follows.push({
+              follower_uid: fMe, followee_uid: fTarget,
+              created_at: (store.now ? store.now : '2026-09-23T00:00:00.000Z')
+            });
+          }
+          return P.resolve({ data: true, error: null });
+        }
+        var keep = [];
+        for (var fu = 0; fu < (store.follows || []).length; fu++) {
+          if (!(store.follows[fu].follower_uid === fMe && store.follows[fu].followee_uid === fTarget)) {
+            keep.push(store.follows[fu]);
+          }
+        }
+        store.follows = keep;
+        return P.resolve({ data: true, error: null });
       }
       return P.resolve({ data: (opts.rpcResult === undefined ? 0 : opts.rpcResult), error: null });
     },

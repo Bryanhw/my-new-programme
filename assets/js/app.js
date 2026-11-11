@@ -505,6 +505,32 @@ window.Campus = (function () {
       });
   }
 
+  /* 第 59 轮 / V5-4：给一批帖子补上「作者公开UID」（仅非匿名作者有）。
+   * 读取走视图 post_authors_public：它只对「已通过 + 非匿名」的帖子返回
+   * author_public_uid，匿名帖 / 未过审帖一律查不到（作者仍是黑盒，匿名墙不动）。
+   * 视图还没建（迁移未跑）时整段降级：所有帖都当成匿名处理，卡片不出「@作者」入口，
+   * 不影响阅读 —— 与 attachLikes / withAnonCodeFallback 同一种「页面先上、迁移后跑」。
+   * 只用于展示一个可点的 @UID 外壳，不暴露任何 author_id。 */
+  function attachAuthors(posts) {
+    if (!posts || !posts.length) return Promise.resolve(posts);
+
+    var ids = posts.map(function (p) { return p.id; });
+
+    return client.from("post_authors_public")
+      .select("post_id, author_public_uid")
+      .in("post_id", ids)
+      .then(function (res) {
+        var map = {};
+        ((res && res.data) || []).forEach(function (r) { map[r.post_id] = r.author_public_uid; });
+        posts.forEach(function (p) { p.author_public_uid = map[p.id] || null; });
+        return posts;
+      })
+      .catch(function () {
+        posts.forEach(function (p) { p.author_public_uid = null; });
+        return posts;
+      });
+  }
+
   /** 取内容流（最新在前）。
    *  只取帖子本身：点赞数 / 评论数由调用方拿到数据后调 attachEngagement 补 ——
    *  两个统计请求不再挡住第一张卡片（实测三个请求串行约 0.9 秒，分开能省掉三分之二）。
@@ -1570,7 +1596,7 @@ window.Campus = (function () {
    * ------------------------------------------------------------------ */
 
   var COMMENT_MAX = 300;
-  var COMMENT_COLUMNS = "id, post_id, parent_id, is_anonymous, display_name, school, content, created_at, is_mine";
+  var COMMENT_COLUMNS = "id, post_id, parent_id, is_anonymous, display_name, school, content, created_at, is_mine, is_deleted";
 
   /** 取某条帖子下的公开评论（时间正序：顶层与回复都在同一个列表里） */
   function listComments(postId, limit) {
@@ -1638,7 +1664,7 @@ window.Campus = (function () {
    */
   function attachEngagement(posts) {
     if (!posts || !posts.length) return Promise.resolve(posts || []);
-    return Promise.all([attachLikes(posts), attachComments(posts)]).then(function () {
+    return Promise.all([attachLikes(posts), attachComments(posts), attachAuthors(posts)]).then(function () {
       return posts;
     });
   }
@@ -1681,10 +1707,10 @@ window.Campus = (function () {
     });
   }
 
-  /** 删除自己的一条评论（数据库只放行本人的删除） */
+  /** 删除自己的一条评论：软删除（服务端只放行本人，顺手清空内容与署名） */
   function deleteComment(commentId) {
     if (!client) return Promise.reject(new Error(configError));
-    return client.from("comments").delete().eq("id", commentId).then(function (res) {
+    return client.rpc("soft_delete_comment", { p_comment_id: commentId }).then(function (res) {
       if (res.error) throw new Error("删除失败：" + res.error.message);
     });
   }
@@ -1744,8 +1770,13 @@ window.Campus = (function () {
     return "ta";
   }
 
-  /** 一条评论（isReply = 缩进的回复） */
+  /** 一条评论（isReply = 缩进的回复）；已软删的渲染「评论已删除」占位（不含身份/操作） */
   function renderCommentItem(c, isReply) {
+    if (c.is_deleted) {
+      return '<div class="comment is-deleted" data-comment-id="' + escapeHtml(c.id) + '">' +
+        '<span class="comment-deleted-note">这条评论已删除</span>' +
+        "</div>";
+    }
     var name = commentAuthorName(c);
 
     var html = '<div class="comment' + (isReply ? " is-reply" : "") + '" data-comment-id="' + escapeHtml(c.id) + '">';
@@ -1821,7 +1852,10 @@ window.Campus = (function () {
     } else {
       top.forEach(function (c) {
         html += renderCommentItem(c, false);
-        (childrenOf[c.id] || []).forEach(function (k) { html += renderCommentItem(k, true); });
+        // 顶层评论已软删：其下回复一并折叠（对齐 V5-8 删评语义）
+        if (!c.is_deleted) {
+          (childrenOf[c.id] || []).forEach(function (k) { html += renderCommentItem(k, true); });
+        }
       });
     }
     html += "</div>";
@@ -2503,6 +2537,13 @@ window.Campus = (function () {
     html += '<div class="post-meta">';
     html += '<div class="post-name">' + postNameHtml(post, name);
     html += statusTag(post.status);
+    // V5-4：非匿名帖的作者公开UID入口（attachAuthors 从 post_authors_public 取）
+    // —— 匿名帖 author_public_uid 恒为 null，这里自然不出现，匿名墙不动。
+    if (post.author_public_uid) {
+      html += '<a class="post-author-uid" href="profile.html?uid=' +
+        encodeURIComponent(post.author_public_uid) +
+        '" aria-label="进入发布者主页">@' + escapeHtml(post.author_public_uid) + '</a>';
+    }
     html += "</div>";
     html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + "</div>";
     html += "</div>";                       // 关 .post-meta
@@ -3485,6 +3526,9 @@ window.Campus = (function () {
     onSavedChange: onSavedChange,
     SAVED_POSTS_KEY: SAVED_POSTS_KEY,
     announce: announce,
+    // V5-4：关注/取关等轻量操作用的提示条（announce 的别名，语义更短）
+    toast: announce,
+    attachAuthors: attachAuthors,
     anonCodeOf: anonCodeOf,
     anonName: anonName,
     // D1：服务端稳定洞号（形状不对时返回空串）+ 「这个库有没有迁移过」的探测结果

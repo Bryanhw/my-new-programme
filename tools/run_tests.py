@@ -1239,16 +1239,28 @@ def run_h():
     check("only the accepted reply was stored",
           js(it, "__mockOpts.store.comments.length") == 6,
           js(it, "__mockOpts.store.comments.length"))
-    print("- deleting my own comment")
+    print("- deleting my own comment (soft delete)")
     it = load("feed.html", "mock-logged")
     seed_comments(it)
+    # c-1 is the top comment that owns the reply c-2; give it to the logged-in user
+    # so the ownership check passes, exactly like authoring it.
+    js(it, "(function(){for(var i=0;i<__mockOpts.store.comments.length;i++){var x=__mockOpts.store.comments[i];"
+           " if(x.id==='c-1'){x.author_id='u-1';}} return true;})()")
     js(it, "__r = {}; Campus.deleteComment('c-1')"
            ".then(function () { __r.ok = true; }, function (e) { __r.err = String(e.message); });")
     check("delete resolves", js(it, "__r.ok") is True, js(it, "__r.err"))
-    check("comment removed from the store", js(it, "__mockOpts.store.comments.length") == 3,
+    check("soft delete goes through the rpc, not a raw table delete",
+          js(it, "JSON.stringify(__calls).indexOf('soft_delete_comment')") >= 0)
+    check("the comment is soft-deleted, not removed (the row stays)",
+          js(it, "__mockOpts.store.comments.length") == 5,
           js(it, "__mockOpts.store.comments.length"))
-    check("its reply cascades away",
-          js(it, "JSON.stringify(__mockOpts.store.comments).indexOf('a reply')") < 0)
+    check("the deleted comment is marked and emptied (no identity, no content)",
+          js(it, "(function(){for(var i=0;i<__mockOpts.store.comments.length;i++){var x=__mockOpts.store.comments[i];"
+                 " if(x.id==='c-1'){return x.deleted_at!=null && x.content==='' && x.display_name==='';}} return false;})()")
+             is True,
+          js(it, "JSON.stringify(__mockOpts.store.comments[0])"))
+    check("its reply is no longer cascaded away (kept, to be folded on screen)",
+          js(it, "JSON.stringify(__mockOpts.store.comments).indexOf('a reply')") >= 0)
 
     print("- attachEngagement fills in the per-post counts (A6: the list itself comes back first)")
     it = load("feed.html", "mock-logged")
@@ -3910,6 +3922,158 @@ check("then lands back on the index",
 # cancel-on-button is exercised implicitly above: the click paths still work).
 # The card's static hint text is not seeded into the sandbox DOM, so that
 # markup-side guard lives in static_checks (R51) instead of here.
+
+
+# ====================================================================
+# V5-M1: public UID + mutual following (V5-4). The stub now models the
+# public_profiles / follows_public / author_posts_public / post_authors_public
+# views plus the my_public_uid / follow_user / unfollow_user RPCs, so the
+# regression suite can pin the M1 red lines.
+# ====================================================================
+print()
+print("=" * 70)
+print("SCENARIO M1 - public UID and mutual following (V5-4)")
+print("=" * 70)
+
+M1_SEED = r"""
+(function () {
+  var store = __mockOpts.store;
+  for (var i = 0; i < store.profiles.length; i++) {
+    if (store.profiles[i].id === 'u-1') store.profiles[i].public_uid = 'abc123';
+  }
+  var has = {};
+  for (var j = 0; j < store.profiles.length; j++) has[store.profiles[j].id] = true;
+  if (!has['u-9'])
+    store.profiles.push({ id: 'u-9', phone: null, school: 'Other U', nickname: 'Grace',
+      public_uid: 'xyz789', created_at: '2026-10-01T00:00:00.000Z' });
+  if (!has['u-anon-b'])
+    store.profiles.push({ id: 'u-anon-b', phone: null, school: null, nickname: null,
+      public_uid: null, created_at: '2026-10-02T00:00:00.000Z' });
+  store.posts.push({ id: 'p-9', author_id: 'u-1', is_anonymous: false,
+    display_name: 'TestNick', school: 'Test Univ', content: 'public open post',
+    image_path: null, status: 'approved', created_at: '2026-10-03T00:00:00.000Z' });
+  store.posts.push({ id: 'p-10', author_id: 'u-9', is_anonymous: false,
+    display_name: 'Grace', school: 'Other U', content: 'grace open post',
+    image_path: null, status: 'approved', created_at: '2026-10-03T01:00:00.000Z' });
+  store.posts.push({ id: 'p-11', author_id: 'u-anon-b', is_anonymous: true,
+    display_name: 'Anon', school: null, content: 'anon post must not leak uid',
+    image_path: null, status: 'approved', created_at: '2026-10-03T02:00:00.000Z' });
+  store.posts.push({ id: 'p-12', author_id: 'u-1', is_anonymous: false,
+    display_name: 'TestNick', school: 'Test Univ', content: 'pending not shown',
+    image_path: null, status: 'pending', created_at: '2026-10-03T03:00:00.000Z' });
+  if (!store.follows) store.follows = [];
+  store.follows.length = 0;
+  store.follows.push({ follower_uid: 'abc123', followee_uid: 'xyz789',
+    created_at: '2026-10-04T00:00:00.000Z' });
+  return true;
+})()
+"""
+
+
+print("- M1: my_public_uid returns the caller's public uid (and null for anonymous)")
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().rpc('my_public_uid').then(function (r) { __r.d = r.data; __r.e = r.error; });")
+check("a registered public account gets its own public uid",
+      js(it, "__r.d") == "abc123", js(it, "__r.d"))
+
+it = load("feed.html", "mock-anon")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().rpc('my_public_uid').then(function (r) { __r.d = r.data; });")
+check("an anonymous account has no public uid (my_public_uid is null)",
+      js(it, "__r.d") is None, js(it, "__r.d"))
+
+print("- M1: follow_user enforces the red lines (public only, no self, must exist)")
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().rpc('follow_user',{p_followee_uid:'xyz789'})"
+       ".then(function (r) { __r.d = r.data; __r.e = r.error; __r.f = __mockOpts.store.follows.slice(); });")
+check("following a public account succeeds and records the edge",
+      js(it, "__r.d") is True
+      and ("abc123", "xyz789") in [(x["follower_uid"], x["followee_uid"]) for x in js(it, "__r.f")],
+      js(it, "__r.f"))
+check("the follow went through the rpc, never a raw follows insert",
+      "follow_user" in js(it, "JSON.stringify(__calls)")
+      and not [c for c in json.loads(js(it, "JSON.stringify(__calls)"))
+               if c[0] in ("insert", "delete") and c[1] == "follows"],
+      js(it, "JSON.stringify(__calls)"))
+
+it = load("feed.html", "mock-anon")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().rpc('follow_user',{p_followee_uid:'xyz789'}).then(function (r) { __r.e = r.error; });")
+check("an anonymous account cannot follow anyone",
+      js(it, "__r.e") is not None and "\u9700\u8981\u767b\u5f55" in js(it, "__r.e.message"),
+      js(it, "__r.e"))
+
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().rpc('follow_user',{p_followee_uid:'abc123'}).then(function (r) { __r.e = r.error; });")
+check("you cannot follow yourself",
+      js(it, "__r.e") is not None and "\u4e0d\u80fd\u5173\u6ce8\u81ea\u5df1" in js(it, "__r.e.message"),
+      js(it, "__r.e"))
+
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().rpc('follow_user',{p_followee_uid:'zzz999'}).then(function (r) { __r.e = r.error; });")
+check("following an account that does not exist is refused",
+      js(it, "__r.e") is not None and "\u4e0d\u5b58\u5728" in js(it, "__r.e.message"),
+      js(it, "__r.e"))
+
+print("- M1: unfollow_user removes the edge (and only for a public account)")
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().rpc('unfollow_user',{p_followee_uid:'xyz789'})"
+       ".then(function (r) { __r.f = __mockOpts.store.follows.slice(); });")
+check("unfollowing removes the recorded edge",
+      ("abc123", "xyz789") not in [(x["follower_uid"], x["followee_uid"]) for x in js(it, "__r.f")],
+      js(it, "__r.f"))
+
+print("- M1: public_profiles only exposes uid/nickname/school, never phone, and no anon")
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().from('public_profiles').eq('public_uid','xyz789').maybeSingle()"
+       ".then(function (r) { __r.p = r.data; });")
+_m1p = js(it, "__r.p")
+check("the public view carries nickname/school/uid",
+      _m1p is not None and _m1p.get("nickname") == "Grace"
+      and _m1p.get("school") == "Other U" and _m1p.get("public_uid") == "xyz789",
+      _m1p)
+check("the public view never leaks the phone number",
+      "phone" not in (_m1p or {}), _m1p)
+js(it, "__r = {}; Campus.client().from('public_profiles').then(function (r) { __r.all = r.data; });")
+_m1all = js(it, "__r.all") or []
+check("no anonymous account appears in public_profiles",
+      all(p.get("public_uid") for p in _m1all), _m1all)
+
+print("- M1: the public home feeds only approved + non-anonymous posts")
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().from('post_authors_public').then(function (r) { __r.a = r.data; });")
+_m1a = js(it, "__r.a") or []
+check("an approved non-anonymous post gets its author uid",
+      any(p.get("post_id") == "p-9" and p.get("author_public_uid") == "abc123" for p in _m1a),
+      _m1a)
+check("an anonymous post never leaks its author uid",
+      all(p.get("post_id") != "p-11" for p in _m1a), _m1a)
+check("an unapproved post never leaks its author uid",
+      all(p.get("post_id") != "p-12" for p in _m1a), _m1a)
+js(it, "__r = {}; Campus.client().from('author_posts_public').eq('author_public_uid','abc123')"
+       ".then(function (r) { __r.b = r.data; });")
+_m1b = js(it, "__r.b") or []
+check("the author feed filters by public uid and only public posts",
+      any(p.get("id") == "p-9" for p in _m1b)
+      and all(p.get("id") not in ("p-11", "p-12") for p in _m1b),
+      _m1b)
+
+print("- M1: follows_public only carries public uids (no identity leaks)")
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.client().from('follows_public').then(function (r) { __r.f = r.data; });")
+_m1f = js(it, "__r.f") or []
+check("the follow view exposes only the two public uids and a timestamp",
+      all(set(x.keys()) <= set(["follower_uid", "followee_uid", "created_at"]) for x in _m1f)
+      and ("abc123", "xyz789") in [(x.get("follower_uid"), x.get("followee_uid")) for x in _m1f],
+      _m1f)
 
 
 print()

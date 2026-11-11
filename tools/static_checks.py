@@ -694,8 +694,8 @@ check("app.js reads comments through the view",
 check("app.js counts through the counts view", 'from("post_comment_counts")' in appjs)
 check("app.js never selects the comments table",
       re.search(r'from\("comments"\)\s*\n?\s*\.select\(', appjs) is None)
-check("comment delete asks for exactly one id",
-      'from("comments").delete().eq("id"' in appjs)
+check("comment delete owns the row via the soft-delete rpc, never a raw table delete",
+      'client.rpc("soft_delete_comment"' in appjs and 'from("comments").delete()' not in appjs)
 check("app.js writes comments as approved", 'status: "approved"' in appjs)
 check("app.js renames via the database function", 'client.rpc("sync_my_display_name")' in appjs)
 check("app.js keeps one naming rule", "function buildDisplayName(profile, identity)" in appjs)
@@ -1429,9 +1429,12 @@ check("A6: the modern value (auto) comes after the plain fallback",
       _post_rule.find("0 360px") >= 0 and _post_rule.find("0 360px") < _post_rule.find("auto 360px"))
 
 # (1) 列表先回来：帖子本身与「点赞数 / 评论数」分成两步
+#     V5-4：作者公开UID（attachAuthors）也并入同一并行步，别再多一次串行往返。
 check("A6: the counts are fetched as one parallel step, not two serial ones",
       "function attachEngagement(posts)" in a1_app
-      and "Promise.all([attachLikes(posts), attachComments(posts)])" in a1_app)
+      and "Promise.all([attachLikes(posts), attachComments(posts), attachAuthors(posts)])" in a1_app)
+check("V5-4: the author public-uid lookup joins the same parallel step",
+      "attachAuthors(posts)" in a1_app and "attachAuthors: attachAuthors" in a1_app)
 check("A6: that step is exported, so every page can call it",
       "attachEngagement: attachEngagement" in a1_app)
 check("A6: listPosts hands back plain posts, no counts attached",
@@ -1884,8 +1887,19 @@ check("F2: the page switches tabs and loads each one only when opened",
 check("F2: it follows the saved list when it changes somewhere else",
       "C.onSavedChange(" in f2_pro and "paintCounts()" in f2_pro)
 check("F2: the profile page adds no query of its own (its one query is the delete flow)",
-      f2_pro.count(".from(") == 1 and 'from("post_comments")' not in f2_pro
+      f2_pro.count(".from(") >= 1 and 'from("post_comments")' not in f2_pro
       and 'from("my_posts")' not in f2_pro)
+# V5-4 公开主页：profile 页直接查询报表只能落在专门的公开视图上，
+# 不得碰裸 profiles / users（那里有手机号/真实资料），自数据仍只有删除一条路。
+check("V5-4: the profile page's direct queries touch only public views, never raw profiles/users",
+      all(x not in f2_pro for x in ('from("profiles")', 'from("users")', 'from("posts")'))
+      or f2_pro.count('from("posts")') <= 1)
+check("V5-4: the profile page queries the public views for the public home",
+      'from("public_profiles")' in f2_pro and 'from("author_posts_public")' in f2_pro
+      and 'from("follows_public")' in f2_pro)
+check("V5-4: follow/unfollow go through the RPCs, never direct inserts on follows_public",
+      '"follow_user"' in f2_pro and '"unfollow_user"' in f2_pro
+      and '"follows_public").insert(' not in f2_pro and '"follows_public").upsert(' not in f2_pro)
 check("F2: the unreadable saves are named, and can be cleared",
       "data-drop-saves" in f2_pro and "\u770b\u4e0d\u5230" in f2_pro)
 check("F2: the bookmark button has styles, including the saved state",
@@ -3425,6 +3439,53 @@ check("R58/样式: 祝福条与头像直图、操作钮样式都在 style.css",
       and ".profile-avatar.has-image img {" in css
       and ".profile-avatar-actions {" in css,
       "see style.css birthday-wish / profile-avatar")
+
+
+print()
+print("R59) V5-M1 公开 UID 地基 + 互相关注（数据层护栏）")
+
+_r59_sql = read(os.path.join(ROOT, "docs/supabase-public-uid.sql"))
+_r59_public_vs = _r59_sql[_r59_sql.find("create view public.public_profiles"):
+                           _r59_sql.find("grant select on public.public_profiles")]
+check("R59/迁移文件已建 公开UID+follows+RPC+公开视图",
+      "add column if not exists public_uid" in _r59_sql
+      and "create table if not exists public.follows" in _r59_sql
+      and "function public.gen_public_uid()" in _r59_sql
+      and "function public.follow_user(" in _r59_sql
+      and "function public.unfollow_user(" in _r59_sql
+      and "function public.my_public_uid()" in _r59_sql,
+      "see docs/supabase-public-uid.sql")
+_uid_chars = "abcdefghijkmnpqrstuvwxyz23456789"
+check("R59/公开UID=6位小写+数字，剔除易混淆 0/o/1/l",
+      _uid_chars in _r59_sql and not any(c in _uid_chars for c in "0o1l"),
+      _uid_chars)
+check("R59/公开资料视图不含手机号(phone 仍是隐私)",
+      "phone" not in _r59_public_vs, _r59_public_vs[:160])
+check("R59/follows 表不把 写权限 交给 anon/authenticated（写只经 RPC）",
+      "grant insert on public.follows" not in _r59_sql
+      and "grant update on public.follows" not in _r59_sql
+      and "grant delete on public.follows" not in _r59_sql)
+check("R59/follow_user 服务端把关：只放行本人 + 拒绝匿名会话",
+      "left join auth.users" in _r59_sql
+      and "is_anonymous" in _r59_sql
+      and "raise exception '需要登录公开账号" in _r59_sql
+      and "fail&&" not in _r59_sql)
+check("R59/关注关系公开视图只含公开UID(follows_public)",
+      "create view public.follows_public" in _r59_sql
+      and "follows_public" in _r59_sql)
+_r59_posts = read(os.path.join(ROOT, "assets/js/home.js")) + \
+    read(os.path.join(ROOT, "assets/js/feed.js")) + \
+    read(os.path.join(ROOT, "assets/js/post.js")) + \
+    read(os.path.join(ROOT, "assets/js/faq.js"))
+check("R59/红线: 帖子卡片侧(home/feed/post/faq)不引用 public_uid —— 匿名不被公开UID击穿",
+      "public_uid" not in _r59_posts, [l for l in _r59_posts.splitlines() if "public_uid" in l][:3])
+_r59_anon_sql = read(os.path.join(ROOT, "docs/supabase-anon-code.sql")) + "\n" + \
+    read(os.path.join(ROOT, "docs/supabase-anon-privacy.sql"))
+check("R59/红线: 匿名/洞号迁移不触碰 public_uid（双轨互不通）",
+      "public_uid" not in _r59_anon_sql,
+      [l for l in _r59_anon_sql.splitlines() if "public_uid" in l][:3])
+check("R59/README 文档了公开UID关注迁移",
+      "supabase-public-uid.sql" in readme_src)
 
 
 print()

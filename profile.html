@@ -28,7 +28,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>我的 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=46ebc757">
+<link rel="stylesheet" href="assets/css/style.css?v=80eea7e5">
 </head>
 <body>
 
@@ -125,6 +125,29 @@
       </div>
     </div>
   </section>
+
+  <!-- V5-4：公开主页（?uid=）专属承接区，平时隐藏。只展示非匿名账号的公开资料 -->
+  <section class="card hidden" id="public-card">
+    <div class="public-head">
+      <div class="profile-avatar" id="public-avatar">🙂</div>
+      <div class="public-id">
+        <div class="profile-name" id="public-name">加载中…</div>
+        <div class="profile-sub" id="public-sub"></div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-num" id="public-following">0</div><div class="stat-label">关注</div></div>
+      <div class="stat"><div class="stat-num" id="public-followers">0</div><div class="stat-label">粉丝</div></div>
+      <div class="stat"><div class="stat-num" id="public-posts">0</div><div class="stat-label">分享</div></div>
+    </div>
+    <button class="btn btn-primary btn-block hidden" type="button" id="public-follow-btn"></button>
+    <p class="hint hidden" id="public-self-tip">这是你自己。</p>
+  </section>
+
+  <div class="section-head mt-24 hidden" id="public-posts-head">
+    <h2 class="section-title">📮 TA 的分享</h2>
+  </div>
+  <div class="hidden" id="public-posts"></div>
 
   <section class="card" id="nickname-card">
     <h3 class="section-title mb-16">设置昵称</h3>
@@ -269,8 +292,8 @@
 
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/app.js?v=68998efc"></script>
-<script src="assets/js/profile.js?v=6349e77c"></script>
+<script src="assets/js/app.js?v=9ce3b2f9"></script>
+<script src="assets/js/profile.js?v=18dbfefd"></script>
 <script src="assets/js/birthday.js?v=1b36fa5a"></script>
 </body>
 </html>

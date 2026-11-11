@@ -95,10 +95,118 @@
   C.markTabbar("profile");
   C.blockIfNotReady(noticeEl);
 
+  /* V5-4：?uid= 表示在看别人的公开主页（只展示非匿名账号的公开资料）。
+   * 拿到就不走下面的「我的设置」，直接进只读的公开模式。 */
+  var queryUid = (function () {
+    var m = (window.location.search || "").match(/[?&]uid=([^&]*)/);
+    try { return m ? decodeURIComponent(m[1]).toLowerCase() : ""; } catch (e) { return ""; }
+  })();
+
+  /* 带 head+count 的计数查询：模式兼容老 supabase 客户端（数不到就按 0）。 */
+  function countRows(builder, col, val) {
+    return builder.select("created_at", { count: "exact", head: true }).eq(col, val)
+      .then(function (r) {
+        return (r && typeof r.count === "number") ? r.count : 0;
+      })
+      .catch(function () { return 0; });
+  }
+
+  /* 公开主页（只读）。核心红线：这里能看到的只有公开 UID / 昵称 / 学校 /
+   * 计数，绝不读 author_id 或 phone；匿名作者没有公开 UID，自然进不来。 */
+  function bootPublic(uid) {
+    document.title = "主页 · " + C.SITE_NAME;
+    var pubCard = document.getElementById("public-card");
+    var postsHead = document.getElementById("public-posts-head");
+    var postsEl = document.getElementById("public-posts");
+    var followBtn = document.getElementById("public-follow-btn");
+    var selfTip = document.getElementById("public-self-tip");
+
+    [nickCard, mineCard, reportsCard, profileCard, secCard, anonTip].forEach(function (el) {
+      if (el) el.classList.add("hidden");
+    });
+    pubCard.classList.remove("hidden");
+
+    C.client().from("public_profiles").eq("public_uid", uid).maybeSingle()
+      .then(function (res) {
+        var pub = res && res.data;
+        if (!pub) {
+          pubCard.innerHTML = '<div class="empty">找不到这个主页</div>' +
+            '<a class="btn btn-ghost btn-block mt-16" href="feed.html">回广场</a>';
+          return;
+        }
+        document.getElementById("public-name").textContent = pub.nickname || "一位同学";
+        document.getElementById("public-avatar").textContent =
+          (pub.nickname ? C.initial(pub.nickname) : "🙂");
+        document.getElementById("public-sub").textContent =
+          ["@" + pub.public_uid, pub.school].filter(Boolean).join(" · ");
+
+        var pStats = Promise.all([
+          countRows(C.client().from("follows_public"), "follower_uid", uid),  // 关注数
+          countRows(C.client().from("follows_public"), "followee_uid", uid)   // 粉丝数
+        ]);
+
+        C.client().rpc("my_public_uid").then(function (mres) {
+          var myUid = (mres && mres.data) || null;
+          if (myUid === uid) {
+            if (selfTip) selfTip.classList.remove("hidden");
+            if (followBtn) followBtn.classList.add("hidden");
+          } else if (myUid) {
+            paintFollow(uid, myUid, followBtn);
+          }
+        });
+
+        C.client().from("author_posts_public").eq("author_public_uid", uid)
+          .order("created_at", { ascending: false })
+          .then(function (ares) {
+            var rows = (ares && ares.data) || [];
+            document.getElementById("public-posts").textContent = rows.length
+              ? "" : "还没有公开发布的内容";
+            document.getElementById("public-posts").classList.remove("hidden");
+            postsHead.classList.remove("hidden");
+            postsEl.innerHTML = rows.map(function (p) { return C.renderPostCard(p); }).join("");
+            if (C.attachEngagement) C.attachEngagement(rows).then(function () {
+              // 计数回来后再补一边（点赞/评论/作者UID）
+              postsEl.innerHTML = rows.map(function (p) { return C.renderPostCard(p); }).join("");
+            });
+          });
+
+        pStats.then(function (counts) {
+          document.getElementById("public-following").textContent = String(counts[0] || 0);
+          document.getElementById("public-followers").textContent = String(counts[1] || 0);
+        });
+      });
+  }
+
+  /* 关注 / 取关按钮：只有登录了公开账号、且看的不是自己时才显示。 */
+  function paintFollow(uid, myUid, followBtn) {
+    C.client().from("follows_public")
+      .select("followee_uid")
+      .eq("follower_uid", myUid).eq("followee_uid", uid).maybeSingle()
+      .then(function (res) {
+        var following = !!(res && res.data);
+        followBtn.classList.remove("hidden");
+        followBtn.textContent = following ? "已关注" : "+ 关注";
+        followBtn.classList.toggle("btn-ghost", following);
+        followBtn.onclick = function () {
+          var rpc = following ? "unfollow_user" : "follow_user";
+          var fn = C.client().rpc(rpc, { p_followee_uid: uid });
+          fn.then(function (r) {
+            if (r && r.error) { C.toast("没成功：" + r.error.message); return; }
+            following = !following;
+            followBtn.textContent = following ? "已关注" : "+ 关注";
+            followBtn.classList.toggle("btn-ghost", following);
+            C.toast(following ? "已关注" : "已取消关注");
+          });
+        };
+      })
+      .catch(function () { /* 视图未建时静默，不出按钮 */ });
+  }
+
   /* ---------------------------------------------------------------
    * 加载
    * --------------------------------------------------------------- */
   function boot() {
+    if (queryUid) { bootPublic(queryUid); return; }
     if (!C.isReady()) {
       heroEl.innerHTML = C.setupCard();
       nickCard.classList.add("hidden");

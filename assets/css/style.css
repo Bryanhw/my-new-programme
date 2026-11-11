@@ -2157,6 +2157,15 @@ body.modal-open { overflow: hidden; }
   border-left: 2px solid var(--brand-soft);
 }
 
+/* 已软删的评论：灰色占位，只提示不展示身份/内容 */
+.comment.is-deleted {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.comment-deleted-note {
+  font-size: var(--fs-sm);
+}
+
 .comment-head {
   display: flex;
   align-items: baseline;
@@ -2969,3 +2978,27 @@ body.modal-open { overflow: hidden; }
 .campus-opt-custom {
   color: var(--brand-text);
 }
+
+/* ------------------------- V5-4：公开主页 + 作者@入口 ------------------------- */
+/* 作者公开UID（非匿名帖才有，走过 post_authors_public 视图）：小字、可点进主页 */
+.post-author-uid {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--brand-text);
+  text-decoration: none;
+}
+.post-author-uid:hover { text-decoration: underline; }
+
+/* 公开主页：头部横向排布（左头像，右昵称+@UID/学校） */
+.public-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.public-id { min-width: 0; }
+.public-id .profile-name { margin: 0 0 2px; }
+.public-id .profile-sub { color: var(--ink-soft); font-size: var(--fs-sm); }
+
