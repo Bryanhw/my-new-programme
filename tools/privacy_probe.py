@@ -242,6 +242,39 @@ st, body = req("GET", "/rest/v1/author_posts_public?select=author_id&limit=1")
 check("asking it for the raw author id is refused",
       code_of(body) in ("42703", "42501", "PGRST204"), (st, code_of(body), msg_of(body)))
 
+# ------------------------------------------------------------- direct messages
+print()
+print("4c) direct messages (M2): tables unreachable, drift letters carry no"
+      " account identity")
+# The three M2 tables are revoke all from public, so a signed-out visitor gets
+# 42501 before any row is considered - the same treatment that keeps author_id
+# private. Writes go through security-definer RPCs, exercised later in write mode.
+for table, label in (
+        ("direct_messages", "the private messages table"),
+        ("message_reports", "the DM report table"),
+        ("drift_letters", "the hole-code letters table")):
+    for q in ("select=id&limit=5", "select=*&limit=5"):
+        st, body = req("GET", "/rest/v1/" + table + "?" + q)
+        check("a signed-out visitor cannot read " + label + " (" + q.split("&")[0] + ")",
+              (st in (401, 403) and code_of(body) == "42501") or (st == 200 and body == []),
+              (st, code_of(body), msg_of(body)))
+
+# drift_letters must stay structurally free of account identity: no column may
+# ever name either party, so a request for one is refused no matter the auth.
+for col in ("sender_uid", "recipient_uid", "nickname", "author_id", "user_id"):
+    st, body = req("GET", "/rest/v1/drift_letters?select=" + col + "&limit=1")
+    check("drift_letters has no " + col + " column at all",
+          code_of(body) in ("42703", "42501", "PGRST204"),
+          (st, code_of(body), msg_of(body)))
+
+# The RPC surface the app depends on must exist and must not act as a raw
+# reading door for a visitor (a visitor calling send_message is refused because
+# the function is granted to authenticated only, 401/403).
+st, body = req("POST", "/rest/v1/rpc/send_message",
+               {"p_recipient_uid": "000000", "p_body": MARKER})
+check("a signed-out visitor cannot use send_message",
+      st in (400, 401, 403), (st, msg_of(body)))
+
 print()
 print("5) signed in as the first test account")
 if not PASSWORD:
@@ -325,6 +358,35 @@ else:
         check("A can still delete their own post", st in (200, 204), (st, msg_of(deleted)))
         st, gone = req("GET", "/rest/v1/my_posts?select=id&id=eq." + PID, token=TOK_A)
         check("it is gone from my_posts", st == 200 and gone == [], (st, gone))
+
+# --------------------------------------------------------- M2 write-side checks
+# The DM tables give authenticated users select, but row-level security must
+# keep every conversation between its two parties: neither party may ever see a
+# conversation they are not in.
+print()
+if not WRITE:
+    print("7b) M2 conversation isolation not requested (use --write for the proof)")
+else:
+    print("7b) M2 conversation isolation: only the two parties see a DM")
+
+    def _dm_party_rows(token, who):
+        # authenticated select reaches RLS; rows are filtered to own convos
+        st, body = req("GET", "/rest/v1/direct_messages?select=*&limit=100", token=token)
+        rows = body if isinstance(body, list) else []
+        ok = st in (200, 403) and all(
+            r.get("sender_uid") == who or r.get("recipient_uid") == who
+            for r in rows)
+        return ok, st, msg_of(body)
+
+    ok, sta, msa = _dm_party_rows(TOK_A, UID_A)
+    check("A sees only DMs where A is a party", ok, (sta, msa))
+    ok, stb, msb = _dm_party_rows(TOK_B, UID_B)
+    check("B sees only DMs where B is a party", ok, (stb, msb))
+    # Sending to a nonexistent public uid must be refused by the RPC.
+    st, self_send = req("POST", "/rest/v1/rpc/send_message",
+                        {"p_recipient_uid": STRANGER, "p_body": MARKER}, token=TOK_A)
+    check("send_message refuses a recipient that is not an existing public uid",
+          st in (400, 403), (st, msg_of(self_send)))
 
 # --------------------------------------------------------------- likes side
 print()

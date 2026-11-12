@@ -15,7 +15,7 @@ import esprima
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (tools/ -> repo)
 JS_DIR = os.path.join(ROOT, "assets", "js")
 PAGES = ["index.html", "feed.html", "post.html", "login.html", "reset.html", "profile.html",
-         "faq.html", "feedback.html"]
+         "faq.html", "feedback.html", "messages.html"]
 PAGE_SCRIPTS = {
     "index.html": "home.js",
     "feed.html": "feed.js",
@@ -25,6 +25,7 @@ PAGE_SCRIPTS = {
     "profile.html": "profile.js",
     "faq.html": "faq.js",
     "feedback.html": "feedback.js",
+    "messages.html": "messages.js",
 }
 
 failures = []
@@ -60,7 +61,7 @@ for name in js_files:
 # (it must be loaded by a page and covered by a test), not an accident.
 EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "campus-picker.js", "campuses.js", "circles.js",
                "config.js", "faq.js", "feed.js", "feedback.js", "home.js",
-               "hotwords.js", "post.js", "profile.js", "reset.js"]
+               "hotwords.js", "messages.js", "post.js", "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
       js_files)
 
@@ -1430,11 +1431,18 @@ check("A6: the modern value (auto) comes after the plain fallback",
 
 # (1) 列表先回来：帖子本身与「点赞数 / 评论数」分成两步
 #     V5-4：作者公开UID（attachAuthors）也并入同一并行步，别再多一次串行往返。
+_ae = _fn_body(a1_app, "attachEngagement")
 check("A6: the counts are fetched as one parallel step, not two serial ones",
       "function attachEngagement(posts)" in a1_app
-      and "Promise.all([attachLikes(posts), attachComments(posts), attachAuthors(posts)])" in a1_app)
+      and "attachLikes(posts)" in _ae and "attachComments(posts)" in _ae
+      and "attachAuthors(posts)" in _ae and "attachMine(posts)" in _ae)
 check("V5-4: the author public-uid lookup joins the same parallel step",
-      "attachAuthors(posts)" in a1_app and "attachAuthors: attachAuthors" in a1_app)
+      "attachAuthors(posts)" in _ae and "attachAuthors: attachAuthors" in a1_app)
+check("R63/F1: the delete-share entry rides the same parallel step via attachMine",
+      "function attachMine(posts)" in a1_app
+      and "attachMine(posts)" in _ae
+      and 'from("my_posts")' in _fn_body(a1_app, "attachMine")
+      and '.select("id")' in _fn_body(a1_app, "attachMine"))
 check("A6: that step is exported, so every page can call it",
       "attachEngagement: attachEngagement" in a1_app)
 check("A6: listPosts hands back plain posts, no counts attached",
@@ -1510,9 +1518,14 @@ check("R18/F1: the button says out loud whether it is open",
       and 'setAttribute("aria-expanded", "false")' in r18_app)
 check("R18/F1: only one card menu is open at a time",
       "function closePostMenus()" in r18_app and r18_app.count("openMenuBtn = btn") == 1)
-check("R18/F1: the card click delegate routes the menu, the copy and the hide",
+check("R18/F1: the card click delegate routes the menu, the copy, the hide and the delete",
       'closest("[data-post-menu]")' in r18_app and 'closest("[data-copy-link]")' in r18_app
-      and 'closest("[data-hide-post]")' in r18_app)
+      and 'closest("[data-hide-post]")' in r18_app and 'closest("[data-del-post]")' in r18_app)
+check("R63/F1: the delete entry shows only on my own posts, and double-confirms",
+      "post.is_mine" in r18_app and "data-del-post" in r18_app
+      and 'confirm("确定要删除这篇分享吗？删掉就不能恢复了。")' in r18_app
+      and "function delOwnPost(id)" in r18_app
+      and "function deletePost" in r18_app)
 check("R18/F1: a click outside the card, or Escape, closes it",
       'closest(".post-more")' in r18_app and "closePostMenus();" in r18_app
       and 'e.key === "Escape"' in r18_app)
@@ -3486,6 +3499,100 @@ check("R59/红线: 匿名/洞号迁移不触碰 public_uid（双轨互不通）"
       [l for l in _r59_anon_sql.splitlines() if "public_uid" in l][:3])
 check("R59/README 文档了公开UID关注迁移",
       "supabase-public-uid.sql" in readme_src)
+
+print()
+print("R60) V5-M2 私信 + 私信举报 + 写给那个洞号（数据层护栏）")
+_r60_sql = read(os.path.join(ROOT, "docs/supabase-direct-message.sql"))
+check("R60/迁移文件已建 三表 + 7 个 RPC + 私信开关",
+      "create table if not exists public.direct_messages" in _r60_sql
+      and "create table if not exists public.message_reports" in _r60_sql
+      and "create table if not exists public.drift_letters" in _r60_sql
+      and "function public.send_message(" in _r60_sql
+      and "function public.list_rooms" in _r60_sql
+      and "function public.list_messages" in _r60_sql
+      and "function public.set_dm_setting" in _r60_sql
+      and "function public.send_drift_letter" in _r60_sql
+      and "function public.list_my_drift_letters" in _r60_sql
+      and "function public.report_message" in _r60_sql
+      and "add column if not exists dm_setting" in _r60_sql,
+      "see docs/supabase-direct-message.sql")
+check("R60/三张私密表对 anon 无 select 授权（42501 墙）",
+      all("grant select, references on public.%s to authenticated" % t in _r60_sql and " to anon" not in
+          _r60_sql[_r60_sql.find("create table if not exists public.%s" % t):
+                    _r60_sql.find("alter table if exists public.%s" % t)]
+          for t in ("direct_messages", "message_reports", "drift_letters")),
+      [l for l in _r60_sql.splitlines() if "grant" in l and "drift_letters" in l][:3])
+check("R60/RLS 三策略只放双方/本人/my-anon",
+      "dm_select_participant" in _r60_sql
+      and "mreports_select_self" in _r60_sql
+      and "drift_select_my_anon" in _r60_sql,
+      "policies")
+check("R60/RPC 全部 security definer + 写只经 RPC（不裸授权 insert/update/delete）",
+      _r60_sql.count("security definer") >= 7
+      and not any(re.search(r"grant\s+(insert|update|delete).*?to\s+(anon|authenticated)", _r60_sql)
+                  for t in ("direct_messages", "message_reports", "drift_letters")))
+check("R60/洞号信不落发送方公开身份（drift_letters 无 sender/public_uid/昵称列）",
+      "to_anon    text not null" in _r60_sql
+      and "sender" not in _r60_sql[_r60_sql.find("create table if not exists public.drift_letters"):
+                                  _r60_sql.find("create index if not exists drift_letters_anon_idx")]
+      and "public_uid" not in _r60_sql[_r60_sql.find("create table if not exists public.drift_letters"):
+                                         _r60_sql.find("create index if not exists drift_letters_anon_idx")]
+      and "nickname" not in _r60_sql[_r60_sql.find("create table if not exists public.drift_letters"):
+                                        _r60_sql.find("create index if not exists drift_letters_anon_idx")],
+      "drift_letters DDL must stay (to_anon, body, timestamps) only")
+check("R60/私信开关取值受 CHECK 约束（open/mutual）",
+      "profiles_dm_setting_check" in _r60_sql
+      and "'open', 'mutual'" in _r60_sql)
+check("R60/举报原因白名单与状态三态同既存 reports 惯例",
+      "message_reports_reason_check" in _r60_sql
+      and "'open', 'resolved', 'ignored'" in _r60_sql)
+check("R60/同名举报唯一约束（同 message+同人）",
+      "message_reports_one_per_user" in _r60_sql)
+check("R60/站主可见全量举报视图 message_review_queue（security_invoker）",
+      "create view public.message_review_queue" in _r60_sql
+      and "security_invoker" in _r60_sql)
+check("R60/红线段: 前端不出现直写三表的动作，只走 RPC（app.js/profile.js）",
+      all(pat not in (appjs + read(os.path.join(ROOT, "assets/js/profile.js")))
+          for pat in ('from("direct_messages").insert', 'from("message_reports").insert',
+                      'from("drift_letters").insert',
+                      'from("direct_messages").update', 'from("message_reports").update',
+                      'from("drift_letters").update',
+                      'from("direct_messages").delete', 'from("message_reports").delete',
+                      'from("drift_letters").delete')),
+      "writes go through the security RPCs only")
+check("R60/红线段: 前端看不到未读私信数的地方不许在手写裸表查询里出现三表 select",
+      "from('drift_letters')" not in appjs
+      and "from('direct_messages')" not in appjs
+      and "from('message_reports')" not in appjs,
+      "front-end reads go through list_rooms/list_messages/list_my_drift_letters")
+_m60_anon_sql = read(os.path.join(ROOT, "docs/supabase-anon-code.sql")) + "\n" + \
+    read(os.path.join(ROOT, "docs/supabase-anon-privacy.sql"))
+check("R60/红线: 私信/洞号信迁移不触碰 anon 轨上的现有物（双轨不互通）",
+      "direct_messages" not in _m60_anon_sql
+      and "message_reports" not in _m60_anon_sql
+      and "drift_letters" not in _m60_anon_sql)
+check("R60/README 文档了私信迁移",
+      "supabase-direct-message.sql" in readme_src)
+_msgjs = read(os.path.join(ROOT, "assets/js/messages.js"))
+check("R60/messages.js 直写三表动作全部缺席（只经 7 个 RPC）",
+      all(pat not in _msgjs for pat in (
+          'from("direct_messages").insert', 'from("message_reports").insert',
+          'from("drift_letters").insert', 'from("direct_messages").update',
+          'from("message_reports").update', 'from("drift_letters").update',
+          'from("direct_messages").delete', 'from("message_reports").delete',
+          'from("drift_letters").delete')),
+      "see assets/js/messages.js")
+check("R60/messages.js ?????? RPC ????????",
+      "send_drift_letter" in _msgjs and "p_to_anon" in _msgjs
+      and 'from("direct_messages")' not in _msgjs
+      and 'from("drift_letters")' not in _msgjs,
+      "hole letters travel through send_drift_letter only")
+check("R60/profile.js 洞号信收件箱与 DM 未读也走 RPC（无裸表 select）",
+      'from("drift_letters")' not in (appjs + read(os.path.join(ROOT, "assets/js/profile.js")))
+      and 'from("direct_messages")' not in (appjs + read(os.path.join(ROOT, "assets/js/profile.js")))
+      and 'list_my_drift_letters' in read(os.path.join(ROOT, "assets/js/profile.js"))
+      and 'list_rooms' in read(os.path.join(ROOT, "assets/js/profile.js")),
+      "profile.js uses list_my_drift_letters/list_rooms")
 
 
 print()

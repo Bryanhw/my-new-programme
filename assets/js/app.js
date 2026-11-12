@@ -531,6 +531,29 @@ window.Campus = (function () {
       });
   }
 
+  /* 给一批帖子标上「这条是我发的」（is_mine）。
+   * 判定走视图 my_posts：真实库里由 auth.uid() 在服务端过滤，未登录查得空集
+   * 所以全是 false；视图/迁移没跑时查询会失败，这里同样降级成全 false
+   * （卡片不出删除入口），与 attachAuthors 同一种「页面先上、迁移后跑」。
+   * 只取 id 一列做交集，不把整条帖子拉回来，也不新增任何可读字段。 */
+  function attachMine(posts) {
+    if (!posts || !posts.length) return Promise.resolve(posts);
+
+    var ids = posts.map(function (p) { return p.id; });
+
+    return client.from("my_posts").select("id").in("id", ids)
+      .then(function (res) {
+        var mine = {};
+        ((res && res.data) || []).forEach(function (r) { mine[r.id] = true; });
+        posts.forEach(function (p) { if (mine[p.id]) p.is_mine = true; });
+        return posts;
+      })
+      .catch(function () {
+        posts.forEach(function (p) { p.is_mine = false; });
+        return posts;
+      });
+  }
+
   /** 取内容流（最新在前）。
    *  只取帖子本身：点赞数 / 评论数由调用方拿到数据后调 attachEngagement 补 ——
    *  两个统计请求不再挡住第一张卡片（实测三个请求串行约 0.9 秒，分开能省掉三分之二）。
@@ -1406,6 +1429,14 @@ window.Campus = (function () {
       return;
     }
 
+    // 自己的帖子：菜单里的「删除这篇分享」—— 真删前要人确认
+    var delPostBtn = el.closest("[data-del-post]");
+    if (delPostBtn) {
+      closePostMenus();
+      delOwnPost(delPostBtn.getAttribute("data-del-post"));
+      return;
+    }
+
     var unhideBtn = el.closest("[data-unhide-post]");
     if (unhideBtn) {
       unhidePost(unhideBtn.getAttribute("data-unhide-post"));
@@ -1664,7 +1695,9 @@ window.Campus = (function () {
    */
   function attachEngagement(posts) {
     if (!posts || !posts.length) return Promise.resolve(posts || []);
-    return Promise.all([attachLikes(posts), attachComments(posts), attachAuthors(posts)]).then(function () {
+    return Promise.all([
+      attachLikes(posts), attachComments(posts), attachAuthors(posts), attachMine(posts)
+    ]).then(function () {
       return posts;
     });
   }
@@ -1701,6 +1734,12 @@ window.Campus = (function () {
 
           var msg = String(res.error.message || "");
           if (/父评论/.test(msg)) throw new Error("这条评论刚刚被下架了，换一条回复吧");
+          // 23514 check constraint：前端已兜 1~300+非空，真触发说明是
+          // 旧缓存前端 / 直接写库等非常规路径 —— 不把 PostgREST 的英文
+          // 报错原样甩给用户，转成人话。
+          if (res.error.code === "23514" || /comments_content_check/.test(msg)) {
+            throw new Error("这条评论没发上：要在 1~300 字之间，且不能只发空白。");
+          }
           throw new Error("评论没发上：" + (msg || "请稍后重试"));
         });
       });
@@ -2425,6 +2464,19 @@ window.Campus = (function () {
       所以三个列表都不用各自绑一遍。 */
   function moreMenuHtml(post) {
     var id = escapeHtml(post.id);
+    var extra = "";
+    // M2：匿名帖有个「洞号」可以收信 —— 放一个「写给这个洞号」入口，不露任何账号身份
+    var code = anonCode(post) || anonCodeOf(post && post.id);
+    if (post && post.is_anonymous && code) {
+      extra += '<a class="link-plain" role="menuitem" href="messages.html?hole=' +
+        encodeURIComponent(code) + '">写给这个洞号</a>';
+    }
+    // 自己发的帖子：给一个「删除全篇」入口（is_mine 由 attachMine 打标，
+    // 真正删除仍走数据库 posts_delete_self RLS，前端入口只是快捷方式）
+    if (post && post.is_mine) {
+      extra += '<button class="link-plain" type="button" role="menuitem" data-del-post="' +
+        escapeHtml(post.id) + '">删除这篇分享</button>';
+    }
     return '<div class="post-more">' +
       '<button class="post-more-btn" type="button" aria-haspopup="true" aria-expanded="false"' +
       ' aria-label="这条内容的更多操作" data-post-menu="' + id + '">⋯</button>' +
@@ -2432,6 +2484,7 @@ window.Campus = (function () {
       '<button class="link-plain" type="button" role="menuitem" data-copy-link="' + id + '">复制链接</button>' +
       '<button class="link-plain report-btn" type="button" role="menuitem" data-report="' + id + '">举报</button>' +
       '<button class="link-plain" type="button" role="menuitem" data-hide-post="' + id + '">不感兴趣</button>' +
+      extra +
       "</div></div>";
   }
 
@@ -2511,6 +2564,25 @@ window.Campus = (function () {
     var post = postCache[id];
     if (post) swapCard(id, renderPostCard(post));
     announce("已恢复");
+  }
+
+  /** 自己帖子菜单里的「删除这篇分享」：
+   *  确认后调数据库删除（RLS posts_delete_self 保证只有作者删得动），
+   *  成功后把这张卡片从眼前拿走（列表不整页重画，滚动位置不跳）。
+   *  入口只在 is_mine 时渲染，这里再兜一道 confirm，误点也有反悔机会。 */
+  function delOwnPost(id) {
+    if (!id) return;
+    var post = postCache[id] || { id: id };
+    if (!confirm("确定要删除这篇分享吗？删掉就不能恢复了。")) return;
+
+    deletePost(post).then(function () {
+      delete postCache[id];
+      var card = document.querySelector('[data-post-id="' + id + '"]');
+      if (card && card.parentNode) card.parentNode.removeChild(card);
+      announce("已删除这篇分享");
+    }).catch(function (err) {
+      announce("删除失败：" + (err && err.message ? err.message : "稍后再试"));
+    });
   }
 
   /** 渲染单条帖子卡片 */

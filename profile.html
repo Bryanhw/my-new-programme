@@ -28,7 +28,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>我的 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=80eea7e5">
+<link rel="stylesheet" href="assets/css/style.css?v=fed8ddd9">
 </head>
 <body>
 
@@ -141,6 +141,7 @@
       <div class="stat"><div class="stat-num" id="public-posts">0</div><div class="stat-label">分享</div></div>
     </div>
     <button class="btn btn-primary btn-block hidden" type="button" id="public-follow-btn"></button>
+    <a class="btn btn-ghost btn-block mt-16 hidden" href="messages.html" id="public-dm-btn">💬 发私信</a>
     <p class="hint hidden" id="public-self-tip">这是你自己。</p>
   </section>
 
@@ -212,6 +213,10 @@
   <section id="mine-card">
     <div class="section-head mt-24">
       <h2 class="section-title">📮 我的</h2>
+    
+      <a class="section-more" href="messages.html" id="dm-entry">💬 私信
+        <span class="dm-unread" id="dm-unread" hidden></span>
+      </a>
     </div>
 
     <!-- F2：三格。发布 / 评论都来自服务器，收藏只存在这台设备上 ——
@@ -255,6 +260,16 @@
     </div>
   </section>
 
+  <section id="drift-card" class="hidden">
+    <div class="section-head mt-24">
+      <h2 class="section-title">🕳️ 写给这个洞号的信</h2>
+    </div>
+    <p class="text-sm on-gold mb-16">
+      只要有人往你匿名发过的洞号写信，就会出现在这里。你们互相只见洞号，不见账号。
+    </p>
+    <div id="drift-list"></div>
+  </section>
+
   <section id="reports-card" class="hidden">
     <div class="section-head mt-24">
       <h2 class="section-title">🛡️ 我举报的</h2>
@@ -292,8 +307,8 @@
 
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/app.js?v=9ce3b2f9"></script>
-<script src="assets/js/profile.js?v=18dbfefd"></script>
+<script src="assets/js/app.js?v=d8b9c16e"></script>
+<script src="assets/js/profile.js?v=38cea623"></script>
 <script src="assets/js/birthday.js?v=1b36fa5a"></script>
 </body>
 </html>

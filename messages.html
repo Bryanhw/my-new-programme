@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#CB9243">
+<!-- 提前和 Supabase 握手：私信页首屏要等 list_rooms，先建好 DNS + TLS 省一段空等。
+     地址必须与 assets/js/config.js 里的 SUPABASE_URL 一致，换项目时两处一起改。
+     crossorigin：Supabase 的请求是跨域带 CORS 的，不加这个属性浏览器不会复用这条连接。 -->
+<link rel="preconnect" href="https://gvmqmzgzwnvseubpvqdx.supabase.co" crossorigin>
+<link rel="dns-prefetch" href="https://gvmqmzgzwnvseubpvqdx.supabase.co">
+<meta name="description" content="和同学的悄悄话，在这里说。">
+<!-- 分享卡片：og:image / og:url 用完整网址，社交平台才能抓到（已上线 GitHub Pages）-->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="校园拾光">
+<meta property="og:url" content="https://bryanhw.github.io/my-new-programme/messages.html">
+<meta property="og:title" content="私信 · 校园拾光">
+<meta property="og:description" content="和同学的悄悄话，一对一聊在这里说。">
+<meta property="og:image" content="https://bryanhw.github.io/my-new-programme/assets/img/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<!-- 标签页 / 主屏图标。矢量优先、位图兜底：32px 给不认 SVG 的浏览器，
+     180px 给 iOS / Android 加到主屏（那张要不透明，iOS 自己切圆角）。
+     三张图由 tools/make_icons.py 画出来，改颜色 / 形状请改脚本后重跑，别手工导出。 -->
+<link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+<title>私信 · 校园拾光</title>
+<link rel="stylesheet" href="assets/css/style.css?v=fed8ddd9">
+</head>
+<body>
+
+<a class="skip-link" href="#main">跳到主要内容</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="messages.html">
+      <span class="brand-mark">💬</span>
+      <span>私信</span>
+    </a>
+    <button class="btn btn-soft btn-sm" id="refresh" type="button">
+      <svg class="icon-refresh" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/>
+        <path d="M20.5 4.6V10H15"/>
+      </svg>
+      <span>刷新</span>
+    </button>
+    <button class="header-signout" type="button" hidden>退出登录</button>
+    <a class="header-login" href="login.html" aria-label="登录或注册">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8.2" r="3.6"/>
+        <path d="M5.2 19.4a6.9 6.9 0 0 1 13.6 0"/>
+      </svg>
+      <span class="header-login-text">登录 / 注册</span>
+    </a>
+  </div>
+</header>
+
+<main class="wrap" id="main" tabindex="-1">
+
+  <div class="notice notice-info" id="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+
+  <!-- 会话列表 -->
+  <section class="dm-section" id="dm-rooms">
+    <div class="row-between" style="padding:18px 0 10px">
+      <p class="text-sm on-gold" id="rooms-title">私信</p>
+      <a class="btn btn-soft btn-sm" id="to-profile" href="profile.html">我的</a>
+    </div>
+    <div id="rooms"></div>
+    <p class="hint" id="rooms-empty" hidden>
+      还没有私信。到公开主页点「发私信」，或等同学先找你。
+    </p>
+  </section>
+
+  <!-- 打开的一场对话 -->
+  <section class="dm-section" id="thread" hidden>
+    <div class="dm-thread-head">
+      <button class="btn btn-soft btn-sm" id="thread-back" type="button">← 会话</button>
+      <span class="text-sm on-gold" id="thread-title" style="flex:1"></span>
+    </div>
+    <div class="dm-scroll" id="messages"></div>
+    <p class="hint" id="thread-empty" hidden>还没有消息，说句话打个招呼吧。</p>
+    <form class="dm-composer" id="composer">
+      <label for="dm-body" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">消息内容</label>
+      <textarea id="dm-body" rows="2" maxlength="500" placeholder="写点什么…（500 字以内）" autocomplete="off"></textarea>
+      <button class="btn btn-primary" id="dm-send" type="submit">发送</button>
+    </form>
+  </section>
+
+  <!-- 写给某个洞号（?hole= 直达）：不显示任何账号身份，只认洞号 -->
+  <section class="dm-section" id="hole" hidden>
+    <div class="row-between" style="padding:18px 0 10px">
+      <p class="text-sm on-gold" id="hole-title">写给这个洞号</p>
+    </div>
+    <p class="hint" style="margin-top:0">
+      这封信会匿名送达：对方只看到「写给你的洞号」，看不到你是谁。
+    </p>
+    <div class="dm-composer" id="hole-composer">
+      <label for="hole-body" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">信的内容</label>
+      <textarea id="hole-body" rows="4" maxlength="500" placeholder="写一封信…（500 字以内）" autocomplete="off"></textarea>
+      <button class="btn btn-primary" id="hole-send" type="button">寄出</button>
+    </div>
+    <p class="hint" id="hole-note" hidden></p>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-brand">校园拾光</div>
+  <p class="footer-line">把今天的心事和光，留在这里</p>
+  <p class="footer-note">私信只有你和对方看得到</p>
+  <p class="footer-legal">
+    本网页含有 AI 生成的产物，未侵犯版权；用户发言不代表网站所有者的观点；
+    网站所有者将对不合规的帖子进行下架处理；烦请用户谨慎发言。
+  </p>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="assets/js/config.js?v=07936165"></script>
+<script src="assets/vendor/supabase.js?v=dff1e545"></script>
+<script src="assets/js/app.js?v=d8b9c16e"></script>
+<script src="assets/js/messages.js?v=0d8a630e"></script>
+</body>
+</html>

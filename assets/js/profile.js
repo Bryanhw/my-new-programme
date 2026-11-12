@@ -28,6 +28,12 @@
   var reportsCard = document.getElementById("reports-card");
   var reportsEl   = document.getElementById("reports-list");
 
+  /* M2：私信入口的未读角标 + 写给「我的洞号」的信（收件箱） */
+  var dmEntry     = document.getElementById("dm-entry");
+  var dmUnread    = document.getElementById("dm-unread");
+  var driftCard   = document.getElementById("drift-card");
+  var driftEl     = document.getElementById("drift-list");
+
   /* F2：三格（我的发布 / 我的评论 / 我的收藏） */
   var mineTabs    = document.getElementById("mine-tabs");
   var countPosts  = document.getElementById("mine-count-posts");
@@ -119,6 +125,7 @@
     var postsHead = document.getElementById("public-posts-head");
     var postsEl = document.getElementById("public-posts");
     var followBtn = document.getElementById("public-follow-btn");
+    var dmBtn = document.getElementById("public-dm-btn");
     var selfTip = document.getElementById("public-self-tip");
 
     [nickCard, mineCard, reportsCard, profileCard, secCard, anonTip].forEach(function (el) {
@@ -150,8 +157,17 @@
           if (myUid === uid) {
             if (selfTip) selfTip.classList.remove("hidden");
             if (followBtn) followBtn.classList.add("hidden");
+            if (dmBtn) dmBtn.classList.add("hidden");
           } else if (myUid) {
             paintFollow(uid, myUid, followBtn);
+            // M2：公开主页的「发私信」直达这场对话（仅登录的公开账号可见）
+            if (dmBtn) {
+              dmBtn.classList.remove("hidden");
+              dmBtn.href = "messages.html?with=" + encodeURIComponent(String(uid));
+            }
+          } else {
+            // 匿名访客：没有自己的公开 UID，给不出「自己」，私信按钮也不该亮
+            if (dmBtn) dmBtn.classList.add("hidden");
           }
         });
 
@@ -253,6 +269,8 @@
       loadMyPosts();
       loadMyReports();
       loadSecurity();
+      paintDmUnread();
+      loadDriftLetters();
 
       // F2：收藏只存本机，数字立刻就能显示；地址里带 #saves / #comments 就直接停在那格
       paintCounts();
@@ -576,6 +594,53 @@
       reportsCard.classList.remove("hidden");
       reportsEl.innerHTML = '<p class="receipt-empty">暂时读不到举报记录，稍后再看看。</p>';
     });
+  }
+
+  /* 私信入口的未读角标：sum(list_rooms.unread_count)，非公开账号时悄悄不显示 */
+  function paintDmUnread() {
+    if (!dmUnread || !dmEntry) return;
+    dmUnread.hidden = true;
+    dmUnread.textContent = "";
+    if (!currentUser || currentIsAnon) return;   // 匿名访客没有私信
+    C.client().rpc("list_rooms").then(function (res) {
+      var rows = (res && res.data) || [];
+      var n = 0;
+      for (var i = 0; i < rows.length; i++) n += rows[i].unread_count || 0;
+      if (!n) return;
+      dmUnread.textContent = n > 99 ? "99+" : String(n);
+      dmUnread.hidden = false;
+    }).catch(function () { /* 视图未建时静默，不给角标 */ });
+  }
+
+  /* 写给「我的洞号」的信：任何人（匿名访客也行）都可以在匿名帖上留话给这个号 */
+  function loadDriftLetters() {
+    if (!driftCard || !driftEl) return;
+    driftEl.innerHTML = '<p class="text-sm on-gold mb-16">正在读取…</p>';
+    C.client().rpc("list_my_drift_letters").then(function (res) {
+      var rows = (res && res.data) || [];
+      if (!rows.length) {
+        driftCard.classList.add("hidden");
+        return;
+      }
+      driftCard.classList.remove("hidden");
+      driftEl.innerHTML = rows.map(renderDriftLetter).join("");
+    }).catch(function () {
+      // 数据层没迁 M2 时报红也不好：给一句轻提示，功能不在也不影响别的
+      driftCard.classList.remove("hidden");
+      driftEl.innerHTML = '<p class="receipt-empty">暂时读不到写给洞号的信，稍后再看看。</p>';
+    });
+  }
+
+  function renderDriftLetter(letter) {
+    var code = String(letter.to_anon || "").trim();
+    var label = code ? ("洞号 " + code) : "不知道哪个洞号";
+    return '<div class="drift-letter">' +
+      '<div class="drift-letter-top">' +
+        "<span>写给：" + C.escapeHtml(label) + "</span>" +
+        "<span>" + C.escapeHtml(C.timeAgo(letter.created_at || "")) + "</span>" +
+      "</div>" +
+      '<div class="drift-letter-body">' + C.escapeHtml(letter.body || "") + "</div>" +
+      "</div>";
   }
 
   /* ---------------------------------------------------------------

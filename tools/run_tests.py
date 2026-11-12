@@ -25,6 +25,7 @@ PAGES = {
     "profile.html": ["assets/js/profile.js"],
     "faq.html": ["assets/js/faq.js"],
     "feedback.html": ["assets/js/feedback.js"],
+    "messages.html": ["assets/js/messages.js"],
 }
 
 
@@ -446,6 +447,29 @@ def run_b():
                    " image_path: null, status: 'approved', created_at: '2026-09-23T10:00:00.000Z' })")
     check("a missing id falls back to the old wording", ZH_NICK in no_id, no_id[:200])
     check("a missing id never invents a code", "anon-stamp" not in no_id, no_id[:200])
+
+    print("- delete whole share (R63, menu entry gated on is_mine)")
+    it = load("feed.html", "mock-logged")
+    zh_mine = "\u5220\u9664\u8fd9\u7bc7\u5206\u4eab"   # 删除这篇分享
+    def mcard(pid, mine):
+        return js(it, "Campus.renderPostCard({ id: %r, author_id: 'u-1', is_anonymous: false,"
+                      " display_name: 'TestNick', school: null, content: 'x', image_path: null,"
+                      " status: 'approved', created_at: '2026-09-23T10:00:00.000Z', is_mine: %s })"
+                      % (pid, "true" if mine else "false"))
+    c_mine = mcard("rm-1", True)
+    c_other = mcard("rm-2", False)
+    check("my own post's menu carries the delete entry", zh_mine in c_mine, c_mine[:300])
+    check("my own post's delete entry targets the right post",
+          'data-del-post="rm-1"' in c_mine, c_mine[:300])
+    check("someone else's post has no delete entry", zh_mine not in c_other, c_other[:300])
+    check("unlogged flag defaults to no delete entry",
+          zh_mine not in js(it, "Campus.renderPostCard({ id: 'rm-3', author_id: 'u-1',"
+                                " is_anonymous: false, display_name: 'TestNick', school: null,"
+                                " content: 'x', image_path: null, status: 'approved',"
+                                " created_at: '2026-09-23T10:00:00.000Z' })"))
+    check("the delete entry is a button, not a link (no accidental nav)",
+          ('<button class="link-plain" type="button" role="menuitem" data-del-post="rm-1">%s</button>'
+           % zh_mine) in c_mine, c_mine[:300])
 
     print("- likes account column is unreadable at the interface")
     it = load("feed.html", "mock-logged")
@@ -4074,6 +4098,223 @@ check("the follow view exposes only the two public uids and a timestamp",
       all(set(x.keys()) <= set(["follower_uid", "followee_uid", "created_at"]) for x in _m1f)
       and ("abc123", "xyz789") in [(x.get("follower_uid"), x.get("followee_uid")) for x in _m1f],
       _m1f)
+
+
+# ====================================================================
+# V5-M2: private DMs + DM reports + "write to that anonymous hole".
+# The stub now models docs/supabase-direct-message.sql: seven security RPCs
+# (send_message / list_rooms / list_messages / set_dm_setting /
+# send_drift_letter / list_my_drift_letters / report_message) plus the RLS
+# on the three new tables, so this suite pins the M2 red lines.
+# ====================================================================
+print()
+print("=" * 70)
+print("SCENARIO M2 - private messages + DM reports + drift letters (V5-1)")
+print("=" * 70)
+
+# Chinese messages used below (kept as escapes so the file stays ASCII):
+#   ZH_DM_AUTH    = xu-yao-deng-lu-gong-kai-zhang-hao-cai-neng-fa-si-xin
+#   ZH_DM_SELF    = bu-neng-gei-zi-ji-fa-si-xin
+#   ZH_DM_MISSING = yao-si-xin-de-zhang-hao-bu-cun-zai
+#   ZH_DM_EMPTY   = si-xin-nei-rong-bu-neng-shi-kong-de
+#   ZH_DM_LONG    = si-xin-zui-duo-500-ge-zi
+#   ZH_DM_MUTUAL  = dui-fang-she-zhi-le-jin-hu-xiang-guan-zhu
+#   ZH_DM_REPORT  = zhi-neng-ju-bao-ni-shou-dao-de-si-xin
+ZH_DM_AUTH = "\u9700\u8981\u767b\u5f55\u516c\u5f00\u8d26\u53f7\u624d\u80fd\u53d1\u79c1\u4fe1"
+ZH_DM_SELF = "\u4e0d\u80fd\u7ed9\u81ea\u5df1\u53d1\u79c1\u4fe1"
+ZH_DM_MISSING = "\u8981\u79c1\u4fe1\u7684\u8d26\u53f7\u4e0d\u5b58\u5728"
+ZH_DM_EMPTY = "\u79c1\u4fe1\u5185\u5bb9\u4e0d\u80fd\u662f\u7a7a\u7684"
+ZH_DM_LONG = "\u79c1\u4fe1\u6700\u591a 500 \u4e2a\u5b57"
+ZH_DM_MUTUAL = "\u5bf9\u65b9\u8bbe\u7f6e\u4e86\u4ec5\u4e92\u76f8\u5173\u6ce8\u53ef\u79c1\u4fe1\uff0c\u5148\u4e92\u76f8\u5173\u6ce8\u518d\u8054\u7cfb\u5427"
+ZH_DM_REPORT = "\u53ea\u80fd\u4e3e\u62a5\u4f60\u6536\u5230\u7684\u79c1\u4fe1"
+ZH_DM_GONE = "\u8fd9\u6761\u79c1\u4fe1\u4e0d\u5b58\u5728\u6216\u4f60\u5df2\u7ecf\u770b\u4e0d\u5230\u4e86"
+ZH_DM_SETTING = "\u79c1\u4fe1\u5f00\u5173\u53d6\u503c\u53ea\u80fd\u662f open \u6216 mutual"
+ZH_DR_AUTH = "\u9700\u8981\u767b\u5f55\u516c\u5f00\u8d26\u53f7\u624d\u80fd\u5199\u4fe1"
+ZH_DR_EMPTY = "\u8981\u5199\u7ed9\u7684\u6d1e\u53f7\u662f\u7a7a\u7684"
+ZH_DR_MISSING = "\u8fd9\u4e2a\u6d1e\u53f7\u4e0d\u5b58\u5728"
+ZH_DR_BODYEMPTY = "\u4fe1\u7684\u5185\u5bb9\u4e0d\u80fd\u662f\u7a7a\u7684"
+ZH_DR_LONG = "\u4e00\u5c01\u4fe1\u6700\u591a 500 \u4e2a\u5b57"
+
+M2_SEED = r"""
+(function () {
+  var store = __mockOpts.store;
+  var pc;
+  for (pc = 0; pc < store.profiles.length; pc++) {
+    if (store.profiles[pc].id === 'u-1') store.profiles[pc].public_uid = 'abc123';
+  }
+  var has2 = {};
+  for (pc = 0; pc < store.profiles.length; pc++) has2[store.profiles[pc].id] = true;
+  if (!has2['u-9'])
+    store.profiles.push({ id: 'u-9', phone: '13899999999', school: 'Other U', nickname: 'Grace',
+      public_uid: 'xyz789', created_at: '2026-10-01T00:00:00.000Z' });
+  if (!has2['u-anon-b'])
+    store.profiles.push({ id: 'u-anon-b', phone: null, school: null, nickname: null,
+      public_uid: null, created_at: '2026-10-02T00:00:00.000Z' });
+  var hasDrift = false;
+  for (var pd2 = 0; pd2 < store.posts.length; pd2++) {
+    if (store.posts[pd2].id === 'p-drift') hasDrift = true;
+  }
+  if (!hasDrift)
+    store.posts.push({ id: 'p-drift', author_id: 'u-9', is_anonymous: true,
+      display_name: '', school: null, content: 'the hole we write to', image_path: null,
+      status: 'approved', created_at: '2026-10-03T00:00:00.000Z' });
+  if (!store.direct_messages) store.direct_messages = [];
+  if (!store.message_reports) store.message_reports = [];
+  if (!store.drift_letters) store.drift_letters = [];
+  store.direct_messages.length = 0;
+  store.message_reports.length = 0;
+  store.drift_letters.length = 0;
+  store.direct_messages.push({ id: 'dm-1', sender_uid: 'abc123', recipient_uid: 'xyz789',
+    body: 'hi grace', created_at: '2026-10-04T09:00:00.000Z', read_at: null });
+  store.direct_messages.push({ id: 'dm-2', sender_uid: 'xyz789', recipient_uid: 'abc123',
+    body: 'hi testnick', created_at: '2026-10-04T10:00:00.000Z', read_at: null });
+  store.direct_messages.push({ id: 'dm-3', sender_uid: 'aaa111', recipient_uid: 'zzz999',
+    body: 'none of my business', created_at: '2026-10-04T11:00:00.000Z', read_at: null });
+  return true;
+})()
+"""
+
+print("- M2: send_message enforces the red lines (public account, no self, target must exist)")
+it = load("feed.html", "mock-logged")
+ev(it, M2_SEED)
+js(it, "__r = {}; Campus.client().rpc('send_message', { p_recipient_uid: 'xyz789', p_body: 'hi grace' })"
+      ".then(function (r) { __r.d = r.data; __r.e = r.error ? r.error.message : null; });")
+check("a logged public account sends a DM successfully",
+      js(it, "__r.d") == "dm-4" and js(it, "__r.e") is None,
+      js(it, "JSON.stringify(__r)"))
+js(it, "__r2 = {}; Campus.client().rpc('send_message', { p_recipient_uid: 'abc123', p_body: 'hi me' })"
+       ".then(function (r) { __r2.e = r.error ? r.error.message : null; });")
+check("cannot DM yourself", js(it, "__r2.e") == ZH_DM_SELF, js(it, "__r2.e"))
+js(it, "__r3 = {}; Campus.client().rpc('send_message', { p_recipient_uid: 'nobody', p_body: 'hi?' })"
+       ".then(function (r) { __r3.e = r.error ? r.error.message : null; });")
+check("target must exist", js(it, "__r3.e") == ZH_DM_MISSING, js(it, "__r3.e"))
+js(it, "__r4 = {}; Campus.client().rpc('send_message', { p_recipient_uid: 'xyz789', p_body: '   ' })"
+       ".then(function (r) { __r4.e = r.error ? r.error.message : null; });")
+check("blank body is rejected", js(it, "__r4.e") == ZH_DM_EMPTY, js(it, "__r4.e"))
+js(it, "__r5 = {}; Campus.client().rpc('send_message', { p_recipient_uid: 'xyz789', p_body: new Array(502).join('x') })"
+       ".then(function (r) { __r5.e = r.error ? r.error.message : null; });")
+check("over-long body is rejected", js(it, "__r5.e") == ZH_DM_LONG, js(it, "__r5.e"))
+
+it = load("feed.html", "mock-anon")
+ev(it, M2_SEED)
+js(it, "__r6 = {}; Campus.client().rpc('send_message', { p_recipient_uid: 'xyz789', p_body: 'anon hi' })"
+       ".then(function (r) { __r6.e = r.error ? r.error.message : null; });")
+check("an anonymous session cannot send a DM", js(it, "__r6.e") == ZH_DM_AUTH, js(it, "__r6.e"))
+
+print("- M2: the DM thread is visible only to the two participants")
+it = load("feed.html", "mock-logged")
+ev(it, M2_SEED)
+js(it, "__t2 = {}; Campus.client().rpc('list_rooms').then(function (r) { __t2.d = r.data; });")
+_t2 = js(it, "__t2.d") or []
+check("list_rooms shows one room with the other side and unread count",
+      len(_t2) == 1 and _t2[0]["other_uid"] == "xyz789" and _t2[0]["unread_count"] == 1,
+      _t2)
+js(it, "__t = {}; Campus.client().rpc('list_messages', { p_other_uid: 'xyz789' })"
+       ".then(function (r) { __t.d = r.data; });")
+_t = js(it, "__t.d") or []
+check("I read only the thread I am in (2 rows, mine + theirs)",
+      len(_t) == 2 and all(x["id"] in ("dm-1", "dm-2") for x in _t), _t)
+check("the third-party thread is invisible to me",
+      all(x["id"] != "dm-3" for x in _t))
+js(it, "__t3 = {}; Campus.client().rpc('list_messages', { p_other_uid: 'xyz789' })"
+       ".then(function (r) { __t3.d = r.data; });")
+_t3 = js(it, "__t3.d") or []
+check("reading the thread marks the received message as read",
+      any(x["id"] == "dm-2" and x["read_at"] for x in _t3), _t3)
+js(it, "__t4 = {}; Campus.client().rpc('list_rooms').then(function (r) { __t4.d = r.data; });")
+_t4 = js(it, "__t4.d") or []
+check("after reading, the unread count drops to zero",
+      len(_t4) == 1 and _t4[0]["unread_count"] == 0, _t4)
+
+print("- M2: dm_setting switch (mutual-only) gates who may send to me")
+it = load("feed.html", "mock-logged")
+ev(it, M2_SEED)
+js(it, "__m1 = {}; Campus.client().rpc('set_dm_setting', { p_setting: 'mutual' })"
+       ".then(function (r) { __m1.e = r.error ? r.error.message : null; });")
+check("I can switch my own DM setting to mutual", js(it, "__m1.e") is None, js(it, "__m1.e"))
+js(it, "__m2 = {}; Campus.client().rpc('set_dm_setting', { p_setting: 'loose' })"
+       ".then(function (r) { __m2.e = r.error ? r.error.message : null; });")
+check("invalid setting value is rejected", js(it, "__m2.e") == ZH_DM_SETTING, js(it, "__m2.e"))
+
+# the recipient (u-9) sets mutual; the sender (u-1, not mutually followed) is gated
+M2_SEED_MUTUAL = r"""
+(function () {
+  var store = __mockOpts.store;
+  var pc;
+  for (pc = 0; pc < store.profiles.length; pc++) {
+    if (store.profiles[pc].id === 'u-1') store.profiles[pc].public_uid = 'abc123';
+  }
+  var has2 = {};
+  for (pc = 0; pc < store.profiles.length; pc++) has2[store.profiles[pc].id] = true;
+  if (!has2['u-9'])
+    store.profiles.push({ id: 'u-9', phone: '13899999999', school: 'Other U', nickname: 'Grace',
+      public_uid: 'xyz789', created_at: '2026-10-01T00:00:00.000Z' });
+  for (pc = 0; pc < store.profiles.length; pc++) {
+    if (store.profiles[pc].id === 'u-9') store.profiles[pc].dm_setting = 'mutual';
+  }
+  if (!store.direct_messages) store.direct_messages = [];
+  store.direct_messages.length = 0;
+  return true;
+})()
+"""
+it = load("feed.html", "mock-logged")
+ev(it, M2_SEED_MUTUAL)
+js(it, "__m3 = {}; Campus.client().rpc('send_message', { p_recipient_uid: 'xyz789', p_body: 'hi' })"
+       ".then(function (r) { __m3.e = r.error ? r.error.message : null; });")
+check("mutual-only + no mutual follow rejects the DM", js(it, "__m3.e") == ZH_DM_MUTUAL, js(it, "__m3.e"))
+
+# (mutual flow is covered in M1 fw tests via follows; here stub checks the gate fires)
+
+print("- M2: report_message accepts only received messages")
+it = load("feed.html", "mock-logged")
+ev(it, M2_SEED)
+js(it, "__p1 = {}; Campus.client().rpc('report_message', { p_message_id: 'dm-2', p_reason: 'abuse', p_detail: 'means' })"
+       ".then(function (r) { __p1.e = r.error ? r.error.message : null; });")
+check("I can report a message I received", js(it, "__p1.e") is None, js(it, "__p1.e"))
+js(it, "__p2 = {}; Campus.client().rpc('report_message', { p_message_id: 'dm-1', p_reason: 'abuse', p_detail: '' })"
+       ".then(function (r) { __p2.e = r.error ? r.error.message : null; });")
+check("I cannot report a message I sent", js(it, "__p2.e") == ZH_DM_REPORT, js(it, "__p2.e"))
+js(it, "__p3 = {}; Campus.client().rpc('report_message', { p_message_id: 'dm-3', p_reason: 'abuse', p_detail: '' })"
+       ".then(function (r) { __p3.e = r.error ? r.error.message : null; });")
+check("I cannot report a third-party thread", js(it, "__p3.e") == ZH_DM_GONE, js(it, "__p3.e"))
+js(it, "__p4 = {}; Campus.client().rpc('report_message', { p_message_id: 'dm-2', p_reason: 'abuse', p_detail: '' })"
+       ".then(function (r) { __p4.e = r.error ? r.error.message : null; });")
+check("duplicate report on the same message is blocked",
+      js(it, "__p4.e") is not None, js(it, "__p4.e"))
+
+print("- M2: the drift letter keeps both sides anonymous")
+it = load("feed.html", "mock-logged")
+ev(it, M2_SEED)
+js(it, "__g1 = {}; Campus.client().rpc('send_drift_letter', { p_to_anon: __serverCode('u-9'), p_body: 'a letter to that hole' })"
+       ".then(function (r) { __g1.d = r.data; __g1.e = r.error ? r.error.message : null; });")
+_gl = js(it, "__g1.d")
+gl_code = js(it, "__serverCode('u-9')")
+check("sending to an existing hole succeeds", bool(_gl) and js(it, "__g1.e") is None,
+      (_gl, js(it, "__g1.e")))
+js(it, "__g2 = {}; Campus.client().rpc('send_drift_letter', { p_to_anon: 'NOPE99', p_body: 'hi' })"
+       ".then(function (r) { __g2.e = r.error ? r.error.message : null; });")
+check("a hole that does not exist is rejected", js(it, "__g2.e") == ZH_DR_MISSING, js(it, "__g2.e"))
+js(it, "__g3 = {}; Campus.client().rpc('send_drift_letter', { p_to_anon: '" + gl_code + "', p_body: '' })"
+       ".then(function (r) { __g3.e = r.error ? r.error.message : null; });")
+check("blank letter body is rejected", js(it, "__g3.e") == ZH_DR_BODYEMPTY, js(it, "__g3.e"))
+it = load("feed.html", "mock-anon")
+ev(it, M2_SEED)
+js(it, "__g4 = {}; Campus.client().rpc('send_drift_letter', { p_to_anon: 'ABC123', p_body: 'hi' })"
+       ".then(function (r) { __g4.e = r.error ? r.error.message : null; });")
+check("an anonymous session cannot write a drift letter", js(it, "__g4.e") == ZH_DR_AUTH, js(it, "__g4.e"))
+
+# the letter row must not carry the sending account identity
+it = load("feed.html", "mock-logged")
+ev(it, M2_SEED)
+js(it, "__g5 = {}; Campus.client().rpc('send_drift_letter', { p_to_anon: '" + gl_code + "', p_body: 'hello hole' })"
+       ".then(function (r) { __g5.d = r.data; });")
+js(it, "__g6 = __mockOpts.store.drift_letters.slice();")
+_g6 = js(it, "__g6") or []
+check("the stored drift letter keeps no account identity (only to_anon/body/time)",
+      len(_g6) >= 1
+      and all(set(x.keys()) <= set(["id", "to_anon", "body", "created_at", "read_at"]) for x in _g6)
+      and all(x["to_anon"] == gl_code for x in _g6),
+      _g6)
 
 
 print()

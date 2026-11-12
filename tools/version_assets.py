@@ -30,6 +30,7 @@ ROOT = os.path.dirname(TOOLS_DIR)
 PAGES = [
     "index.html", "feed.html", "post.html", "login.html",
     "reset.html", "profile.html", "faq.html", "feedback.html",
+    "messages.html",
 ]
 
 # Only CSS/JS under assets/ (never images, never external URLs).

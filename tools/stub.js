@@ -508,6 +508,45 @@ function __tableRows(store, table, uid) {
     }
     return apRows;
   }
+  /* V5-M2 私信表 RLS：只有「本人是发信方或收信方」的行才看得到（模拟真实库的策略）。
+     匿名/未登录：my_public_uid 为 null，任何一行都不匹配 -> 空集。 */
+  if (table === 'direct_messages') {
+    var myUid = __publicUidOf(store, uid);
+    var dmRows = [];
+    for (var di = 0; di < (store.direct_messages || []).length; di++) {
+      var dmr = store.direct_messages[di];
+      if (myUid && (dmr.sender_uid === myUid || dmr.recipient_uid === myUid)) dmRows.push(dmr);
+    }
+    return dmRows;
+  }
+  /* V5-M2 私信举报表 RLS：只见自己提交的回执（reporter_uid = 本人公开 UID）。 */
+  if (table === 'message_reports') {
+    var myUid2 = __publicUidOf(store, uid);
+    var mrRows = [];
+    for (var mi = 0; mi < (store.message_reports || []).length; mi++) {
+      if (store.message_reports[mi].reporter_uid === myUid2) mrRows.push(store.message_reports[mi]);
+    }
+    return mrRows;
+  }
+  /* V5-M2 洞号信 RLS：只有「to_anon 是自己的洞号」的行可见。
+     洞号 = 本人匿名帖的 anon_code（stub 用 __serverCode 替身派生，和真实库语义一致）。 */
+  if (table === 'drift_letters') {
+    var myAnon = {};
+    for (var po = 0; po < (store.posts || []).length; po++) {
+      if (store.posts[po].author_id === uid && store.posts[po].is_anonymous) {
+        myAnon[__serverCode(store.posts[po].author_id)] = true;
+      }
+    }
+    var dlRows = [];
+    for (var dri = 0; dri < (store.drift_letters || []).length; dri++) {
+      if (myAnon[store.drift_letters[dri].to_anon]) {
+        dlRows.push({ id: store.drift_letters[dri].id, to_anon: store.drift_letters[dri].to_anon,
+          body: store.drift_letters[dri].body, created_at: store.drift_letters[dri].created_at,
+          read_at: store.drift_letters[dri].read_at || null });
+      }
+    }
+    return dlRows;
+  }
   return [];
 }
 
@@ -900,6 +939,9 @@ function __makeClient(opts) {
   if (!store.comments) store.comments = [];
   if (!store.feedback) store.feedback = [];
   if (!store.follows) store.follows = [];
+  if (!store.direct_messages) store.direct_messages = [];
+  if (!store.message_reports) store.message_reports = [];
+  if (!store.drift_letters) store.drift_letters = [];
   var session = opts.session || null;
   /* 当前会话 uid：视图 my_posts 用它模拟 auth.uid() 的服务端过滤 */
   function sessionUid() { return session && session.user ? session.user.id : null; }
@@ -1088,6 +1130,202 @@ function __makeClient(opts) {
         }
         store.follows = keep;
         return P.resolve({ data: true, error: null });
+      }
+      /* ---------- V5-M2 私信 + 洞号信（stub，与 docs/supabase-direct-message.sql 同语义） ---------- */
+      function __myPublicUid() {
+        var u = sessionUid();
+        if (!u || (session && session.user && session.user.is_anonymous)) return null;
+        return __publicUidOf(store, u);
+      }
+      function __hasProfilePublicUid(pu) {
+        for (var x = 0; x < store.profiles.length; x++) {
+          if (store.profiles[x].public_uid === pu) return true;
+        }
+        return false;
+      }
+      function __followsEdge(aUid, bUid) {
+        for (var y = 0; y < (store.follows || []).length; y++) {
+          if (store.follows[y].follower_uid === aUid && store.follows[y].followee_uid === bUid) return true;
+        }
+        return false;
+      }
+      if (name === 'send_message') {
+        /* 与 SQL RPC 同口径：公开账号、目标存在、不能给自己、长度 ≤500、对方开关 */
+        var sargs = arguments[1] || {};
+        var sTo = String(sargs.p_recipient_uid == null ? '' : sargs.p_recipient_uid);
+        var sBody = String(sargs.p_body == null ? '' : sargs.p_body);
+        var sMe = __myPublicUid();
+        if (!sMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '需要登录公开账号才能发私信' } });
+        }
+        if (sMe === sTo) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '不能给自己发私信' } });
+        }
+        if (!__hasProfilePublicUid(sTo)) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '要私信的账号不存在' } });
+        }
+        if (!sBody.replace(/^\s+|\s+$/g, '')) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '私信内容不能是空的' } });
+        }
+        if (sBody.length > 500) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '私信最多 500 个字' } });
+        }
+        var sSetting = 'open';
+        for (var si = 0; si < store.profiles.length; si++) {
+          if (store.profiles[si].public_uid === sTo) sSetting = store.profiles[si].dm_setting || 'open';
+        }
+        if (sSetting === 'mutual') {
+          if (!(__followsEdge(sMe, sTo) && __followsEdge(sTo, sMe))) {
+            return P.resolve({ data: null, error: { code: 'P0001', message: '对方设置了仅互相关注可私信，先互相关注再联系吧' } });
+          }
+        }
+        var smId = 'dm-' + ((store.direct_messages || []).length + 1);
+        store.direct_messages.push({ id: smId, sender_uid: sMe, recipient_uid: sTo, body: sBody,
+          created_at: (store.now ? store.now : '2026-09-23T00:00:00.000Z'), read_at: null });
+        return P.resolve({ data: smId, error: null });
+      }
+      if (name === 'list_rooms') {
+        var rMe = __myPublicUid();
+        if (!rMe) return P.resolve({ data: [], error: null });
+        var roomMap = {};
+        var order = [];
+        for (var ri = 0; ri < (store.direct_messages || []).length; ri++) {
+          var rm = store.direct_messages[ri];
+          if (rm.sender_uid !== rMe && rm.recipient_uid !== rMe) continue;
+          var other = (rm.sender_uid === rMe) ? rm.recipient_uid : rm.sender_uid;
+          var key = [rMe, other].sort().join('|');
+          if (!roomMap[key]) { roomMap[key] = { other_uid: other, last_body: '', last_at: '', last_sender_uid: '', unread_count: 0, key: key }; order.push(key); }
+          if (!roomMap[key].last_at || rm.created_at > roomMap[key].last_at) {
+            roomMap[key].last_body = rm.body; roomMap[key].last_at = rm.created_at;
+            roomMap[key].last_sender_uid = rm.sender_uid;
+          }
+          if (rm.recipient_uid === rMe && !rm.read_at) roomMap[key].unread_count++;
+        }
+        var rooms = order.map(function (k) { return roomMap[k]; });
+        rooms.sort(function (a, b) { return (a.last_at < b.last_at) ? 1 : -1; });
+        return P.resolve({ data: rooms, error: null });
+      }
+      if (name === 'list_messages') {
+        var largs = arguments[1] || {};
+        var lOther = String(largs.p_other_uid == null ? '' : largs.p_other_uid);
+        var lMe = __myPublicUid();
+        if (!lMe) return P.resolve({ data: [], error: null });
+        for (var li = 0; li < (store.direct_messages || []).length; li++) {
+          var lm = store.direct_messages[li];
+          if (lm.sender_uid === lOther && lm.recipient_uid === lMe && !lm.read_at) lm.read_at = '2026-09-23T12:00:00.000Z';
+        }
+        var lOut = [];
+        for (var lj = 0; lj < (store.direct_messages || []).length; lj++) {
+          var lx = store.direct_messages[lj];
+          if ((lx.sender_uid === lMe && lx.recipient_uid === lOther)
+              || (lx.sender_uid === lOther && lx.recipient_uid === lMe)) lOut.push(lx);
+        }
+        lOut.sort(function (a, b) { return (a.created_at < b.created_at) ? -1 : 1; });
+        return P.resolve({ data: lOut, error: null });
+      }
+      if (name === 'set_dm_setting') {
+        var dargs = arguments[1] || {};
+        var dSet = String(dargs.p_setting == null ? '' : dargs.p_setting);
+        var dMe = __myPublicUid();
+        if (!dMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '需要登录公开账号' } });
+        }
+        if (dSet !== 'open' && dSet !== 'mutual') {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '私信开关取值只能是 open 或 mutual' } });
+        }
+        for (var di = 0; di < store.profiles.length; di++) {
+          if (store.profiles[di].id === sessionUid()) store.profiles[di].dm_setting = dSet;
+        }
+        return P.resolve({ data: null, error: null });
+      }
+      if (name === 'send_drift_letter') {
+        var gargs = arguments[1] || {};
+        var gTo = String(gargs.p_to_anon == null ? '' : gargs.p_to_anon);
+        var gBody = String(gargs.p_body == null ? '' : gargs.p_body);
+        var gMe = __myPublicUid();
+        if (!gMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '需要登录公开账号才能写信' } });
+        }
+        if (!gTo.replace(/^\s+|\s+$/g, '')) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '要写给的洞号是空的' } });
+        }
+        var gExists = false;
+        for (var gi = 0; gi < (store.posts || []).length; gi++) {
+          if (store.posts[gi].is_anonymous && __serverCode(store.posts[gi].author_id) === gTo) { gExists = true; break; }
+        }
+        if (!gExists) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '这个洞号不存在' } });
+        }
+        if (!gBody.replace(/^\s+|\s+$/g, '')) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '信的内容不能是空的' } });
+        }
+        if (gBody.length > 500) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '一封信最多 500 个字' } });
+        }
+        var glId = 'dl-' + ((store.drift_letters || []).length + 1);
+        store.drift_letters.push({ id: glId, to_anon: gTo, body: gBody,
+          created_at: (store.now ? store.now : '2026-09-23T00:00:00.000Z'), read_at: null });
+        return P.resolve({ data: glId, error: null });
+      }
+      if (name === 'list_my_drift_letters') {
+        var lmMe = __myPublicUid();
+        if (!lmMe) return P.resolve({ data: [], error: null });
+        var myAnon = {};
+        for (var lp = 0; lp < (store.posts || []).length; lp++) {
+          if (store.posts[lp].author_id === sessionUid() && store.posts[lp].is_anonymous) {
+            myAnon[__serverCode(store.posts[lp].author_id)] = true;
+          }
+        }
+        var lmOut = [];
+        for (var lq = 0; lq < (store.drift_letters || []).length; lq++) {
+          var lw = store.drift_letters[lq];
+          if (myAnon[lw.to_anon]) {
+            if (!lw.read_at) lw.read_at = '2026-09-23T12:00:00.000Z';
+            lmOut.push({ id: lw.id, to_anon: lw.to_anon, body: lw.body, created_at: lw.created_at, read_at: lw.read_at });
+          }
+        }
+        lmOut.sort(function (a, b) { return (a.created_at < b.created_at) ? 1 : -1; });
+        return P.resolve({ data: lmOut, error: null });
+      }
+      if (name === 'report_message') {
+        var reargs = arguments[1] || {};
+        var reId = String(reargs.p_message_id == null ? '' : reargs.p_message_id);
+        var reReason = String(reargs.p_reason == null ? '' : reargs.p_reason);
+        var reDetail = String(reargs.p_detail == null ? '' : reargs.p_detail);
+        var reMe = __myPublicUid();
+        if (!reMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '需要登录公开账号才能举报' } });
+        }
+        var reFound = null;
+        for (var ri2 = 0; ri2 < (store.direct_messages || []).length; ri2++) {
+          if (String(store.direct_messages[ri2].id) === reId) { reFound = store.direct_messages[ri2]; break; }
+        }
+        if (!reFound) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '这条私信不存在或你已经看不到了' } });
+        }
+        /* 第三种：thread 里既没我的发信也没我的收信（第三方线程）-> 本来就是看不见的 */
+        if (reFound.sender_uid !== reMe && reFound.recipient_uid !== reMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '这条私信不存在或你已经看不到了' } });
+        }
+        if (reFound.sender_uid === reMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '只能举报你收到的私信' } });
+        }
+        var knownReasons = ['illegal', 'porn', 'ad', 'abuse', 'privacy', 'other'];
+        if (knownReasons.indexOf(reReason) < 0) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '举报原因不在允许的范围内' } });
+        }
+        if (reDetail.length > 200) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '补充说明最多 200 个字' } });
+        }
+        for (var ru = 0; ru < (store.message_reports || []).length; ru++) {
+          if (store.message_reports[ru].message_id === reId && store.message_reports[ru].reporter_uid === reMe) {
+            return P.resolve({ data: null, error: { code: '23505', message: '你已经举报过这条私信了，我们正在处理中' } });
+          }
+        }
+        store.message_reports.push({ id: 'mr-' + ((store.message_reports || []).length + 1), message_id: reId,
+          reporter_uid: reMe, reason: reReason, detail: reDetail, status: 'open',
+          created_at: (store.now ? store.now : '2026-09-23T00:00:00.000Z') });
+        return P.resolve({ data: null, error: null });
       }
       return P.resolve({ data: (opts.rpcResult === undefined ? 0 : opts.rpcResult), error: null });
     },

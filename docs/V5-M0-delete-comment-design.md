@@ -122,4 +122,4 @@ grant execute on function public.soft_delete_comment(uuid) to authenticated;
 
 **回归结果**：`static_checks.py` 1120/0；`run_tests.py` 934/0。
 
-> ⚠️ 上线前置仍未完成（需站主）：确认/重跑 `docs/supabase-comments.sql`，再执行 `docs/supabase-comments-soft-delete.sql`，前端随代码逐字节发版。
+> ✅ **上线状态（2026-11-11，第 60 轮）**：站主已在 Supabase SQL Editor 执行 `docs/supabase-comments-soft-delete.sql`（显示正常），前端随代码逐字节发版上线；privacy_probe 32/0 全绿，线上 11 文件逐字节一致。
