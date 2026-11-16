@@ -124,7 +124,7 @@
             isNew ? "新版（含本轮修复标记）· " + v : "旧版（缓存文件，缺少本轮修复）· " + v);
         return probe("版本 · profile.js 新旧", origin + "assets/js/profile.js", {}, 15000).then(function (r3) {
           var t3 = r3.text || "";
-          var ok3 = t3.indexOf("retryOnce") >= 0 && t3.indexOf("PUBLIC_TIMEOUT_MS = 6000") >= 0;
+          var ok3 = t3.indexOf("retryOnce") >= 0 && t3.indexOf("withTimeout(") >= 0 && t3.indexOf("abortSignal") >= 0;
           add("版本 · profile.js 是否新版", ok3 ? "ok" : "bad",
               ok3 ? "新版（含 6 秒超时 + 自动重试）" : "旧版（缓存文件）");
         });

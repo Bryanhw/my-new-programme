@@ -3639,7 +3639,7 @@ check("R62: [hidden] 不再被 display:flex 顶掉（头像按钮不会在公开
 check("R62b: 公开页失败前自动重试一次，且失败态带真实原因",
       "function retryOnce(" in _pro62 and "shortErr(err)" in _pro62)
 check("R62b: 公开页超时收紧到 6 秒（不再让人干等）",
-      "PUBLIC_TIMEOUT_MS = 6000" in _pro62)
+      "PUBLIC_TIMEOUT_MS = 4000" in _pro62)
 _sql62b = os.path.join(ROOT, "docs/supabase-comments-delete-fix.sql")
 check("R62b: 软删除补丁不再把 content 清成空串（这才是 comments_content_check 报错的根因）",
       os.path.exists(_sql62b)

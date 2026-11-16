@@ -119,19 +119,21 @@
 
   /* 公开主页（只读）。核心红线：这里能看到的只有公开 UID / 昵称 / 学校 /
    * 计数，绝不读 author_id 或 phone；匿名作者没有公开 UID，自然进不来。 */
-  var PUBLIC_TIMEOUT_MS = 6000;    // 公开页最多等这么久，等不到就给人话 + 重试
+  var PUBLIC_TIMEOUT_MS = 4000;    // 公开页最多等这么久，等不到就给人话 + 重试
   var PUBLIC_RETRY_MS   = 400;     // 失败后自动再试一次的间隔
 
   /* 第 62 轮补充：站主点 @UID 进来后卡在「加载中…」永远不动。
    * 根因是这条链**一个 catch 都没有**：请求被拒（网络 / 令牌过期 / 视图没建）
    * 或一直不返回时，页面没有任何出口。这里给每个公开页请求都套一层超时，
    * 失败一定有话说、有按钮可点，绝不再留一个转不动的「加载中…」。 */
-  function withTimeout(promise, ms, label) {
+  function withTimeout(promise, ms, label, ctl) {
     return new Promise(function (resolve, reject) {
       var done = false;
       var timer = setTimeout(function () {
         if (done) return;
         done = true;
+        /* 真把请求掐掉，别让它在后台一直挂着。 */
+        try { if (ctl && typeof ctl.abort === "function") ctl.abort(); } catch (e) {}
         reject(new Error((label || "请求") + "没有响应"));
       }, ms || PUBLIC_TIMEOUT_MS);
       promise.then(function (v) {
@@ -148,12 +150,12 @@
     });
   }
 
-  /* 拉一次公开资料（带超时）。 */
+  /* 拉一次公开资料（带超时 + 可中断）。 */
   function loadPublicRow(uid) {
-    return withTimeout(
-      C.client().from("public_profiles").eq("public_uid", uid).maybeSingle(),
-      PUBLIC_TIMEOUT_MS, "公开资料"
-    );
+    var ctl = (typeof AbortController === "function") ? new AbortController() : null;
+    var q = C.client().from("public_profiles").eq("public_uid", uid);
+    if (ctl && typeof q.abortSignal === "function") q = q.abortSignal(ctl.signal);
+    return withTimeout(q.maybeSingle(), PUBLIC_TIMEOUT_MS, "公开资料", ctl);
   }
 
   /* 手机网络抖一下就整页报错太糙：失败先自动再试一次，仍失败才麻烦用户。 */
@@ -322,7 +324,19 @@
    * 加载
    * --------------------------------------------------------------- */
   function boot() {
-    if (queryUid) { bootPublic(queryUid); return; }
+    if (queryUid) {
+      /* 同步段任何异常都要变成看得见的失败态，不能留一张静态的「正在读取…」。 */
+      try {
+        bootPublic(queryUid);
+      } catch (e) {
+        var pc = document.getElementById("public-card");
+        if (pc) {
+          pc.classList.remove("hidden");
+          paintPublicFailure(pc, "主页打不开", String((e && e.message) || e));
+        }
+      }
+      return;
+    }
     if (!C.isReady()) {
       heroEl.innerHTML = C.setupCard();
       nickCard.classList.add("hidden");
