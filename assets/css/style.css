@@ -3212,6 +3212,39 @@ body.modal-open { overflow: hidden; }
   line-height: 1;
   vertical-align: middle;
 }
+/* inline-flex 的优先级高于浏览器默认的 [hidden]{display:none}，不补这条空角标会一直挂着 */
+.section-head .dm-unread[hidden] { display: none; }
+
+/* V5-1 私信收信开关：默认 open，可切「仅互相关注可私信」 */
+.dm-setting {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+.dm-setting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.dm-setting-row input {
+  flex: none;
+  margin-top: 3px;
+}
+.dm-setting-text {
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--ink);
+}
+.dm-setting-hint {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
 
 /* 洞号信收件箱：每封信一张小卡片，洞号名「洞号 xxxxxx」 */
 .drift-letter {

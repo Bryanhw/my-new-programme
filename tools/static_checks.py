@@ -3599,6 +3599,27 @@ check("R60/profile.js 洞号信收件箱与 DM 未读也走 RPC（无裸表 sele
       "profile.js uses list_my_drift_letters/list_rooms")
 
 
+print("- R61: 我的页私信入口 / 未读角标 / 仅互相关注开关")
+_pro61 = read(os.path.join(ROOT, "assets/js/profile.js"))
+_html61 = read(os.path.join(ROOT, "profile.html"))
+_css61 = read(os.path.join(ROOT, "assets/css/style.css"))
+check("R61: 我的页有私信入口 + 未读角标，未读数走 list_rooms",
+      'id="dm-entry"' in _html61 and 'id="dm-unread"' in _html61
+      and "list_rooms" in _pro61,
+      "profile.html / profile.js")
+check("R61: 未读角标 hidden 时真的不占位（inline-flex 会顶掉默认 [hidden]）",
+      ".section-head .dm-unread[hidden]" in _css61,
+      "style.css needs the [hidden] override")
+check("R61: 私信收信开关有界面，读写都不裸写 profiles",
+      'id="dm-setting"' in _html61
+      and 'id="dm-mutual-toggle"' in _html61
+      and "paintDmSetting" in _pro61
+      and "set_dm_setting" in _pro61
+      and 'from("profiles").update' not in _pro61,
+      "profile.html / profile.js")
+check("R61: 匿名访客看不到私信开关",
+      re.search(r"function paintDmSetting\(\)[\s\S]{0,320}currentIsAnon", _pro61) is not None,
+      "anonymous visitors must not get the switch")
 print("- R62: 计数横杠就地回填 + 作者区直发私信")
 _app63 = sources["app.js"]
 _feed63 = sources["feed.js"]

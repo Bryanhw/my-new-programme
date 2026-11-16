@@ -28,7 +28,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>我的 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=9f53ef0e">
+<link rel="stylesheet" href="assets/css/style.css?v=43379a58">
 </head>
 <body>
 
@@ -222,6 +222,17 @@
       </a>
     </div>
 
+    <!-- V5-1 §13.3：私信默认开放；打开这个开关后只有互相关注的人能发来私信 -->
+    <div class="dm-setting hidden" id="dm-setting">
+      <label class="dm-setting-row">
+        <input type="checkbox" id="dm-mutual-toggle">
+        <span class="dm-setting-text">
+          仅互相关注的人可以给我发私信
+          <em class="dm-setting-hint">默认任何人都能发。打开后，没和你互相关注的人发不进来。</em>
+        </span>
+      </label>
+    </div>
+
     <!-- F2：三格。发布 / 评论都来自服务器，收藏只存在这台设备上 ——
          这件事在收藏那一格里明说，免得同学换设备后以为内容被删了。
 
@@ -357,7 +368,7 @@
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
 <script src="assets/js/app.js?v=c07e9d37"></script>
-<script src="assets/js/profile.js?v=714fa235"></script>
+<script src="assets/js/profile.js?v=42480455"></script>
 <script src="assets/js/birthday.js?v=1b36fa5a"></script>
 </body>
 </html>

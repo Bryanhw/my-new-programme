@@ -31,6 +31,8 @@
   /* M2：私信入口的未读角标 + 写给「我的洞号」的信（收件箱） */
   var dmEntry     = document.getElementById("dm-entry");
   var dmUnread    = document.getElementById("dm-unread");
+  var dmSetting   = document.getElementById("dm-setting");
+  var dmMutual    = document.getElementById("dm-mutual-toggle");
   var driftCard   = document.getElementById("drift-card");
   var driftEl     = document.getElementById("drift-list");
 
@@ -378,6 +380,7 @@
         nickInput.value = (p && p.nickname) || "";
         if (profileCard) profileCard.classList.remove("hidden");
         populateProfileForm(p);
+        paintDmSetting();   // 开关状态就在这一行里，不用再单独请求
       });
 
       loadMyPosts();
@@ -728,6 +731,38 @@
       dmUnread.textContent = n > 99 ? "99+" : String(n);
       dmUnread.hidden = false;
     }).catch(function () { /* 视图未建时静默，不给角标 */ });
+  }
+
+  /* 私信收信开关（§13.3）：默认 open（谁都能发）；切到 mutual 后只有互相关注的人能发。
+     状态直接用 getProfile() 已经读到的本人行（只读本人），写只走 set_dm_setting RPC —— 不裸写表。 */
+  function paintDmSetting() {
+    if (!dmSetting || !dmMutual) return;
+    dmSetting.classList.add("hidden");
+    if (!currentUser || currentIsAnon) return;   // 匿名访客既不收私信，也没有这个开关
+    dmSetting.classList.remove("hidden");
+    dmMutual.disabled = false;
+    dmMutual.checked = !!(currentProfile && currentProfile.dm_setting === "mutual");
+
+    dmMutual.onchange = function () {
+      var want = dmMutual.checked ? "mutual" : "open";
+      var prev = !dmMutual.checked;
+      dmMutual.disabled = true;
+      C.client().rpc("set_dm_setting", { p_setting: want }).then(function (res) {
+        dmMutual.disabled = false;
+        if (res && res.error) {
+          dmMutual.checked = prev;
+          C.toast("没改成：" + (res.error.message || "稍后再试"));
+          return;
+        }
+        C.toast(want === "mutual"
+          ? "已改成：仅互相关注的人可以私信你"
+          : "已改成：任何人都可以私信你");
+      }).catch(function () {
+        dmMutual.disabled = false;
+        dmMutual.checked = prev;
+        C.toast("没改成，稍后再试");
+      });
+    };
   }
 
   /* 写给「我的洞号」的信：任何人（匿名访客也行）都可以在匿名帖上留话给这个号 */

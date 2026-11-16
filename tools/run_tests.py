@@ -4309,6 +4309,26 @@ js(it, "__m2 = {}; Campus.client().rpc('set_dm_setting', { p_setting: 'loose' })
        ".then(function (r) { __m2.e = r.error ? r.error.message : null; });")
 check("invalid setting value is rejected", js(it, "__m2.e") == ZH_DM_SETTING, js(it, "__m2.e"))
 
+print("- M2: the DM setting switch on my own profile page")
+it = load("profile.html", "mock-logged",
+          "(__mockOpts.store.profiles.forEach(function (p) {"
+          " if (p.id === 'u-1') { p.public_uid = 'abc123'; p.dm_setting = 'mutual'; } }), true)")
+ev(it, "__drain();")
+check("the DM switch is visible for a logged-in account",
+      "hidden" not in js(it, "document.getElementById('dm-setting').className"),
+      js(it, "document.getElementById('dm-setting').className"))
+check("the DM switch reflects the stored mutual setting",
+      js(it, "document.getElementById('dm-mutual-toggle').checked") == True)
+js(it, "document.getElementById('dm-mutual-toggle').checked = false;"
+       "document.getElementById('dm-mutual-toggle').onchange();")
+ev(it, "__drain();")
+_dms = js(it, "(__mockOpts.store.profiles.filter(function (p) { return p.id === 'u-1'; })[0] || {}).dm_setting")
+check("switching back to open is written through set_dm_setting", _dms == "open", _dms)
+it = load("profile.html", "mock-anon")
+ev(it, "__drain();")
+check("anonymous visitors do not see the DM switch",
+      "hidden" in js(it, "document.getElementById('dm-setting').className"),
+      js(it, "document.getElementById('dm-setting').className"))
 # the recipient (u-9) sets mutual; the sender (u-1, not mutually followed) is gated
 M2_SEED_MUTUAL = r"""
 (function () {
