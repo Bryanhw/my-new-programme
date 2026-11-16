@@ -275,6 +275,37 @@ st, body = req("POST", "/rest/v1/rpc/send_message",
 check("a signed-out visitor cannot use send_message",
       st in (400, 401, 403), (st, msg_of(body)))
 
+# ------------------------------------------------------- drift notes (V5-M7)
+print()
+print("4d) drift bottles never hand out the author (run AFTER the drift migration)")
+DENIAL_DRIFT = [
+    ("select everything", "/rest/v1/drift_notes?select=*&limit=1"),
+    ("select the author id", "/rest/v1/drift_notes?select=author_id&limit=1"),
+    ("select the body", "/rest/v1/drift_notes?select=body&limit=1"),
+    ("read the reads table", "/rest/v1/drift_reads?select=*&limit=1"),
+    ("read the thanks table", "/rest/v1/drift_thanks?select=*&limit=1"),
+]
+_drift_missing = False
+for label, path in DENIAL_DRIFT:
+    st, body = req("GET", path)
+    if st == 404:
+        _drift_missing = True
+        continue
+    check("drift: cannot " + label,
+          st in (400, 401, 403) and code_of(body) == "42501",
+          (st, code_of(body), msg_of(body)))
+if _drift_missing:
+    print("        note: drift tables not there yet (migration pending) - skipped")
+
+# 拆一只瓶子：没有登录态就拿不到任何东西，更拿不到作者
+st, body = req("POST", "/rest/v1/rpc/draw_drift_note", {"p_circle": "gba"})
+if st == 404:
+    print("        note: draw_drift_note not there yet - skipped")
+else:
+    check("drift: an unauthenticated caller cannot draw a bottle",
+          st in (400, 401, 403) and code_of(body) in ("P0001", "42501", "401"),
+          (st, code_of(body), msg_of(body)))
+
 print()
 print("5) signed in as the first test account")
 if not PASSWORD:

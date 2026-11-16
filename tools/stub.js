@@ -584,6 +584,10 @@ function __resolveQuery(st, store, uid, clientOpts) {
        —— 这里照实模拟，防止前端（或新写的测试）又把它加回查询串。 */
     var touched = String(st.select || '*');
     for (var fi = 0; fi < st.filters.length; fi++) touched += ' ' + st.filters[fi][0];
+    if (st.table === 'drift_notes' || st.table === 'drift_reads' || st.table === 'drift_thanks') {
+      /* V5-M7：漂流祝福三张表对前端零权限，读写只走 definer RPC */
+      return { data: null, error: { code: '42501', message: 'permission denied for table ' + st.table } };
+    }
     if (st.table === 'comments') {
       /* comments 整表 select 对前端角色已撤销（隐私收口）：照实模拟 42501 */
       return { data: null, error: { code: '42501', message: 'permission denied for table comments' } };
@@ -1107,6 +1111,20 @@ function __q(table, store, clientOpts, getUid) {  var st = {
   return b;
 }
 
+/* V5-M7 漂流祝福：合法圈 id 与「今天」（与 docs/supabase-drift.sql 一致）。
+   __mockOpts.driftToday 可以把「今天」钉死，方便测「跨天再抽」。 */
+var __DRIFT_CIRCLES = ['gba', 'jingjinji', 'yangtze', 'central', 'shandong', 'fujian',
+  'southwest', 'northeast', 'northwest', 'hainan', 'huabei', 'guangxi'];
+
+function __driftDay() {
+  try {
+    if (__mockOpts && __mockOpts.driftToday) return String(__mockOpts.driftToday);
+  } catch (e) { /* 没有 __mockOpts 就跑真实日期 */ }
+  var d = new Date();
+  return d.getFullYear() + '-' +
+    ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+}
+
 function __makeClient(opts) {
   opts = opts || {};
   var store = opts.store || { posts: [], likes: [], hugs: [], profiles: [], reports: [], comments: [] };
@@ -1117,6 +1135,9 @@ function __makeClient(opts) {
   if (!store.direct_messages) store.direct_messages = [];
   if (!store.message_reports) store.message_reports = [];
   if (!store.drift_letters) store.drift_letters = [];
+  if (!store.drift_notes) store.drift_notes = [];
+  if (!store.drift_reads) store.drift_reads = [];
+  if (!store.drift_thanks) store.drift_thanks = [];
   var session = opts.session || null;
   /* 当前会话 uid：视图 my_posts 用它模拟 auth.uid() 的服务端过滤 */
   function sessionUid() { return session && session.user ? session.user.id : null; }
@@ -1509,6 +1530,102 @@ function __makeClient(opts) {
         }
         store.hugs = uhKept;
         return P.resolve({ data: uhN, error: null });
+      }
+
+      /* ---------------- V5-M7 漂流祝福 ---------------- */
+      if (name === 'post_drift_note') {
+        var pdArgs = arguments[1] || {};
+        var pdMe = sessionUid();
+        if (!pdMe) return P.resolve({ data: null, error: { code: 'P0001', message: '请先登录' } });
+        var pdCircle = String(pdArgs.p_circle || '');
+        if (__DRIFT_CIRCLES.indexOf(pdCircle) < 0) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '先选一个城市圈，才知道把瓶子投进哪片海' } });
+        }
+        var pdBody = String(pdArgs.p_body || '').trim();
+        if (pdBody.length < 4) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '再多写几个字吧，至少 4 个字' } });
+        }
+        if (pdBody.length > 120) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '有点长，120 字以内更好漂流' } });
+        }
+        var pdToday = __driftDay();
+        var pdMine = store.drift_notes.filter(function (n) {
+          return n.author_id === pdMe && n.day === pdToday;
+        }).length;
+        if (pdMine >= 3) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '今天已经投了 3 只了，明天再来' } });
+        }
+        var pdId = 'dn-' + (store.drift_notes.length + 1);
+        store.drift_notes.push({
+          id: pdId, circle: pdCircle, body: pdBody,
+          author_id: pdMe, day: pdToday, created_at: new Date().toISOString()
+        });
+        return P.resolve({ data: pdId, error: null });
+      }
+
+      if (name === 'draw_drift_note') {
+        var ddArgs = arguments[1] || {};
+        var ddMe = sessionUid();
+        if (!ddMe) return P.resolve({ data: null, error: { code: 'P0001', message: '请先登录' } });
+        var ddCircle = String(ddArgs.p_circle || '');
+        if (__DRIFT_CIRCLES.indexOf(ddCircle) < 0) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '先选一个城市圈' } });
+        }
+        var ddToday = __driftDay();
+        var ddRead = store.drift_reads.filter(function (r) {
+          return r.user_id === ddMe && r.day === ddToday;
+        })[0];
+        var ddNew = false;
+        if (!ddRead) {
+          var ddPool = store.drift_notes.filter(function (n) {
+            return n.circle === ddCircle && n.author_id !== ddMe;
+          });
+          if (!ddPool.length) return P.resolve({ data: [], error: null });
+          /* stub 里按插入顺序取，测试才可预期；真实库是 order by random() */
+          var ddPick = ddPool[0];
+          ddRead = {
+            user_id: ddMe, day: ddToday, note_id: ddPick.id,
+            created_at: new Date().toISOString()
+          };
+          store.drift_reads.push(ddRead);
+          ddNew = true;
+        }
+        var ddNote = store.drift_notes.filter(function (n) { return n.id === ddRead.note_id; })[0];
+        if (!ddNote) return P.resolve({ data: [], error: null });
+        var ddThanks = store.drift_thanks.filter(function (t) { return t.note_id === ddNote.id; });
+        return P.resolve({ data: [{
+          note_id: ddNote.id,
+          body: ddNote.body,
+          thanks_count: ddThanks.length,
+          thanked_by_me: ddThanks.some(function (t) { return t.user_id === ddMe; }),
+          drawn_at: ddRead.created_at,
+          is_new: ddNew
+        }], error: null });
+      }
+
+      if (name === 'thank_drift_note' || name === 'unthank_drift_note') {
+        var dtArgs = arguments[1] || {};
+        var dtMe = sessionUid();
+        if (!dtMe) return P.resolve({ data: null, error: { code: 'P0001', message: '请先登录' } });
+        var dtNote = String(dtArgs.p_note_id || '');
+        if (name === 'thank_drift_note') {
+          var dtRead = store.drift_reads.some(function (r) {
+            return r.user_id === dtMe && r.note_id === dtNote;
+          });
+          if (!dtRead) {
+            return P.resolve({ data: null, error: { code: 'P0001', message: '只能谢谢自己拆到过的瓶子' } });
+          }
+          var dtHas = store.drift_thanks.some(function (t) {
+            return t.note_id === dtNote && t.user_id === dtMe;
+          });
+          if (!dtHas) store.drift_thanks.push({ note_id: dtNote, user_id: dtMe });
+        } else {
+          store.drift_thanks = store.drift_thanks.filter(function (t) {
+            return !(t.note_id === dtNote && t.user_id === dtMe);
+          });
+        }
+        var dtCount = store.drift_thanks.filter(function (t) { return t.note_id === dtNote; }).length;
+        return P.resolve({ data: dtCount, error: null });
       }
 
       /* ---------------- V5-M4 一起听（音乐专区） ---------------- */

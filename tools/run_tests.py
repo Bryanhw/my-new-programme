@@ -27,6 +27,7 @@ PAGES = {
     "feedback.html": ["assets/js/feedback.js"],
     "messages.html": ["assets/js/messages.js"],
     "music.html": ["assets/js/music.js"],
+    "drift.html": ["assets/js/drift.js"],
 }
 
 
@@ -4903,6 +4904,133 @@ check("M5: 没登录的人抱不了，提示也说明白",
       "登录后才能抱抱" in str(js(_it3, "__r.err")), js(_it3, "__r.err"))
 check("M5: 没登录那次没有留下记录",
       js(_it3, "__mockOpts.store.hugs.length") == 3)
+
+
+print("- M6: 漂流祝福（一天一只，三张表对前端零权限）")
+M6_SEED = r"""
+(function () {
+  var st = __mockOpts.store;
+  st.profiles[0].school = '\u4e2d\u5c71\u5927\u5b66';
+  st.drift_notes = [
+    { id: 'dn-9', circle: 'gba', body: '\u4eca\u5929\u4e5f\u8f9b\u82e6\u4e86', author_id: 'u-9',
+      day: '2026-11-16', created_at: '2026-11-16T10:00:00.000Z' },
+    { id: 'dn-8', circle: 'jingjinji', body: '\u5317\u4eac\u7684\u79cb\u5929', author_id: 'u-8',
+      day: '2026-11-16', created_at: '2026-11-16T11:00:00.000Z' }
+  ];
+  st.drift_reads = [];
+  st.drift_thanks = [];
+  __mockOpts.driftToday = '2026-11-16';
+  return true;
+})()
+"""
+_dit = load("drift.html", "mock-logged", pre=M6_SEED, modules=True)
+js(_dit, "__drain(); __drain(); __drain();")
+
+_txt = js(_dit, "document.getElementById('drift-text').textContent") or ""
+check("M6: 今天能拆到一只同圈的瓶子",
+      "\u4eca\u5929\u4e5f\u8f9b\u82e6\u4e86" in _txt, _txt)
+check("M6: 页面标出所在城市圈",
+      "\u5927\u6e7e\u533a" in (js(_dit, "document.getElementById('drift-circle').textContent") or ""),
+      js(_dit, "document.getElementById('drift-circle').textContent"))
+check("M6: 祝福正文里没有任何作者痕迹",
+      "TestNick" not in _txt and "u-9" not in _txt, _txt)
+check("M6: 只抽同圈的瓶子（北京的没被抽到）",
+      "\u5317\u4eac" not in _txt, _txt)
+check("M6: 第一次抽到是 is_new", js(_dit, "__mockOpts.store.drift_reads.length") == 1)
+
+js(_dit, "document.getElementById('drift-thank').click();")
+js(_dit, "__drain(); __drain();")
+check("M6: 点谢谢后计数变成 1，按钮说已谢谢",
+      js(_dit, "document.getElementById('drift-thanks').textContent") == "1 \u4eba\u8c22\u8c22\u8fc7"
+      and js(_dit, "document.getElementById('drift-thank').getAttribute('aria-pressed')") == "true",
+      js(_dit, "document.getElementById('drift-thanks').textContent"))
+check("M6: 谢谢存进 drift_thanks", js(_dit, "__mockOpts.store.drift_thanks.length") == 1)
+
+js(_dit, "document.getElementById('drift-thank').click();")
+js(_dit, "__drain(); __drain();")
+check("M6: 再点一下收回谢谢（幂等，不留残影）",
+      js(_dit, "__mockOpts.store.drift_thanks.length") == 0
+      and js(_dit, "document.getElementById('drift-thank').getAttribute('aria-pressed')") == "false")
+
+js(_dit, "document.getElementById('drift-input').value = '\u665a\u5b89\uff0c\u660e\u5929\u89c1';")
+js(_dit, "document.getElementById('drift-send').click();")
+js(_dit, "__drain(); __drain();")
+check("M6: 能投一只进海里", js(_dit, "__mockOpts.store.drift_notes.length") == 3,
+      js(_dit, "__mockOpts.store.drift_notes.length"))
+check("M6: 投完清空输入框", js(_dit, "document.getElementById('drift-input').value") == "")
+
+print("- M6: 服务端边界（限额 / 伪造圈 / 空池 / 跨天 / 越权谢谢）")
+js(_dit, "__e = {}; Campus.client().rpc('post_drift_note', { p_body: '\u554a', p_circle: 'gba' })"
+       ".then(function (r) { __e.m = r.error && r.error.message; });")
+js(_dit, "__drain();")
+check("M6: 太短的祝福被拒",
+      "\u81f3\u5c11 4 \u4e2a\u5b57" in str(js(_dit, "__e.m")), js(_dit, "__e.m"))
+
+js(_dit, "__e = {}; Campus.client().rpc('post_drift_note', { p_body: '\u4f60\u597d\u4e16\u754c', p_circle: 'mars' })"
+       ".then(function (r) { __e.m = r.error && r.error.message; });")
+js(_dit, "__drain();")
+check("M6: 编出来的圈 id 被拒",
+      "\u5148\u9009\u4e00\u4e2a\u57ce\u5e02\u5708" in str(js(_dit, "__e.m")), js(_dit, "__e.m"))
+
+for _i in range(2):
+    js(_dit, "__e = {}; Campus.client().rpc('post_drift_note', { p_body: '\u7b2c' + %d + '\u53ea\u74f6\u5b50', p_circle: 'gba' })"
+           ".then(function (r) { __e.m = r.error && r.error.message; });" % (_i + 2))
+    js(_dit, "__drain();")
+check("M6: 投满 3 只后还能投第 3 只", js(_dit, "__e.m") is None, js(_dit, "__e.m"))
+
+js(_dit, "__e = {}; Campus.client().rpc('post_drift_note', { p_body: '\u7b2c\u56db\u53ea\u74f6\u5b50\u5566', p_circle: 'gba' })"
+       ".then(function (r) { __e.m = r.error && r.error.message; });")
+js(_dit, "__drain();")
+check("M6: 第 4 只被每日限额挡住",
+      "\u4eca\u5929\u5df2\u7ecf\u6295\u4e86 3 \u53ea" in str(js(_dit, "__e.m")), js(_dit, "__e.m"))
+
+js(_dit, "__d = {}; Campus.client().rpc('draw_drift_note', { p_circle: 'gba' })"
+       ".then(function (r) { __d.n = r.data && r.data[0]; });")
+js(_dit, "__drain();")
+check("M6: 同一天再拆拿到的是同一只",
+      js(_dit, "__d.n.note_id") == "dn-9" and js(_dit, "__d.n.is_new") is False,
+      js(_dit, "JSON.stringify(__d.n)"))
+check("M6: 一天只写一条 drift_reads", js(_dit, "__mockOpts.store.drift_reads.length") == 1)
+
+js(_dit, "__mockOpts.driftToday = '2026-11-17';")
+js(_dit, "__d = {}; Campus.client().rpc('draw_drift_note', { p_circle: 'gba' })"
+       ".then(function (r) { __d.n = r.data && r.data[0]; });")
+js(_dit, "__drain();")
+check("M6: 换一天可以再拆一只", js(_dit, "__d.n.is_new") is True, js(_dit, "JSON.stringify(__d.n)"))
+check("M6: 第二天仍然抽不到自己写的",
+      js(_dit, "__d.n.note_id") == "dn-9", js(_dit, "__d.n.note_id"))
+
+js(_dit, "__e = {}; Campus.client().rpc('thank_drift_note', { p_note_id: 'dn-8' })"
+       ".then(function (r) { __e.m = r.error && r.error.message; });")
+js(_dit, "__drain();")
+check("M6: 不能谢自己没拆到过的瓶子",
+      "\u53ea\u80fd\u8c22\u8c22\u81ea\u5df1\u62c6\u5230\u8fc7\u7684\u74f6\u5b50" in str(js(_dit, "__e.m")),
+      js(_dit, "__e.m"))
+
+_dempty = load("drift.html", "mock-logged",
+               pre=M6_SEED + "\n;__mockOpts.store.drift_notes = []; "
+                             "__mockOpts.store.drift_reads = [];",
+               modules=True)
+js(_dempty, "__drain(); __drain();")
+check("M6: 空池时明确说今天还没有瓶子",
+      js(_dempty, "document.getElementById('drift-empty').hidden") is False,
+      js(_dempty, "document.getElementById('drift-empty').hidden"))
+check("M6: 空池不会伪造一条祝福",
+      js(_dempty, "document.getElementById('drift-body').hidden") is True)
+
+_danon = load("drift.html", "mock-login", pre=M6_SEED, modules=True)
+js(_danon, "__e = {}; Campus.client().rpc('draw_drift_note', { p_circle: 'gba' })"
+          ".then(function (r) { __e.m = r.error && r.error.message; });")
+js(_danon, "__drain();")
+check("M6: 没登录的人拆不了瓶子",
+      "\u8bf7\u5148\u767b\u5f55" in str(js(_danon, "__e.m")), js(_danon, "__e.m"))
+
+_ddirect = load("drift.html", "mock-logged", pre=M6_SEED, modules=True)
+js(_ddirect, "__e = {}; Campus.client().from('drift_notes').select('*')"
+            ".then(function (r) { __e.code = r && r.error && r.error.code; });")
+js(_ddirect, "__drain();")
+check("M6: 前端直读 drift_notes 被拒（42501）",
+      str(js(_ddirect, "__e.code")) == "42501", js(_ddirect, "__e.code"))
 
 print()
 print("=" * 70)

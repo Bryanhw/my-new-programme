@@ -204,7 +204,7 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
 
 ### 9.2 设计要点
 - 轻薄结构：祝福由账号用户发（可选匿名），系统当天在**同城市圈**内随机投放；每人每天限读一条、限时（如当日有效）。
-- `drift_notes` 表（`user_uid`/`body`/`circle`/`created_at`/`pick_window`）；投放为服务端（Edge Function）或随机索引的只读查询。
+- `drift_notes` 表（`circle`/`body`/`author_id`/`created_at`）；投放**不做 Edge Function**，由 definer RPC `draw_drift_note` 用 `order by random()` 在近 30 天、同圈、非自己的瓶子里捞一只。
 - 读到的是一条**匿名祝福**（不显示发送者身份），收件可给反馈（抱抱/感谢计数）。
 - 防刷：每人每天一条、分离出「未读/已读」状态。
 
@@ -330,4 +330,21 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
     重跑 `docs/supabase-hugs.sql` 即生效。
   - **待办（站主）**：执行 `docs/supabase-hugs.sql`（幂等）。执行前点抱抱只会提示「抱抱功能还没开启」，不影响点赞 / 评论 / 阅读。
 
-
+- **2026-11-16 · 第 67 轮（V5-M7 匿名漂流祝福，v0.13 → v0.14）**：
+  - **路线**：不做 Edge Function —— 随机投放用 `order by random()` 在 RPC 里完成，
+    保持「改一份 SQL 就上线」的零运维形状；圈 id 由前端传、服务端校验合法性
+    （祝福本身不含身份，伪造圈最多看到别的圈的一句祝福）。
+  - **数据层** `docs/supabase-drift.sql`：`drift_notes` / `drift_reads` / `drift_thanks`；
+    `drift_reads` 主键 `(user_id, day)` 保证一天一条；三张表打开 RLS 且**零授权**，
+    读写只走 4 个 definer RPC（`post_drift_note` / `draw_drift_note` /
+    `thank_drift_note` / `unthank_drift_note`）。
+  - **规则**：每天投 3 只、4–120 字；拆近 30 天同圈且不是自己写的；谢谢只能谢
+    自己拆到过的，且可以收回（一次做全，不留直删通道）。
+  - **前端**：`drift.html` + `assets/js/drift.js`；三态（未拆 / 已拆 / 空池）+ 投瓶子；
+    页头菜单第 8 项「🌊 漂流祝福」，底栏仍然只有 2 格。
+  - **测试**：stub 补三表四 RPC；run_tests 新增 M6 用例（抽 / 幂等 / 跨天 / 空池 /
+    限额 / 伪造圈 / 越权谢谢 / 未登录 / 直读表 42501）；static_checks 新增 R66
+    （含 SQL 圈 id 与 circles.js 的一致性）；privacy_probe 新增 4d 段。
+  - **工程基线**：static_checks **1274/0**、run_tests **1121/0**、
+    privacy_probe **44/0**（4d 段要等迁移执行后才会真正比较）。
+  - **待办（站主）**：执行 `docs/supabase-drift.sql`（幂等）；执行前三张表直读会 404。

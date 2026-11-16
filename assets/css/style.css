@@ -3534,3 +3534,62 @@ body.modal-open { overflow: hidden; }
   .music-publish-row .btn { align-self: auto; flex: none; }
   .music-publish-row .input { flex: 1; min-width: 0; }
 }
+
+/* =====================================================================
+ *  V5-M7：漂流祝福
+ *
+ *  整页只有一句话和一张纸：没有头像、没有昵称、没有时间线。
+ *  结构本身就在表达「这里不追人」——这也是匿名红线的视觉版。
+ * ===================================================================== */
+.drift-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 16px 12px;
+  margin-top: 18px;
+}
+.drift-head { padding-bottom: 6px; }
+.drift-paper {
+  background: var(--surface-soft);
+  border-radius: var(--radius-md);
+  padding: 18px 16px 12px;
+  margin: 6px 0 10px;
+}
+.drift-text {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: 1.9;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+.drift-sign { margin: 10px 0 0; text-align: right; }
+.drift-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 2px;
+}
+.drift-write {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  margin-top: 14px;
+}
+.drift-input {
+  width: 100%;
+  min-height: 84px;
+  margin: 8px 0;
+  resize: vertical;
+}
+.drift-send-row { align-items: center; }
+.drift-rules {
+  padding: 14px 4px 24px;
+  text-align: center;
+}
+.drift-rules .hint { line-height: 1.8; }
+.btn.is-thanked {
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}

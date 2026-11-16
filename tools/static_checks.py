@@ -15,7 +15,7 @@ import esprima
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (tools/ -> repo)
 JS_DIR = os.path.join(ROOT, "assets", "js")
 PAGES = ["index.html", "feed.html", "post.html", "login.html", "reset.html", "profile.html",
-         "faq.html", "feedback.html", "messages.html", "music.html"]
+         "faq.html", "feedback.html", "messages.html", "music.html", "drift.html"]
 PAGE_SCRIPTS = {
     "index.html": "home.js",
     "feed.html": "feed.js",
@@ -27,6 +27,7 @@ PAGE_SCRIPTS = {
     "feedback.html": "feedback.js",
     "messages.html": "messages.js",
     "music.html": "music.js",
+    "drift.html": "drift.js",
 }
 
 failures = []
@@ -61,7 +62,7 @@ for name in js_files:
 # The shipped script set is pinned on purpose: adding a file is a decision
 # (it must be loaded by a page and covered by a test), not an accident.
 EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "campus-picker.js", "campuses.js", "circles.js",
-               "config.js", "faq.js", "feed.js", "feedback.js", "home.js",
+               "config.js", "drift.js", "faq.js", "feed.js", "feedback.js", "home.js",
                "hotwords.js", "messages.js", "music.js", "post.js", "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
       js_files)
@@ -158,7 +159,7 @@ for page in PAGES:
 
 print("8) header nav + tabbar contract")
 TABBED = ["index.html", "feed.html", "post.html", "profile.html", "faq.html", "feedback.html"]
-MENU_PAGES = TABBED + ["login.html"]
+MENU_PAGES = TABBED + ["login.html", "drift.html"]
 menu_targets = set()
 for page in MENU_PAGES:
     html = read(os.path.join(ROOT, page))
@@ -169,8 +170,10 @@ for page in MENU_PAGES:
           'class="nav-btn"' in head and "M4 7h16M4 12h16M4 17h16" in head)
     check("sheet markup inside the header on " + page,
           'class="menu-sheet"' in head and "menu-text" in head)
-    check("7 secondary items on " + page, html.count('class="menu-item"') == 7,
+    check("8 secondary items on " + page, html.count('class="menu-item"') == 8,
           html.count('class="menu-item"'))
+    check("drift entry is in the menu on " + page,
+          "\u6f02\u6d41\u795d\u798f" in head and 'href="drift.html"' in head)
     check("faq is in the menu on " + page, "常见问题" in head and 'href="faq.html"' in head)
     check("feedback is in the menu on " + page,
           "意见反馈" in head and 'href="feedback.html"' in head)
@@ -3714,6 +3717,65 @@ check("R65: 抱过的按钮有独立暖色状态", ".hug-btn.hugged" in _hgcss)
 check("R65: 文档同步（README 与 PLAN 都提到抱抱）",
       "抱抱" in read(os.path.join(ROOT, "README.md"))
       and "V5-6" in read(os.path.join(ROOT, "docs/PLAN_SCOPE_v5.md")))
+
+print("- R66: V5-M7 \u6f02\u6d41\u795d\u798f\uff08\u4e00\u5929\u4e00\u53ea\uff0c\u4e09\u5f20\u8868\u5bf9\u524d\u7aef\u96f6\u6743\u9650\uff09")
+_dfsql = read(os.path.join(ROOT, "docs/supabase-drift.sql"))
+_dfjs = read(os.path.join(JS_DIR, "drift.js"))
+_dfhtml = read(os.path.join(ROOT, "drift.html"))
+_dfcss = read(os.path.join(ROOT, "assets/css/style.css"))
+_circlejs = read(os.path.join(JS_DIR, "circles.js"))
+check("R66: \u8fc1\u79fb\u5efa\u4e09\u5f20\u8868\u5e76\u6253\u5f00 RLS",
+      all(("create table if not exists public." + t) in _dfsql
+          for t in ("drift_notes", "drift_reads", "drift_thanks"))
+      and all(re.search(r"alter table public\." + t + r"\s+enable row level security", _dfsql)
+              for t in ("drift_notes", "drift_reads", "drift_thanks")))
+check("R66: \u4e09\u5f20\u8868\u5bf9\u524d\u7aef\u96f6\u6743\u9650\uff08\u4e0d\u7ed9\u4efb\u4f55\u76f4\u8fde\u8bfb\u5199\uff09",
+      all(re.search(r"revoke all on public\." + t + r"\s+from anon, authenticated", _dfsql)
+          for t in ("drift_notes", "drift_reads", "drift_thanks"))
+      and "grant select on public.drift_" not in _dfsql
+      and "grant insert on public.drift_" not in _dfsql)
+check("R66: \u4e00\u5929\u4e00\u6761\u9760\u4e3b\u952e (user_id, day)",
+      "primary key (user_id, day)" in _dfsql)
+check("R66: \u56db\u4e2a\u5165\u53e3\u5168\u662f definer \u4e14\u53ea\u7ed9\u8c03\u7528\u6743",
+      _dfsql.count("security definer") >= 4
+      and all(("grant execute on function public." + f) in _dfsql
+              for f in ("post_drift_note(text, text)", "draw_drift_note(text)",
+                        "thank_drift_note(uuid)", "unthank_drift_note(uuid)")))
+check("R66: \u6295\u653e\u6c60 = \u8fd1 30 \u5929 + \u540c\u5708 + \u4e0d\u662f\u81ea\u5df1\u5199\u7684",
+      "interval '30 days'" in _dfsql and "n.author_id <> v_uid" in _dfsql
+      and "order by random()" in _dfsql)
+_df_ret = ""
+_mret = re.search(r"returns table\s*\(([\s\S]*?)\)\s*language", _dfsql)
+if _mret:
+    _df_ret = _mret.group(1)
+check("R66: \u62bd\u7b7e\u7ed3\u679c\u4e0d\u5e26\u4f5c\u8005\u8eab\u4efd",
+      bool(_df_ret) and "author_id" not in _df_ret and "nickname" not in _df_ret,
+      _df_ret or "returns table not found")
+check("R66: \u53ea\u80fd\u8c22\u81ea\u5df1\u62c6\u5230\u8fc7\u7684\u74f6\u5b50\uff0c\u4e14\u53ef\u6536\u56de",
+      "\u53ea\u80fd\u8c22\u8c22\u81ea\u5df1\u62c6\u5230\u8fc7\u7684\u74f6\u5b50" in _dfsql
+      and "create or replace function public.unthank_drift_note" in _dfsql
+      and "and user_id = v_uid" in _dfsql)
+check("R66: \u6bcf\u4eba\u6bcf\u5929 3 \u53ea", "v_count >= 3" in _dfsql)
+_circle_ids = set(re.findall(r'\bid:\s*"([a-z]+)"', _circlejs))
+_ck = re.search(r"function public\.drift_circle_ok[\s\S]*?as \$\$([\s\S]*?)\$\$", _dfsql)
+_sql_ids = set(re.findall(r"'([a-z]+)'", _ck.group(1))) if _ck else set()
+check("R66: SQL \u7684\u5708 id \u4e0e circles.js \u5b8c\u5168\u4e00\u81f4",
+      _circle_ids == _sql_ids and len(_circle_ids) == 12,
+      str((sorted(_circle_ids - _sql_ids), sorted(_sql_ids - _circle_ids))))
+check("R66: \u524d\u7aef\u56db\u4e2a RPC \u90fd\u7528\u4e0a\uff0c\u4e0d\u88f8\u8bfb\u5199\u4e09\u8868",
+      all(('"' + f + '"') in _dfjs for f in
+          ("post_drift_note", "draw_drift_note", "thank_drift_note", "unthank_drift_note"))
+      and "client().rpc(" in _dfjs and 'from("drift_' not in _dfjs)
+check("R66: \u9875\u9762\u7ed3\u6784\u4e0e\u6837\u5f0f\u8d70\u4ee4\u724c",
+      'id="drift-text"' in _dfhtml and 'id="drift-input"' in _dfhtml
+      and ".drift-paper {" in _dfcss and ".drift-text {" in _dfcss)
+check("R66: \u4e0b\u62c9\u83dc\u5355\u91cc\u6709\u6f02\u6d41\u795d\u798f",
+      all('href="drift.html"' in read(os.path.join(ROOT, p))
+          for p in ("index.html", "feed.html", "post.html", "profile.html",
+                    "faq.html", "feedback.html", "login.html", "drift.html")))
+check("R66: \u6587\u6863\u540c\u6b65",
+      "\u6f02\u6d41\u795d\u798f" in read(os.path.join(ROOT, "README.md"))
+      and "V5-7" in read(os.path.join(ROOT, "docs/PLAN_SCOPE_v5.md")))
 print("- R61: 我的页私信入口 / 未读角标 / 仅互相关注开关")
 _pro61 = read(os.path.join(ROOT, "assets/js/profile.js"))
 _html61 = read(os.path.join(ROOT, "profile.html"))
