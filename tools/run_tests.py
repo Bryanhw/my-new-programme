@@ -4499,6 +4499,19 @@ js(it, "__mr = {}; Campus.client().rpc('mark_notifications_read')"
 check("M3: marking read touches exactly my unread row",
       js(it, "__mr.d") == 1, js(it, "__mr.d"))
 
+print("- M3: comments still post before the migration is executed")
+it = load("feed.html", "mock-logged", "(__mockOpts.noMentionColumn = true, true)")
+ev(it, M3_SEED)
+js(it, "__pm = {}; Campus.addComment('p-1', 'plain comment', null, null)"
+       ".then(function () { __pm.ok = 1; }).catch(function (e) { __pm.err = e.message; });")
+ev(it, "__drain();")
+check("M3: a plain comment still posts when the mention column is missing",
+      js(it, "__pm.ok") == 1, js(it, "__pm.err"))
+js(it, "__pm2 = {}; Campus.addComment('p-1', 'hi @xyz789', null, 'xyz789')"
+       ".then(function () { __pm2.ok = 1; }).catch(function (e) { __pm2.err = e.message; });")
+ev(it, "__drain();")
+check("M3: an @ comment fails cleanly when the mention column is missing",
+      js(it, "__pm2.ok") is None and bool(js(it, "__pm2.err")), js(it, "__pm2.err"))
 print("- M3: @uid in a comment body becomes a link")
 _rt = js(it, "Campus.renderCommentText('nice one @xyz789')")
 check("M3: an @uid is rendered as a profile link",

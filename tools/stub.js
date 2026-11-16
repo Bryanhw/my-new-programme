@@ -672,6 +672,12 @@ function __resolveQuery(st, store, uid, clientOpts) {
     }
 
     if (st.table === 'comments') {
+      /* M3 迁移还没执行时，comments.mention_uid 这一列不存在：
+         带 @ 的插入会 42703，普通评论（不带该列）必须照常成功。 */
+      if (clientOpts && clientOpts.noMentionColumn
+          && row.mention_uid != null && String(row.mention_uid) !== '') {
+        return { data: null, error: { code: '42703', message: 'column comments.mention_uid does not exist' } };
+      }
       /* 触发器 validate_comment_parent：只允许两级，父必须是同帖的已公开顶层评论 */
       if (row.parent_id) {
         var par = null;

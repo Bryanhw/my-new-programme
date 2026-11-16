@@ -1790,7 +1790,7 @@ window.Campus = (function () {
       if (!id.user) throw new Error("请先登录或匿名进入，再评论");
 
       return getProfile().then(function (profile) {
-        return client.from("comments").insert({
+        var payload = {
           post_id: postId,
           author_id: id.user.id,
           parent_id: parentId || null,
@@ -1798,9 +1798,13 @@ window.Campus = (function () {
           display_name: buildDisplayName(profile, id),
           school: (profile && profile.school) || null,
           content: text,
-          status: "approved",
-          mention_uid: mentionUid || null
-        }).then(function (res) {
+          status: "approved"
+        };
+        /* 只在真的 @ 了人才带这一列：M3 迁移还没执行时，多一个不存在的列
+           会让整条评论都插不进去（42703）。普通评论必须照常可用。 */
+        if (mentionUid) payload.mention_uid = mentionUid;
+
+        return client.from("comments").insert(payload).then(function (res) {
           if (!res.error) return { parentId: parentId || null };
 
           var msg = String(res.error.message || "");

@@ -3625,7 +3625,7 @@ check("R63: 只有 approved 且带 mention 的评论才产生提醒",
       "new.mention_uid is null or new.status <> 'approved'" in _m3sql)
 check("R63: 前端 @ 候选只来自 my_mutual_follows，提交带 mention_uid",
       "my_mutual_follows" in _m3app
-      and "mention_uid: mentionUid || null" in _m3app
+      and "payload.mention_uid = mentionUid" in _m3app
       and "data-comment-at" in _m3app,
       "see assets/js/app.js")
 check("R63: 我的页有提醒区，读写都走 RPC",
