@@ -104,7 +104,7 @@ check("all C.* members exist in app.js", not missing, sorted(missing))
 check("export count", len(exports), sorted(exports))
 
 print("4) element id cross-check")
-known_dynamic = {"retry", "circle-chips", "circle-take", "clear-term", "show-all"}
+known_dynamic = {"retry", "circle-chips", "circle-take", "clear-term", "show-all", "public-retry"}
 for page in PAGES:
     html = read(os.path.join(ROOT, page))
     html_ids = set(re.findall(r'id="([^"]+)"', html))
@@ -3610,7 +3610,7 @@ check("R62: 只替换占位符，已显示的数字不动（不把刚点的赞�
 check("R62: 广场/首页/我的 都在整卡重画之前先就地补数",
       _feed63.count("C.fillCountsInDom(") == 1
       and _home63.count("C.fillCountsInDom(") == 1
-      and _pro63.count("C.fillCountsInDom(") == 2,
+      and _pro63.count("C.fillCountsInDom(") == 3,
       "%s/%s/%s" % (_feed63.count("C.fillCountsInDom("),
                     _home63.count("C.fillCountsInDom("),
                     _pro63.count("C.fillCountsInDom(")))
@@ -3619,6 +3619,19 @@ check("R62: 非匿名帖作者区给直发私信入口",
 check("R62: 私信入口写在 author_public_uid 分支里（匿名帖不会长出来）",
       _app63.find('class="post-dm"') > _app63.find("if (post.author_public_uid) {"))
 check("R62: .post-dm 胶囊样式存在", ".post-dm {" in _css63)
+_pro62 = read(os.path.join(ROOT, "assets/js/profile.js"))
+check("R62: 公开主页每个请求都有超时兜底（不再永远「加载中」）",
+      "function withTimeout(" in _pro62
+      and _pro62.count("withTimeout(") >= 2
+      and "PUBLIC_TIMEOUT_MS" in _pro62)
+check("R62: 公开主页的失败态有话说、有重试",
+      "function paintPublicFailure(" in _pro62
+      and 'id="public-retry"' in _pro62)
+check("R62: 公开模式把「我的」卡片一起藏起来",
+      "[heroEl, nickCard, mineCard, reportsCard, profileCard, secCard, anonTip]"
+      in _pro62.replace("\n      ", " "))
+check("R62: [hidden] 不再被 display:flex 顶掉（头像按钮不会在公开页露出来）",
+      ".profile-avatar-actions[hidden]" in _css63)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

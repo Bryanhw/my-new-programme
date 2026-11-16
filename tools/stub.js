@@ -855,8 +855,15 @@ function __resolveQuery(st, store, uid, clientOpts) {
   return { data: null, error: { message: 'unknown op' } };
 }
 
-function __q(table, store, clientOpts, getUid) {
-  var st = {
+/* 第 62 轮：测试注入「某张表的请求失败」：reject（网络错）/ hang（永不返回） */
+function __failMode(tbl) {
+  try {
+    if (__mockOpts && __mockOpts.failTable === tbl) return __mockOpts.failMode || 'reject';
+    return '';
+  } catch (e) { return ''; }
+}
+
+function __q(table, store, clientOpts, getUid) {  var st = {
     table: table, op: null, payload: null, filters: [], select: null,
     orderCol: null, asc: true, limit: null, single: false, maybeSingle: false
   };
@@ -889,6 +896,17 @@ function __q(table, store, clientOpts, getUid) {
   b.single = function () { st.single = true; return b; };
   b.maybeSingle = function () { st.maybeSingle = true; return b; };
   b.then = function (onOk, onErr) {
+    /* 第 62 轮：让指定表的请求「被拒」或「一直不返回」，
+       用来验证公开主页不会再永远卡在「加载中…」。 */
+    var fm = __failMode(table);
+    if (fm === 'reject') {
+      __calls.push([st.op || 'select', table, st.select || '*', 'rejected']);
+      return P.reject(new TypeError('Failed to fetch')).then(onOk, onErr);
+    }
+    if (fm === 'hang') {
+      __calls.push([st.op || 'select', table, st.select || '*', 'hang']);
+      return new P(function () {}).then(onOk, onErr);
+    }
     /* 模拟「列级迁移还没跑」：这一列在表里不存在（Postgres 42703）。
        前端带着 posts.anon_code 请求时应该降级重试一次，页面照常显示。 */
     var missingCol = __missingColumn(clientOpts, st);

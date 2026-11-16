@@ -4379,6 +4379,76 @@ check("the stored drift letter keeps no account identity (only to_anon/body/time
 
 print()
 print("=" * 70)
+print("SCENARIO: 公开主页 profile.html?uid= —— 第 62 轮「卡在加载中」修复")
+print("=" * 70)
+
+PUB_SEED = r"""
+(function () {
+  var st = __mockOpts.store;
+  for (var i = 0; i < st.profiles.length; i++) {
+    if (st.profiles[i].id === 'u-1') {
+      st.profiles[i].public_uid = 'abc123';
+      st.profiles[i].nickname = st.profiles[i].nickname || 'TestNick';
+    }
+  }
+  var has = {};
+  for (var j = 0; j < st.profiles.length; j++) has[st.profiles[j].id] = true;
+  if (!has['u-9']) {
+    st.profiles.push({ id: 'u-9', phone: null, school: 'Other U', nickname: 'Grace',
+      public_uid: 'xyz789', created_at: '2026-10-01T00:00:00.000Z' });
+  }
+  st.posts.push({ id: 'p-9', author_id: 'u-9', is_anonymous: false,
+    display_name: 'Grace', school: 'Other U', content: 'public open post',
+    image_path: null, status: 'approved', created_at: '2026-10-03T00:00:00.000Z' });
+  if (!st.follows) st.follows = [];
+  st.follows.push({ follower_uid: 'abc123', followee_uid: 'xyz789',
+    created_at: '2026-10-04T00:00:00.000Z' });
+  return true;
+})()
+"""
+
+PUB_URL = "window.location.search='?uid=xyz789';"
+
+print("- 别人的公开主页：资料 / 发布 / 私信入口都到位，且不再叠一张「我的」卡")
+it = load("profile.html", "mock-logged", pre=PUB_URL + PUB_SEED)
+check("昵称填上了",
+      js(it, "document.getElementById('public-name').textContent") == "Grace",
+      js(it, "document.getElementById('public-name').textContent"))
+check("公开模式下「我的」那张卡被藏起来了（站主截图里的自我卡片不再出现）",
+      js(it, "document.getElementById('profile-hero').classList.contains('hidden')") is True)
+check("更换头像 / 移除头像也跟着藏起来",
+      js(it, "document.getElementById('avatar-actions').hidden") is True)
+check("TA 的发布显示出来",
+      "public open post" in js(it, "document.getElementById('public-posts').innerHTML"))
+check("发私信直达这一场对话",
+      js(it, "document.getElementById('public-dm-btn').href") == "messages.html?with=xyz789",
+      js(it, "document.getElementById('public-dm-btn').href"))
+
+print("- 请求被拒（网络错 / 令牌过期）：给一句人话 + 重试，不再永远「加载中」")
+it = load("profile.html", "mock-logged",
+          pre=PUB_URL +
+              "__mockOpts.failTable = 'public_profiles'; __mockOpts.failMode = 'reject';" + PUB_SEED)
+card = js(it, "document.getElementById('public-card').innerHTML")
+check("失败态写明「主页加载失败」", "主页加载失败" in card, card[:200])
+check("给了重试按钮", 'id="public-retry"' in card, card[:200])
+check("不再留着「加载中」", "加载中" not in card, card[:200])
+
+print("- 请求一直不返回：超时兜底，同样有出口")
+it = load("profile.html", "mock-logged",
+          pre=PUB_URL +
+              "__mockOpts.failTable = 'public_profiles'; __mockOpts.failMode = 'hang';" + PUB_SEED)
+js(it, "__drain();")
+card = js(it, "document.getElementById('public-card').innerHTML")
+check("超时之后也有失败态和重试", "主页加载失败" in card and 'id="public-retry"' in card, card[:200])
+check("超时之后不再挂着「加载中」", "加载中" not in card, card[:200])
+
+print("- 查不到这个 UID：明确说「找不到」，不假装在加载")
+it = load("profile.html", "mock-logged", pre="window.location.search='?uid=nobody666';" + PUB_SEED)
+card = js(it, "document.getElementById('public-card').innerHTML")
+check("找不到时给的是「找不到这个主页」", "找不到这个主页" in card, card[:200])
+
+print()
+print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 print("=" * 70)
 for f in failures:

@@ -1612,6 +1612,9 @@ input[type="file"] { display: none; }
   justify-content: center;
   margin: -2px 0 8px;
 }
+/* 这条必须留着：display:flex 的优先级高于浏览器默认的 [hidden]{display:none}，
+   少了它，公开主页（?uid=）上也会露出「更换头像 / 移除头像」。 */
+.profile-avatar-actions[hidden] { display: none; }
 .profile-avatar-actions .btn-sm {
   font-size: var(--fs-xs);
   padding: 4px 10px;

@@ -119,6 +119,51 @@
 
   /* 公开主页（只读）。核心红线：这里能看到的只有公开 UID / 昵称 / 学校 /
    * 计数，绝不读 author_id 或 phone；匿名作者没有公开 UID，自然进不来。 */
+  var PUBLIC_TIMEOUT_MS = 10000;   // 公开页最多等这么久，等不到就给人话 + 重试
+
+  /* 第 62 轮补充：站主点 @UID 进来后卡在「加载中…」永远不动。
+   * 根因是这条链**一个 catch 都没有**：请求被拒（网络 / 令牌过期 / 视图没建）
+   * 或一直不返回时，页面没有任何出口。这里给每个公开页请求都套一层超时，
+   * 失败一定有话说、有按钮可点，绝不再留一个转不动的「加载中…」。 */
+  function withTimeout(promise, ms, label) {
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        reject(new Error((label || "请求") + "没有响应"));
+      }, ms || PUBLIC_TIMEOUT_MS);
+      promise.then(function (v) {
+        if (done) return;
+        done = true;
+        if (typeof clearTimeout === "function") clearTimeout(timer);
+        resolve(v);
+      }, function (e) {
+        if (done) return;
+        done = true;
+        if (typeof clearTimeout === "function") clearTimeout(timer);
+        reject(e);
+      });
+    });
+  }
+
+  /* 公开页的失败态：一句人话 + 重试 + 回广场。任何一步失败都走这里。 */
+  function paintPublicFailure(pubCard, title, detail) {
+    if (!pubCard) return;
+    pubCard.innerHTML =
+      '<div class="empty">' +
+        '<div class="empty-icon">🛰</div>' +
+        '<div class="empty-title">' + C.escapeHtml(title) + "</div>" +
+        '<div class="empty-text">' + C.escapeHtml(detail || "") + "</div>" +
+      "</div>" +
+      '<button class="btn btn-primary btn-block mt-16" type="button" id="public-retry">' +
+        "重试" +
+      "</button>" +
+      '<a class="btn btn-ghost btn-block mt-16" href="feed.html">回广场</a>';
+    var retry = document.getElementById("public-retry");
+    if (retry) retry.onclick = function () { window.location.reload(); };
+  }
+
   function bootPublic(uid) {
     document.title = "主页 · " + C.SITE_NAME;
     var pubCard = document.getElementById("public-card");
@@ -128,13 +173,29 @@
     var dmBtn = document.getElementById("public-dm-btn");
     var selfTip = document.getElementById("public-self-tip");
 
-    [nickCard, mineCard, reportsCard, profileCard, secCard, anonTip].forEach(function (el) {
-      if (el) el.classList.add("hidden");
-    });
+    /* 「我的」那张卡片必须一起藏起来 —— 否则公开主页上面会叠一张
+       「我的分享 / 匿名发布 / 在这里的天数」的自我卡片（站主截图里就是这样）。 */
+    [heroEl, nickCard, mineCard, reportsCard, profileCard, secCard, anonTip]
+      .forEach(function (el) {
+        if (el) el.classList.add("hidden");
+      });
+    if (avatarActions) avatarActions.hidden = true;
     pubCard.classList.remove("hidden");
 
-    C.client().from("public_profiles").eq("public_uid", uid).maybeSingle()
+    if (!C.client()) {
+      paintPublicFailure(pubCard, "主页暂时打不开", "后端还没连上，请稍后重试。");
+      return;
+    }
+
+    withTimeout(
+      C.client().from("public_profiles").eq("public_uid", uid).maybeSingle(),
+      PUBLIC_TIMEOUT_MS, "公开资料"
+    )
       .then(function (res) {
+        if (res && res.error) {
+          paintPublicFailure(pubCard, "这个主页暂时读不到", "服务端没有返回资料，请稍后重试。");
+          return;
+        }
         var pub = res && res.data;
         if (!pub) {
           pubCard.innerHTML = '<div class="empty">找不到这个主页</div>' +
@@ -169,27 +230,42 @@
             // 匿名访客：没有自己的公开 UID，给不出「自己」，私信按钮也不该亮
             if (dmBtn) dmBtn.classList.add("hidden");
           }
+        }).catch(function () {
+          // 拿不到「我是谁」不影响资料展示：按钮维持在默认隐藏态
+          if (dmBtn) dmBtn.classList.add("hidden");
+          if (followBtn) followBtn.classList.add("hidden");
         });
 
         C.client().from("author_posts_public").eq("author_public_uid", uid)
           .order("created_at", { ascending: false })
           .then(function (ares) {
             var rows = (ares && ares.data) || [];
-            document.getElementById("public-posts").textContent = rows.length
-              ? "" : "还没有公开发布的内容";
-            document.getElementById("public-posts").classList.remove("hidden");
             postsHead.classList.remove("hidden");
+            postsEl.classList.remove("hidden");
+            postsEl.textContent = rows.length ? "" : "还没有公开发布的内容";
             postsEl.innerHTML = rows.map(function (p) { return C.renderPostCard(p); }).join("");
-            if (C.attachEngagement) C.attachEngagement(rows).then(function () {
-              // 计数回来后再补一边（点赞/评论/作者UID）
-              postsEl.innerHTML = rows.map(function (p) { return C.renderPostCard(p); }).join("");
+            if (!rows.length || !C.attachEngagement) return;
+            C.attachEngagement(rows).then(function () {
+              // 第 62 轮：占位符就地换成数字，不再整段重画（免得把展开的评论收回去）
+              if (C.fillCountsInDom) C.fillCountsInDom(rows);
             });
+          })
+          .catch(function () {
+            postsHead.classList.remove("hidden");
+            postsEl.classList.remove("hidden");
+            postsEl.innerHTML = '<p class="receipt-empty">暂时读不到 TA 的发布，稍后再看看。</p>';
           });
 
         pStats.then(function (counts) {
           document.getElementById("public-following").textContent = String(counts[0] || 0);
           document.getElementById("public-followers").textContent = String(counts[1] || 0);
         });
+      })
+      .catch(function (err) {
+        paintPublicFailure(pubCard, "主页加载失败",
+          (err && err.message && err.message.indexOf("没有响应") >= 0)
+            ? "网络有点慢，点了「重试」再看一次。"
+            : "网络或服务暂时不可用，点了「重试」再看一次。");
       });
   }
 
