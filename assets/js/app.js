@@ -1850,7 +1850,7 @@ window.Campus = (function () {
     var st = commentZoneState[postId];
     if (!st) {
       st = { open: false, loaded: false, loading: false, sending: false, comments: [], replyTo: null, draft: "",
-             mentionUid: null, atOpen: false, atLoading: false };
+             mentionUid: null, atOpen: false, atLoading: false, atFailed: false };
       commentZoneState[postId] = st;
     }
     return st;
@@ -1967,6 +1967,8 @@ window.Campus = (function () {
       html += '<div class="comment-at-bar">';
       if (st.atLoading) {
         html += '<span class="comment-at-note">正在找和你互相关注的人…</span>';
+      } else if (st.atFailed) {
+        html += '<span class="comment-at-note">@ 功能还没开启（站点刚更新，稍后再试）。</span>';
       } else if (!st.atList || !st.atList.length) {
         html += '<span class="comment-at-note">还没有互相关注的人。你们两个都关注之后，就能互相 @ 了。</span>';
       } else {
@@ -2115,14 +2117,14 @@ window.Campus = (function () {
   var mutualFollowsCache = null;   // 一次页面会话缓存一份，候选是可选集合而已
 
   function loadMutualFollows() {
-    if (mutualFollowsCache) return Promise.resolve(mutualFollowsCache);
-    if (!client) return Promise.resolve([]);
+    if (mutualFollowsCache) return Promise.resolve({ list: mutualFollowsCache, failed: false });
+    if (!client) return Promise.resolve({ list: [], failed: true });
     return client.rpc("my_mutual_follows").then(function (res) {
-      mutualFollowsCache = (res && !res.error && res.data) || [];
-      return mutualFollowsCache;
+      if (res && res.error) return { list: [], failed: true };   // 迁移还没执行
+      mutualFollowsCache = (res && res.data) || [];
+      return { list: mutualFollowsCache, failed: false };
     }).catch(function () {
-      mutualFollowsCache = [];
-      return mutualFollowsCache;
+      return { list: [], failed: true };   // 不缓存失败：站点补上迁移后下次还能用
     });
   }
 
@@ -2135,10 +2137,12 @@ window.Campus = (function () {
     }
     st.atOpen = true;
     st.atLoading = true;
+    st.atFailed = false;
     renderCommentFormOnly(postId);
-    loadMutualFollows().then(function (list) {
+    loadMutualFollows().then(function (r) {
       st.atLoading = false;
-      st.atList = list;
+      st.atList = r.list;
+      st.atFailed = r.failed;
       renderCommentFormOnly(postId);
     });
   }
