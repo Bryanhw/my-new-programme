@@ -1487,6 +1487,30 @@ function __makeClient(opts) {
         return P.resolve({ data: mrCount, error: null });
       }
 
+      /* ---------------- V5-M5 匿名抱抱 ---------------- */
+      if (name === 'unhug') {
+        /* definer 语义：不管调用者能读到什么，只删 auth.uid() 自己那一行。
+           返回真正删掉的行数；重复调用返回 0，前端据此幂等。 */
+        var uhArgs = arguments[1] || {};
+        var uhMe = sessionUid();
+        if (!uhMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '请先登录' } });
+        }
+        store.hugs = store.hugs || [];
+        var uhKept = [];
+        var uhN = 0;
+        for (var uhi = 0; uhi < store.hugs.length; uhi++) {
+          var uhRow = store.hugs[uhi];
+          if (uhRow.post_id === uhArgs.p_post_id && uhRow.user_id === uhMe) {
+            uhN++;
+          } else {
+            uhKept.push(uhRow);
+          }
+        }
+        store.hugs = uhKept;
+        return P.resolve({ data: uhN, error: null });
+      }
+
       /* ---------------- V5-M4 一起听（音乐专区） ---------------- */
       if (name === 'publish_music') {
         var pmArgs = arguments[1] || {};

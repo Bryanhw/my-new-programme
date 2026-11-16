@@ -37,19 +37,25 @@ comment on table public.hugs is
   '匿名抱抱：只用来算计数；user_id 不对任何前端角色开放（见 docs/supabase-hugs.sql）';
 
 -- ---------------------------------------------------------------------
--- 2. 授权：读整列一律撤销；只留「写 + 过滤用的 post_id」
+-- 2. 授权：表上只留「抱一下」，其余全部收回
 --
---    为什么还留 select (post_id)：
---      取消抱抱时前端只能用 post_id 做过滤（见 app.js toggleHug），
---      PostgREST 的 delete 与 RLS 判定都要求这一列可用。
---      它泄露的只有「哪条帖子被抱过」，而 hug_count > 0 本来就是公开信息，
---      与 post_likes 视图暴露的东西完全同级；user_id 一列仍然读不到。
+--    为什么连 select (post_id) 都不给：
+--      最初为了「取消抱抱时用 post_id 过滤」留了这一列，实测发现
+--      PostgREST 的 DELETE 在「列级 SELECT 只开了 post_id + RLS 策略里
+--      引用 user_id」这种组合下会安静地删 0 行（HTTP 204，一行没动），
+--      这是很难被用户察觉的坏状态。
+--      现在收回抱抱改走 unhug()（definer 函数，明确限定 user_id = auth.uid()），
+--      前端不再直删表，因此这条通道可以整条关掉：
+--        * 前端读 hugs 表 → 42501（连 post_id 都读不到）
+--        * 想知道计数 → 只能读 post_hugs 视图
+--        * 想取消 → 只能调 unhug()
 -- ---------------------------------------------------------------------
 revoke all on public.hugs from public;
 revoke all on public.hugs from anon, authenticated;
-grant select (post_id) on public.hugs to anon, authenticated;
-grant insert, delete    on public.hugs to anon, authenticated;
-grant select            on public.hugs to service_role;
+grant insert on public.hugs to anon, authenticated;
+grant all    on public.hugs to service_role;
+-- 注意：不授任何 select —— 前端一条都读不到（连 post_id 也不给）。
+-- 收回抱抱改走下面的 unhug() definer 函数，见第 2 段注释。
 
 -- ---------------------------------------------------------------------
 -- 3. RLS：只能抱「自己」，只能取消「自己的那一行」
@@ -83,20 +89,63 @@ comment on view public.post_hugs is
 
 grant select on public.post_hugs to anon, authenticated;
 
+-- ---------------------------------------------------------------------
+-- 5. 收回抱抱：unhug(post_id)
+--
+--    这是唯一一条「删除」通道，用 definer 语义执行：
+--      * 前端不直删表，因此 hugs 一条 select 都不需要开；
+--      * 函数里写死了 user_id = auth.uid()，删不到别人的那一行；
+--      * 返回真正删掉的行数（0 = 本来就没抱过 / 已收回，1 = 收回成功）。
+--    前端失败重试、重复点击都是安全的：第二次调用只会返回 0。
+-- ---------------------------------------------------------------------
+create or replace function public.unhug(p_post_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_n   integer := 0;
+begin
+  if v_uid is null then
+    raise exception '请先登录';
+  end if;
+  if p_post_id is null then
+    raise exception '缺少帖子';
+  end if;
+
+  delete from public.hugs
+   where post_id = p_post_id
+     and user_id = v_uid;
+  get diagnostics v_n = row_count;
+
+  return v_n;
+end;
+$$;
+
+comment on function public.unhug(uuid) is
+  '收回抱抱：以 definer 语义删除 auth.uid() 自己那一行，返回删除行数';
+
+revoke all on function public.unhug(uuid) from public;
+grant execute on function public.unhug(uuid) to anon, authenticated;
+
 -- 让 PostgREST 立刻刷新 schema 缓存（正常会自动触发，这里显式做一次更稳）。
 notify pgrst, 'reload schema';
 
 -- =====================================================================
 --  验证查询（执行完请各跑一遍）
 -- =====================================================================
--- 验证 1：接口角色读不到 user_id（两条都应是 false）
---   select has_column_privilege('anon',          'public.hugs', 'user_id', 'select') as anon_can_read,
---          has_column_privilege('authenticated', 'public.hugs', 'user_id', 'select') as student_can_read;
+-- 验证 1：接口角色读不到任何一列（三条都应是 false）
+--   select has_table_privilege  ('anon',          'public.hugs', 'select') as anon_can_read,
+--          has_table_privilege  ('authenticated', 'public.hugs', 'select') as student_can_read,
+--          has_column_privilege ('authenticated', 'public.hugs', 'user_id', 'select') as student_can_read_uid;
 --
--- 验证 2：写权限还在（三条都应是 true，否则抱抱按钮会坏）
---   select has_column_privilege('authenticated', 'public.hugs', 'post_id', 'select') as can_filter,
---          has_table_privilege ('authenticated', 'public.hugs', 'insert')        as can_hug,
---          has_table_privilege ('authenticated', 'public.hugs', 'delete')        as can_unhug;
+-- 验证 2：只能抱、不能直删、能调 unhug（三条都应是 true）
+--   select has_table_privilege   ('authenticated', 'public.hugs', 'insert')          as can_hug,
+--          has_table_privilege   ('authenticated', 'public.hugs', 'delete')          as can_delete_directly,
+--          has_function_privilege('authenticated', 'public.unhug(uuid)', 'execute')  as can_unhug;
+--   （can_delete_directly 应为 false —— 删除只走 unhug）
 --
 -- 验证 3：视图可读，且确实没有 user_id 这一列（第二条应为 0）
 --   select * from public.post_hugs limit 5;
@@ -110,15 +159,20 @@ notify pgrst, 'reload schema';
 -- 验证 5（最关键）：拿 uuid 反查「谁抱了哪条」这条路应该断掉（应返回 42501）
 --   浏览器控制台 / curl：
 --     GET /rest/v1/hugs?select=post_id&user_id=eq.<任意 uuid>
---   应该报 42501 permission denied for column user_id。
+--   应该报 42501 permission denied for table hugs（整表都没开读）。
 --
--- 验证 6：同一条不能抱两次（第二次应报主键冲突），取消后可以再抱
---   （前端已做乐观更新 + 失败回滚，这里只做数据层确认）
+-- 验证 6：同一条不能抱两次（第二次报 23505），unhug 之后可以再抱
+--   POST /rest/v1/rpc/unhug  {"p_post_id": "<帖子 id>"}   ->  第一次返回 1，再调一次返回 0
+--
+-- 验证 7：策略仍在（应看到 INSERT 与 DELETE 两条）
+--   select policyname, cmd, roles::text, qual, with_check
+--     from pg_policies where schemaname = 'public' and tablename = 'hugs';
 
 -- =====================================================================
 --  回滚（仅在线上验收不通过时使用；前端也要一起退回）
 -- =====================================================================
--- grant select on public.hugs to anon, authenticated;
+-- revoke insert on public.hugs from anon, authenticated;
+-- drop function if exists public.unhug(uuid);
 -- drop view if exists public.post_hugs;
 -- drop table if exists public.hugs;
 -- 前端：app.js 去掉 attachHugs / toggleHug 与卡片上的抱抱按钮，

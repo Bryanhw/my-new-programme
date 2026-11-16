@@ -901,17 +901,18 @@ window.Campus = (function () {
 
   /* V5-M5：抱抱一下 / 收回抱抱。
    * 与点赞同一套写法，但这里连「谁抱的」都不存在前端路径上：
-   *   * 写：insert / delete 自己那一行，RLS 只放行 auth.uid() = user_id；
-   *   * 读：只能读视图 post_hugs 的计数与 hugged_by_me；
-   *   * 取消时过滤条件只带 post_id（user_id 这一列前端读不到，带上会 42501）。
+   *   * 抱：直写 hugs 表（insert），RLS 只放行 auth.uid() = user_id；
+   *   * 收：走 unhug() definer 函数 —— 前端对 hugs 表连 select 都没有，
+   *     直删会被 RLS + 列权限的组合安静地删成 0 行（HTTP 204 却什么都没发生），
+   *     这是实测踩到的坑，所以删除通道只保留这一条明确限定 user_id 的 RPC；
+   *   * 读：只能读视图 post_hugs 的计数与 hugged_by_me。
    * 一条只能抱一次靠主键 (post_id, user_id) 保证：重复点不会变成 2。 */
   function toggleHug(postId, currentlyHugged) {
     if (!client) return Promise.reject(new Error(configError));
     return getIdentity().then(function (id) {
       if (!id.user) throw new Error("登录后才能抱抱");
       if (currentlyHugged) {
-        return client.from("hugs").delete()
-          .eq("post_id", postId)
+        return client.rpc("unhug", { p_post_id: postId })
           .then(function (res) {
             if (res.error) throw new Error(hugError(res.error));
             return false;

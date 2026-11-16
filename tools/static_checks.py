@@ -3680,9 +3680,9 @@ _hgview = _hgsql.split("create view public.post_hugs", 1)[-1].split("grant selec
 check("R65: 迁移建 hugs 表与 post_hugs 视图",
       "create table if not exists public.hugs" in _hgsql
       and "create view public.post_hugs" in _hgsql)
-check("R65: hugs 的整表读取被撤销，只留过滤用的 post_id",
+check("R65: hugs 的读取被整表撤销（连 post_id 都不给）",
       "revoke all on public.hugs from anon, authenticated" in _hgsql
-      and "grant select (post_id) on public.hugs" in _hgsql
+      and "grant select (post_id) on public.hugs" not in _hgsql
       and "on public.hugs to service_role" in _hgsql)
 check("R65: 视图只输出计数与“我抱过没有”，不含 user_id",
       "hug_count" in _hgview and "hugged_by_me" in _hgview
@@ -3690,8 +3690,12 @@ check("R65: 视图只输出计数与“我抱过没有”，不含 user_id",
 check("R65: 写入靠 RLS 只放行自己",
       "for insert to authenticated with check (auth.uid() = user_id)" in _hgsql
       and "for delete to authenticated using (auth.uid() = user_id)" in _hgsql)
-check("R65: 前端只从视图拿计数",
-      'from("post_hugs")' in _hgjs and _hgjs.count('from("hugs")') == 2)
+check("R65: 收回抱抱只走 unhug 这个 definer 通道",
+      'rpc("unhug"' in _hgjs
+      and "function public.unhug(p_post_id uuid)" in _hgsql
+      and "and user_id = v_uid" in _hgsql and "security definer" in _hgsql)
+check("R65: 前端只从视图拿计数，不直读表",
+      'from("post_hugs")' in _hgjs and _hgjs.count('from("hugs")') == 1)
 check("R65: 卡片上的抱抱只有图标和数字",
       'data-hug="' in _hgjs and "hug-count" in _hgjs
       and "抱抱一下（不公开是谁）" in _hgjs)

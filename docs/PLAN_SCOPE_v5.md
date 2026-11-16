@@ -322,7 +322,12 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
   - **交互**：`home.js` 与 `feed.js` 各加 `[data-hug]` 分支，沿用点赞的乐观更新与失败回滚；CSS 加 `.hug-btn.hugged`（暖色，不放大不弹跳）。
   - **边界**：未登录不能抱（「登录后才能抱抱」）；匿名进入可以抱，同样只有计数；卡片上不出现任何账号痕迹。
   - **测试**：stub 实现 hugs 表（含主键冲突 23505、RLS 只删自己、读 user_id 报 42501）与 `post_hugs` 视图；run_tests 新增 18 个 M5 用例；static_checks 新增 R65 十二条。
-  - **工程基线**：static_checks **1229/0**、run_tests **1092/0**。
+  - **工程基线**：static_checks **1230/0**、run_tests **1092/0**。
+  - **实测修正（同日）**：线上真机验证发现「直删 hugs 表」会返回 204 却删 0 行
+    （列级 `select (post_id)` 与 RLS 策略引用 `user_id` 的组合导致匹配不到行）。
+    改为 `unhug(p_post_id)` definer 函数承担唯一删除通道，并把 `hugs` 的读权限
+    整表撤销（连 `post_id` 也不再开）。前端 `toggleHug` 的取消分支改调 RPC。
+    重跑 `docs/supabase-hugs.sql` 即生效。
   - **待办（站主）**：执行 `docs/supabase-hugs.sql`（幂等）。执行前点抱抱只会提示「抱抱功能还没开启」，不影响点赞 / 评论 / 阅读。
 
 
