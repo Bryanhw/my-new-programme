@@ -3599,6 +3599,42 @@ check("R60/profile.js 洞号信收件箱与 DM 未读也走 RPC（无裸表 sele
       "profile.js uses list_my_drift_letters/list_rooms")
 
 
+print("- R63: V5-M3 评论 @（互关前提）+ 站内提醒")
+_m3sql = read(os.path.join(ROOT, "docs/supabase-mentions.sql"))
+_m3app = sources["app.js"]
+_m3pro = sources["profile.js"]
+_m3css = read(os.path.join(ROOT, "assets/css/style.css"))
+_m3html = read(os.path.join(ROOT, "profile.html"))
+check("R63: 迁移建 mention_uid + notifications + 三个 RPC",
+      "add column if not exists mention_uid" in _m3sql
+      and "create table if not exists public.notifications" in _m3sql
+      and "function public.guard_comment_mention" in _m3sql
+      and "function public.notify_comment_mention" in _m3sql
+      and "function public.my_mutual_follows" in _m3sql
+      and "function public.my_notifications" in _m3sql
+      and "function public.mark_notifications_read" in _m3sql,
+      "see docs/supabase-mentions.sql")
+check("R63: 互相关注是硬校验（两条 follows 边都在才放行）",
+      _m3sql.count("from public.follows") >= 2
+      and "\u53ea\u6709\u4e92\u76f8\u5173\u6ce8\u7684\u4eba\u624d\u80fd\u4e92\u76f8 @" in _m3sql,
+      "guard_comment_mention must check both directions")
+check("R63: 提醒只读、写只经触发器/RPC（不授权 insert/update/delete）",
+      re.search(r"grant\s+(insert|update|delete)[^;]*notifications", _m3sql) is None
+      and "grant select on public.notifications to authenticated" in _m3sql)
+check("R63: 只有 approved 且带 mention 的评论才产生提醒",
+      "new.mention_uid is null or new.status <> 'approved'" in _m3sql)
+check("R63: 前端 @ 候选只来自 my_mutual_follows，提交带 mention_uid",
+      "my_mutual_follows" in _m3app
+      and "mention_uid: mentionUid || null" in _m3app
+      and "data-comment-at" in _m3app,
+      "see assets/js/app.js")
+check("R63: 我的页有提醒区，读写都走 RPC",
+      'id="notice-card"' in _m3html
+      and "my_notifications" in _m3pro
+      and "mark_notifications_read" in _m3pro,
+      "see profile.html / profile.js")
+check("R63: @ 高亮与提醒样式存在",
+      ".comment-at {" in _m3css and ".notice-item {" in _m3css)
 print("- R61: 我的页私信入口 / 未读角标 / 仅互相关注开关")
 _pro61 = read(os.path.join(ROOT, "assets/js/profile.js"))
 _html61 = read(os.path.join(ROOT, "profile.html"))

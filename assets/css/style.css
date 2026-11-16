@@ -2239,6 +2239,50 @@ body.modal-open { overflow: hidden; }
   padding: 0;
 }
 
+/* V5-M3：评论 @ —— 已选提示条 / 候选行 / 正文里的 @ 高亮 */
+.comment-at-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  background: var(--brand-ghost);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+.comment-at-chip strong { color: var(--brand-text); }
+.comment-at-chip .link-plain {
+  margin-left: auto;
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+.comment-at-btn {
+  flex: none;
+  padding: 0;
+  font-size: var(--fs-sm);
+  color: var(--brand-text);
+}
+.comment-at-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.comment-at-note {
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.comment-at {
+  color: var(--brand-text);
+  text-decoration: none;
+  border-bottom: 1px dashed currentColor;
+}
+
 .comment-input {
   width: 100%;
   border: 1.5px solid var(--line);
@@ -3245,6 +3289,42 @@ body.modal-open { overflow: hidden; }
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+
+/* V5-M3 站内提醒：谁在评论里 @ 了我（只有本人能读） */
+.notice-item {
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.notice-item:last-child { border-bottom: 0; }
+.notice-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.notice-item-top strong { color: var(--ink); }
+.notice-item-top span {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+}
+.notice-item-body {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+  text-decoration: none;
+  word-break: break-word;
+}
+.notice-item.is-unread .notice-item-top::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand-strong);
+  flex: none;
+}
+.notice-item.is-unread .notice-item-body { font-weight: 600; }
 
 /* 洞号信收件箱：每封信一张小卡片，洞号名「洞号 xxxxxx」 */
 .drift-letter {

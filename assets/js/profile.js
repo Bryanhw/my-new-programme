@@ -33,6 +33,9 @@
   var dmUnread    = document.getElementById("dm-unread");
   var dmSetting   = document.getElementById("dm-setting");
   var dmMutual    = document.getElementById("dm-mutual-toggle");
+  var noticeCard  = document.getElementById("notice-card");
+  var noticeList  = document.getElementById("notice-list");
+  var noticeReadAll = document.getElementById("notice-read-all");
   var driftCard   = document.getElementById("drift-card");
   var driftEl     = document.getElementById("drift-list");
 
@@ -387,6 +390,7 @@
       loadMyReports();
       loadSecurity();
       paintDmUnread();
+      loadNotifications();
       loadDriftLetters();
 
       // F2：收藏只存本机，数字立刻就能显示；地址里带 #saves / #comments 就直接停在那格
@@ -763,6 +767,54 @@
         C.toast("没改成，稍后再试");
       });
     };
+  }
+
+  /* 站内提醒（V5-M3）：别人在评论里 @ 我。只有本人能读到，读不到就整块藏起来。 */
+  function loadNotifications() {
+    if (!noticeCard || !noticeList) return;
+    if (!currentUser || currentIsAnon) { noticeCard.classList.add("hidden"); return; }
+    C.client().rpc("my_notifications", { p_limit: 20 }).then(function (res) {
+      var rows = (res && !res.error && res.data) || [];
+      if (!rows.length) {
+        noticeCard.classList.add("hidden");
+        return;
+      }
+      noticeCard.classList.remove("hidden");
+      noticeList.innerHTML = rows.map(renderNotification).join("");
+      var unread = rows.filter(function (r) { return !r.read_at; }).length;
+      if (noticeReadAll) noticeReadAll.hidden = !unread;
+    }).catch(function () {
+      // 数据层还没迁 M3 时不打扰：安静藏起来，别把整页拖红
+      noticeCard.classList.add("hidden");
+    });
+
+    if (noticeReadAll) {
+      noticeReadAll.onclick = function () {
+        noticeReadAll.disabled = true;
+        C.client().rpc("mark_notifications_read").then(function () {
+          noticeReadAll.disabled = false;
+          loadNotifications();
+        }).catch(function () {
+          noticeReadAll.disabled = false;
+        });
+      };
+    }
+  }
+
+  function renderNotification(n) {
+    var who = n.from_nick || "一位同学";
+    var body = String(n.body || "");
+    var href = n.post_id
+      ? ("post.html?id=" + encodeURIComponent(String(n.post_id)) + "&r=" + Date.now())
+      : "feed.html";
+    return '<div class="notice-item' + (n.read_at ? "" : " is-unread") + '">' +
+      '<div class="notice-item-top">' +
+        "<strong>" + C.escapeHtml(who) + "</strong> 在评论里 @ 了你" +
+        "<span>" + C.escapeHtml(C.timeAgo(n.created_at || "")) + "</span>" +
+      "</div>" +
+      '<a class="notice-item-body" href="' + C.escapeHtml(href) + '">' +
+        (body ? C.escapeHtml(body) : "点开看看这条评论") + "</a>" +
+      "</div>";
   }
 
   /* 写给「我的洞号」的信：任何人（匿名访客也行）都可以在匿名帖上留话给这个号 */

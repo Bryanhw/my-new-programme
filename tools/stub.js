@@ -694,10 +694,53 @@ function __resolveQuery(st, store, uid, clientOpts) {
       if (!ctrim || ctrim.length > 300) {
         return { data: null, error: { code: '23514', message: 'violates check constraint "comments_content_check"' } };
       }
+      /* V5-M3：mention_uid 只有互相关注才放行（对齐 docs/supabase-mentions.sql 的触发器） */
+      if (row.mention_uid != null && String(row.mention_uid) !== '') {
+        var mMention = String(row.mention_uid).toLowerCase();
+        var mMe = uid ? __publicUidOf(store, uid) : null;
+        if (!mMe) {
+          return { data: null, error: { code: 'P0001', message: '匿名身份不能 @ 别人' } };
+        }
+        if (mMention === mMe) {
+          return { data: null, error: { code: 'P0001', message: '不能 @ 自己' } };
+        }
+        var mTargetFound = false;
+        for (var mpi0 = 0; mpi0 < store.profiles.length; mpi0++) {
+          if (store.profiles[mpi0].public_uid === mMention) { mTargetFound = true; break; }
+        }
+        if (!mTargetFound) {
+          return { data: null, error: { code: 'P0001', message: '没有这个 @ 对象' } };
+        }
+        var mEdge1 = false, mEdge2 = false;
+        for (var mfi = 0; mfi < (store.follows || []).length; mfi++) {
+          var fe = store.follows[mfi];
+          if (fe.follower_uid === mMe && fe.followee_uid === mMention) mEdge1 = true;
+          if (fe.follower_uid === mMention && fe.followee_uid === mMe) mEdge2 = true;
+        }
+        if (!mEdge1 || !mEdge2) {
+          return { data: null, error: { code: 'P0001', message: '只有互相关注的人才能互相 @' } };
+        }
+        row.mention_uid = mMention;
+      } else {
+        row.mention_uid = null;
+      }
+
       if (!row.id) row.id = 'c-' + (store.comments.length + 1);
       if (!row.created_at) row.created_at = new Date().toISOString();
       if (!row.status) row.status = 'approved';
       store.comments.push(row);
+      if (row.mention_uid && row.status === 'approved') {
+        store.notifications = store.notifications || [];
+        store.notifications.push({
+          id: 'n-' + (store.notifications.length + 1),
+          user_uid: row.mention_uid,
+          type: 'mention',
+          ref_id: row.id,
+          body: String(row.content || '').slice(0, 60),
+          read_at: null,
+          created_at: new Date().toISOString()
+        });
+      }
       __calls.push(['insert', st.table]);
       return { data: null, error: null };   /* 前端不带 .select()：真实接口没有回显 */
     }
@@ -1304,6 +1347,59 @@ function __makeClient(opts) {
         }
         return P.resolve({ data: null, error: null });
       }
+      /* ---------- V5-M3 评论 @：互关候选 + 站内提醒 ---------- */
+      if (name === 'my_mutual_follows') {
+        var mfMe = __myPublicUid();
+        var mfOut = [];
+        if (mfMe) {
+          for (var mfi2 = 0; mfi2 < (store.follows || []).length; mfi2++) {
+            var mfe = store.follows[mfi2];
+            if (mfe.follower_uid !== mfMe) continue;
+            if (!__followsEdge(mfe.followee_uid, mfMe)) continue;
+            var mfp = null;
+            for (var mpi = 0; mpi < store.profiles.length; mpi++) {
+              if (store.profiles[mpi].public_uid === mfe.followee_uid) { mfp = store.profiles[mpi]; break; }
+            }
+            if (mfp) mfOut.push({ public_uid: mfp.public_uid, nickname: mfp.nickname || '\u4e00\u4f4d\u540c\u5b66' });
+          }
+        }
+        return P.resolve({ data: mfOut, error: null });
+      }
+      if (name === 'my_notifications') {
+        var mnMe = __myPublicUid();
+        var mnOut = [];
+        if (mnMe) {
+          for (var mni = (store.notifications || []).length - 1; mni >= 0; mni--) {
+            var mnn = store.notifications[mni];
+            if (mnn.user_uid !== mnMe) continue;
+            var mnc = null;
+            for (var mci = 0; mci < (store.comments || []).length; mci++) {
+              if (store.comments[mci].id === mnn.ref_id) { mnc = store.comments[mci]; break; }
+            }
+            mnOut.push({
+              id: mnn.id, type: mnn.type, ref_id: mnn.ref_id, body: mnn.body,
+              post_id: mnc ? mnc.post_id : null,
+              from_nick: mnc ? (mnc.display_name || '\u4e00\u4f4d\u540c\u5b66') : '\u4e00\u4f4d\u540c\u5b66',
+              read_at: mnn.read_at || null, created_at: mnn.created_at
+            });
+          }
+        }
+        return P.resolve({ data: mnOut, error: null });
+      }
+      if (name === 'mark_notifications_read') {
+        var mrMe = __myPublicUid();
+        var mrCount = 0;
+        if (mrMe) {
+          for (var mri = 0; mri < (store.notifications || []).length; mri++) {
+            if (store.notifications[mri].user_uid === mrMe && !store.notifications[mri].read_at) {
+              store.notifications[mri].read_at = new Date().toISOString();
+              mrCount++;
+            }
+          }
+        }
+        return P.resolve({ data: mrCount, error: null });
+      }
+
       if (name === 'send_drift_letter') {
         var gargs = arguments[1] || {};
         var gTo = String(gargs.p_to_anon == null ? '' : gargs.p_to_anon);

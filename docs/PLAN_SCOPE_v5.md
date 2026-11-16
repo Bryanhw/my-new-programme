@@ -1,9 +1,9 @@
 # PLAN_SCOPE_v5.md · 「校园拾光」V5 版本范围规划
 
-> 文档状态：**v0.10** · 2026-11-11（M0/M1 已上线；P1 决策点 §13.3/13.4/13.5 已拍板：私信默认开放+可选开关、匿名不关注不私信、听歌白名单网易云/QQ/B 站；进入 M2 V5-1 私信设计）
+> 文档状态：**v0.11** · 2026-11-16（M0/M1 已上线；V5-1 私信全链路收口；M3 评论 @ + 站内提醒已写完，待站主执行 `docs/supabase-mentions.sql`）
 > 配套阅读：`PROJECT_SCOPE.md`（范围与边界）、`PLAN_phase1.md` / `PLAN_phase2.md`（阶段计划与验收）、`PLAN_SCOPE_v4.md`（V4 范围与轮次记录）
 > 线上站点：https://bryanhw.github.io/my-new-programme/
-> 工程基线（V5 M1 收官，第 60 轮）：`tools/static_checks.py` **1133/0**、`tools/run_tests.py` **950/0**、`tools/privacy_probe.py` **32/0**（5-8 段需 `E2E_PASSWORD`）；CI 见 `.github/workflows/ci.yml`
+> 工程基线（第 64 轮）：`tools/static_checks.py` **1193/0**、`tools/run_tests.py` **1028/0**、`tools/privacy_probe.py` **32/0**（5-8 段需 `E2E_PASSWORD`）；CI 见 `.github/workflows/ci.yml`
 
 ## 0. 一句话
 
@@ -297,5 +297,13 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
   - **文档收口**：README 关注按钮描述、M0 设计文档上线标记同步为已上线；工程基线更新至 §1。
   - **后续（站主拍板）**：P1 决策点 §13.3/§13.4/§13.5 待确认 → 进入 M2 V5-1 私信。
 - **2026-11-11 · P1 决策点拍板（v0.9 → v0.10）**：站主一次确认三件事——§13.3 私信**默认开放**（不要求互关注即可私信），并提供「仅互相关注可私信」个人开关备选；§13.4 **匿名身份不关注也不私信**，洞号只收「写给那个洞号」的双向匿名信（守匿名红线）；§13.5 一起听歌白名单=**网易云 / QQ 音乐 / B 站**（不含 YouTube）。全部已回写 §13。进入 **M2 V5-1 私信**：开启 `docs/V5-M2-direct-message-design.md`。
+- **2026-11-16 · 第 63 轮：公开主页「永远加载中」真凶**（线上故障修复，非新里程碑）：点卡片 `@UID` 进 `profile.html` 一直停在「正在读取…」。根因是 `from("public_profiles").eq(...)` **漏了 `.select()`**——真实 supabase-js 的 `from()` 只返回 QueryBuilder，`.eq` 不存在，第一行就抛 `TypeError`，请求根本没发出，所以超时/重试/失败态全都不触发。修 `public_profiles` 与 `author_posts_public` 两处查询；**把测试桩改成与真实 SDK 同样严格**（`from()` 未 `select` 就调 `.eq` 直接抛错，此前 stub 太宽容掩盖了这个 bug），并加静态检查禁止该写法。回归 1182/1013 全绿后逐字节发版。
+- **2026-11-16 · 第 64 轮：V5-1 私信收口 + V5-M3 评论 @（v0.10 → v0.11）**：
+  - **M2 收口**：「我的」页新增「仅互相关注可私信」开关（状态读本人行、写只走 `set_dm_setting` RPC）；补 `.dm-unread[hidden]` 兜底（`inline-flex` 会顶掉默认 `[hidden]`）；新增 R61 四条护栏 + 4 个 UI 用例。
+  - **M3 数据层** `docs/supabase-mentions.sql`：`comments.mention_uid` + `notifications` 表（只授 select）+ `guard_comment_mention`（写入前校验**双方关注边都在**、拒匿名、拒 @ 自己/不存在）+ `notify_comment_mention`（写入后只给被 @ 的人插一条）+ RPC `my_mutual_follows` / `my_notifications` / `mark_notifications_read`。
+  - **M3 前端**：评论框「@ 提到互关的人」→ 候选只来自 `my_mutual_follows`，选中插入 `@uid` 并随提交带 `mention_uid`；正文里 `@uid` 渲染成可点主页链接；「我的」页新增 🔔 提醒区（未读圆点 + 一键已读）。
+  - **测试**：stub 同步 mention 触发器语义与三个 RPC；run_tests 新增 11 个 M3 用例（互关放行/单向拒/自 @ 拒/不存在拒/匿名拒/通知归属/已读计数/@ 渲染转义）；static_checks 新增 R63 七条。
+  - **工程基线**：static_checks **1193/0**、run_tests **1028/0**。
+  - **待办（站主）**：在 Supabase SQL Editor 执行 `docs/supabase-mentions.sql`（幂等），@ 与提醒即全链路生效；执行前前端安静降级（候选为空、提醒区隐藏），发评论不受影响。
 
 

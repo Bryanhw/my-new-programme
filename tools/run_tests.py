@@ -4412,6 +4412,100 @@ check("the stored drift letter keeps no account identity (only to_anon/body/time
 
 print()
 print("=" * 70)
+print()
+print("=" * 70)
+print("SCENARIO: V5-M3 comment @ (mutual follows only) + notifications")
+print("=" * 70)
+
+M3_SEED = r"""
+(function () {
+  var st = __mockOpts.store;
+  for (var i = 0; i < st.profiles.length; i++) {
+    if (st.profiles[i].id === 'u-1') { st.profiles[i].public_uid = 'abc123'; }
+  }
+  var has = {};
+  for (var j = 0; j < st.profiles.length; j++) has[st.profiles[j].id] = true;
+  if (!has['u-9']) st.profiles.push({ id: 'u-9', phone: null, school: 'Other U',
+    nickname: 'Grace', public_uid: 'xyz789', created_at: '2026-10-01T00:00:00.000Z' });
+  if (!has['u-8']) st.profiles.push({ id: 'u-8', phone: null, school: 'Other U',
+    nickname: 'Hank', public_uid: 'kwm437', created_at: '2026-10-01T00:00:00.000Z' });
+  st.follows = [
+    { follower_uid: 'abc123', followee_uid: 'xyz789', created_at: '2026-10-02T00:00:00.000Z' },
+    { follower_uid: 'xyz789', followee_uid: 'abc123', created_at: '2026-10-02T00:00:00.000Z' },
+    { follower_uid: 'abc123', followee_uid: 'kwm437', created_at: '2026-10-02T00:00:00.000Z' }
+  ];
+  st.notifications = [];
+  return true;
+})()
+"""
+
+it = load("feed.html", "mock-logged")
+ev(it, M3_SEED)
+js(it, "__mm = {}; Campus.client().rpc('my_mutual_follows').then(function (r) { __mm.d = r.data; });")
+_mm = js(it, "__mm.d") or []
+check("M3: @ candidates are mutual follows only",
+      [x["public_uid"] for x in _mm] == ["xyz789"], _mm)
+
+js(it, "__am = {}; Campus.addComment('p-1', 'hi @xyz789', null, 'xyz789')"
+       ".then(function () { __am.ok = 1; }).catch(function (e) { __am.err = e.message; });")
+ev(it, "__drain();")
+check("M3: mentioning a mutual follow is accepted", js(it, "__am.ok") == 1, js(it, "__am.err"))
+_notif = js(it, "__mockOpts.store.notifications") or []
+check("M3: the mention produces one notification for the recipient",
+      len(_notif) == 1 and _notif[0]["user_uid"] == "xyz789" and _notif[0]["type"] == "mention", _notif)
+
+js(it, "__a2 = {}; Campus.addComment('p-1', 'hi @kwm437', null, 'kwm437')"
+       ".then(function () { __a2.ok = 1; }).catch(function (e) { __a2.err = e.message; });")
+ev(it, "__drain();")
+_e2 = js(it, "__a2.err") or ""
+check("M3: mentioning a one-way follow is rejected",
+      js(it, "__a2.ok") is None and "\u4e92\u76f8\u5173\u6ce8" in _e2, _e2)
+
+js(it, "__a3 = {}; Campus.addComment('p-1', 'hi @abc123', null, 'abc123')"
+       ".then(function () { __a3.ok = 1; }).catch(function (e) { __a3.err = e.message; });")
+ev(it, "__drain();")
+_e3 = js(it, "__a3.err") or ""
+check("M3: mentioning yourself is rejected",
+      js(it, "__a3.ok") is None and "\u4e0d\u80fd @ \u81ea\u5df1" in _e3, _e3)
+
+js(it, "__a4 = {}; Campus.addComment('p-1', 'hi @zzz999', null, 'zzz999')"
+       ".then(function () { __a4.ok = 1; }).catch(function (e) { __a4.err = e.message; });")
+ev(it, "__drain();")
+check("M3: mentioning an unknown uid is rejected", js(it, "__a4.ok") is None, js(it, "__a4.err"))
+
+it = load("feed.html", "mock-anon")
+ev(it, M3_SEED)
+js(it, "__a5 = {}; Campus.addComment('p-1', 'hi @xyz789', null, 'xyz789')"
+       ".then(function () { __a5.ok = 1; }).catch(function (e) { __a5.err = e.message; });")
+ev(it, "__drain();")
+_e5 = js(it, "__a5.err") or ""
+check("M3: an anonymous session cannot @ anyone",
+      js(it, "__a5.ok") is None and "\u533f\u540d" in _e5, _e5)
+
+print("- M3: notifications only reach their owner")
+it = load("feed.html", "mock-logged")
+ev(it, M3_SEED)
+js(it, "__mockOpts.store.notifications.push({ id: 'n-a', user_uid: 'abc123', type: 'mention',"
+       " ref_id: null, body: 'mine', read_at: null, created_at: '2026-10-05T00:00:00.000Z' });")
+js(it, "__mockOpts.store.notifications.push({ id: 'n-b', user_uid: 'xyz789', type: 'mention',"
+       " ref_id: null, body: 'theirs', read_at: null, created_at: '2026-10-05T00:00:00.000Z' });")
+js(it, "__nl = {}; Campus.client().rpc('my_notifications', { p_limit: 20 })"
+       ".then(function (r) { __nl.d = r.data; });")
+_nl = js(it, "__nl.d") or []
+check("M3: my_notifications returns only my rows",
+      len(_nl) == 1 and _nl[0]["body"] == "mine", _nl)
+js(it, "__mr = {}; Campus.client().rpc('mark_notifications_read')"
+       ".then(function (r) { __mr.d = r.data; });")
+check("M3: marking read touches exactly my unread row",
+      js(it, "__mr.d") == 1, js(it, "__mr.d"))
+
+print("- M3: @uid in a comment body becomes a link")
+_rt = js(it, "Campus.renderCommentText('nice one @xyz789')")
+check("M3: an @uid is rendered as a profile link",
+      'class="comment-at"' in _rt and "profile.html?uid=xyz789" in _rt, _rt)
+_rt2 = js(it, "Campus.renderCommentText('<img src=x onerror=alert(1)> @xyz789')")
+check("M3: comment text is still escaped around the @",
+      "&lt;img" in _rt2 and "<img" not in _rt2, _rt2)
 print("SCENARIO: 公开主页 profile.html?uid= —— 第 62 轮「卡在加载中」修复")
 print("=" * 70)
 

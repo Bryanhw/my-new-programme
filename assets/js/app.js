@@ -1509,6 +1509,25 @@ window.Campus = (function () {
       if (dZone) removeComment(dZone.getAttribute("data-comment-zone"), delBtn.getAttribute("data-comment-del"));
       return;
     }
+
+    /* M3：@ 候选的打开 / 选人 / 取消 */
+    var atBtn = el.closest("[data-comment-at]");
+    if (atBtn) {
+      toggleCommentAtPicker(atBtn.getAttribute("data-comment-at"));
+      return;
+    }
+
+    var atPick = el.closest("[data-comment-pick]");
+    if (atPick) {
+      pickCommentMention(atPick.getAttribute("data-comment-pick"), atPick.getAttribute("data-uid"));
+      return;
+    }
+
+    var atClear = el.closest("[data-comment-at-clear]");
+    if (atClear) {
+      clearCommentMention(atClear.getAttribute("data-comment-at-clear"));
+      return;
+    }
   });
 
   /* F1：点菜单外面 / 按 Esc 就把「⋯」收起来 —— 菜单开着的时候不该赖着不走。
@@ -1753,12 +1772,13 @@ window.Campus = (function () {
   }
 
   /**
-   * 发布评论 / 回复
+   * 发表评论 / 回复
    * @param {string} postId   帖子 id
    * @param {string} content  评论内容（最多 300 字）
-   * @param {string} [parentId] 回复的顶层评论 id；不填就是顶层评论
+   * @param {string} [parentId] 回复的顶层评论 id，不传就是顶层评论
+   * @param {string} [mentionUid] @ 的公开 UID（可选；服务端校验互相关注）
    */
-  function addComment(postId, content, parentId) {
+  function addComment(postId, content, parentId, mentionUid) {
     if (!client) return Promise.reject(new Error(configError));
     if (!postId) return Promise.reject(new Error("没找到要评论的帖子，刷新一下再试"));
 
@@ -1778,12 +1798,16 @@ window.Campus = (function () {
           display_name: buildDisplayName(profile, id),
           school: (profile && profile.school) || null,
           content: text,
-          status: "approved"
+          status: "approved",
+          mention_uid: mentionUid || null
         }).then(function (res) {
           if (!res.error) return { parentId: parentId || null };
 
           var msg = String(res.error.message || "");
           if (/父评论/.test(msg)) throw new Error("这条评论刚刚被下架了，换一条回复吧");
+          if (/互相关注/.test(msg)) throw new Error("只能 @ 和你互相关注的人");
+          if (/不能 @ 自己/.test(msg)) throw new Error("不能 @ 自己");
+          if (/没有这个 @ 对象/.test(msg)) throw new Error("没有找到这个 @ 对象");
           // 23514 check constraint：前端已兜 1~300+非空，真触发说明是
           // 旧缓存前端 / 直接写库等非常规路径 —— 不把 PostgREST 的英文
           // 报错原样甩给用户，转成人话。
@@ -1821,7 +1845,8 @@ window.Campus = (function () {
   function commentState(postId) {
     var st = commentZoneState[postId];
     if (!st) {
-      st = { open: false, loaded: false, loading: false, sending: false, comments: [], replyTo: null, draft: "" };
+      st = { open: false, loaded: false, loading: false, sending: false, comments: [], replyTo: null, draft: "",
+             mentionUid: null, atOpen: false, atLoading: false };
       commentZoneState[postId] = st;
     }
     return st;
@@ -1869,6 +1894,14 @@ window.Campus = (function () {
     return "ta";
   }
 
+  /** 评论正文：@公开UID 渲染成可点链接。匿名评论不会被服务端放行 @，
+   *  所以这里只需按形态高亮，不会把任何匿名身份牵出来。 */
+  function renderCommentText(text) {
+    return escapeHtml(text).replace(/@([a-z0-9]{4,16})\b/g, function (m, uid) {
+      return '<a class="comment-at" href="profile.html?uid=' + uid + '&r=' + Date.now() + '">@' + uid + "</a>";
+    });
+  }
+
   /** 一条评论（isReply = 缩进的回复）；已软删的渲染「评论已删除」占位（不含身份/操作） */
   function renderCommentItem(c, isReply) {
     if (c.is_deleted) {
@@ -1886,7 +1919,7 @@ window.Campus = (function () {
     html += '<span class="comment-time">' + escapeHtml(timeAgo(c.created_at)) + "</span>";
     html += "</div>";
 
-    html += '<div class="comment-body">' + escapeHtml(c.content) + "</div>";
+    html += '<div class="comment-body">' + renderCommentText(c.content) + "</div>";
 
     html += '<div class="comment-actions">';
     html += '<button class="link-plain" type="button" data-comment-reply="' + escapeHtml(c.id) + '">回复</button>';
@@ -1907,16 +1940,43 @@ window.Campus = (function () {
         '<button class="link-plain" type="button" data-comment-cancel="' + escapeHtml(postId) + '">取消</button></div>';
     }
 
+    if (st.mentionUid) {
+      html += '<div class="comment-at-chip">已 @ <strong>' + escapeHtml(st.mentionUid) + "</strong>" +
+        '<button class="link-plain" type="button" data-comment-at-clear="' + escapeHtml(postId) + '">取消</button></div>';
+    }
+
     html += '<textarea class="comment-input" rows="2" maxlength="' + COMMENT_MAX + '"' +
       ' data-comment-input="' + escapeHtml(postId) + '"' +
       ' placeholder="' + (st.replyTo ? "回复 ta…（最多 " + COMMENT_MAX + " 字）" : "友善地说点什么…（最多 " + COMMENT_MAX + " 字）") + '">' +
       escapeHtml(st.draft || "") + "</textarea>";
 
     html += '<div class="comment-form-foot">';
+    html += '<button class="link-plain comment-at-btn" type="button" data-comment-at="' +
+      escapeHtml(postId) + '">@ 提到互关的人</button>';
     html += '<span class="comment-hint" data-comment-hint="' + escapeHtml(postId) + '" hidden></span>';
     html += '<button class="btn btn-primary btn-sm" type="button" data-comment-send="' + escapeHtml(postId) + '">' +
       (st.replyTo ? "回复" : "发布") + "</button>";
-    html += "</div></div>";
+    html += "</div>";
+
+    /* @ 候选：只列「和我互相关注」的人，选中后插入 @uid —— 前提在挑选阶段就成立 */
+    if (st.atOpen) {
+      html += '<div class="comment-at-bar">';
+      if (st.atLoading) {
+        html += '<span class="comment-at-note">正在找和你互相关注的人…</span>';
+      } else if (!st.atList || !st.atList.length) {
+        html += '<span class="comment-at-note">还没有互相关注的人。你们两个都关注之后，就能互相 @ 了。</span>';
+      } else {
+        st.atList.forEach(function (u) {
+          var uid = String(u.public_uid || "");
+          html += '<button class="chip comment-at-pick" type="button" data-comment-pick="' +
+            escapeHtml(postId) + '" data-uid="' + escapeHtml(uid) + '">@' +
+            escapeHtml(u.nickname || uid) + "</button>";
+        });
+      }
+      html += "</div>";
+    }
+
+    html += "</div>";
     return html;
   }
 
@@ -2047,6 +2107,60 @@ window.Campus = (function () {
     });
   }
 
+  /* ---- M3：评论里 @ 互相关注的人（候选只来自 my_mutual_follows） ---- */
+  var mutualFollowsCache = null;   // 一次页面会话缓存一份，候选是可选集合而已
+
+  function loadMutualFollows() {
+    if (mutualFollowsCache) return Promise.resolve(mutualFollowsCache);
+    if (!client) return Promise.resolve([]);
+    return client.rpc("my_mutual_follows").then(function (res) {
+      mutualFollowsCache = (res && !res.error && res.data) || [];
+      return mutualFollowsCache;
+    }).catch(function () {
+      mutualFollowsCache = [];
+      return mutualFollowsCache;
+    });
+  }
+
+  function toggleCommentAtPicker(postId) {
+    var st = commentState(postId);
+    if (st.atOpen) {
+      st.atOpen = false;
+      renderCommentFormOnly(postId);
+      return;
+    }
+    st.atOpen = true;
+    st.atLoading = true;
+    renderCommentFormOnly(postId);
+    loadMutualFollows().then(function (list) {
+      st.atLoading = false;
+      st.atList = list;
+      renderCommentFormOnly(postId);
+    });
+  }
+
+  function pickCommentMention(postId, uid) {
+    var st = commentState(postId);
+    var clean = String(uid || "");
+    if (!clean) return;
+    st.mentionUid = clean;
+    st.atOpen = false;
+    // 正文里没有这个 @ 就补到末尾（用户可能已经手打了一半）
+    if (String(st.draft || "").indexOf("@" + clean) < 0) {
+      var head = String(st.draft || "").replace(/\s+$/, "");
+      st.draft = (head ? head + " " : "") + "@" + clean + " ";
+    }
+    renderCommentFormOnly(postId);
+    focusCommentInput(postId);
+  }
+
+  function clearCommentMention(postId) {
+    var st = commentState(postId);
+    st.mentionUid = null;
+    st.atOpen = false;
+    renderCommentFormOnly(postId);
+  }
+
   function sendComment(postId) {
     var st = commentState(postId);
     if (st.sending) return;
@@ -2060,10 +2174,15 @@ window.Campus = (function () {
     st.sending = true;
     setCommentSending(postId, true);
 
-    addComment(postId, text, st.replyTo).then(function () {
+    /* @ 只在正文里确实还留着 @uid 时才带上；用户把 @ 删了就不该凭空提醒别人 */
+    var mention = (st.mentionUid && text.indexOf("@" + st.mentionUid) >= 0) ? st.mentionUid : null;
+
+    addComment(postId, text, st.replyTo, mention).then(function () {
       st.sending = false;
       st.draft = "";
       st.replyTo = null;
+      st.mentionUid = null;
+      st.atOpen = false;
       return refreshCommentZone(postId).then(function () {
         focusCommentInput(postId);
       });
@@ -3628,6 +3747,7 @@ window.Campus = (function () {
     listComments: listComments,
     addComment: addComment,
     deleteComment: deleteComment,
+    renderCommentText: renderCommentText,
     COMMENT_MAX: COMMENT_MAX,
     buildDisplayName: buildDisplayName,
 

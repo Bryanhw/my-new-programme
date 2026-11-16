@@ -379,8 +379,25 @@ window.CAMPUS_CONFIG = {
 - RPC 全部 `security definer` 服务端把关：公开账号才能发信/写信、不能发给自己、目标须存在、
   内容 1–500 字、`mutual` 开关要互相关注、洞号须真实存在、举报只放行收到的一方。
 - 匿名会话对私信/洞号信三条通道全部拒绝；匿名帖的主人只在**自己的洞号**收到匿名信。
-- ⏳ 本功能的数据层已于 2026-11-11（第 61 轮）写完并通过全部回归，待站主把迁移在
-  Supabase SQL Editor 执行后逐字节发版。
+- ✅ 迁移已在站主 Supabase 执行（线上 `list_rooms` 可返回），第 62–64 轮补了「我的」页
+  未读角标、卡片直发私信入口与「仅互相关注可私信」开关，私信链路已可用。
+
+### 评论区 @（需互相关注）+ 站内提醒（P3 / M3）
+
+评论里只能 @ **和你互相关注**的人；被 @ 的人会在「我的 → 🔔 提醒」里看到一条站内提醒。
+数据层在 `docs/supabase-mentions.sql`（幂等，可重复执行）：
+
+- `comments.mention_uid` 记录这条评论 @ 了谁（公开 UID，可空）；形态与公开 UID 一致。
+- `guard_comment_mention` 触发器在**写入前**硬校验：匿名会话不能 @、不能 @ 自己、
+  目标必须存在、**双方关注边必须都在**（只单向关注会被拒）；前端绕不过去。
+- `notify_comment_mention` 触发器在**写入后**只给被 @ 的人插一条 `notifications`；
+  `notifications` 表只授 `select`，读写分开，写只经 definer 触发器 / RPC。
+- RPC：`my_mutual_follows()`（@ 候选，只返回互关）、`my_notifications(n)`（只返回本人）、
+  `mark_notifications_read()`（一键已读）。
+- 前端：评论框「@ 提到互关的人」→ 选人后正文插入 `@uid`，提交带 `mention_uid`；
+  正文里的 `@uid` 在评论中渲染成可点主页链接；匿名内容照旧不带任何公开 UID。
+- ⏳ 待站主在 Supabase SQL Editor 执行 `docs/supabase-mentions.sql` 后，@ 与提醒即全链路生效
+  （执行前前端会安静降级：候选为空、提醒区隐藏，不影响发评论）。
 
 ### 本地预览
 
