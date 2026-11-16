@@ -4128,7 +4128,7 @@ check("unfollowing removes the recorded edge",
 print("- M1: public_profiles only exposes uid/nickname/school, never phone, and no anon")
 it = load("feed.html", "mock-logged")
 ev(it, M1_SEED)
-js(it, "__r = {}; Campus.client().from('public_profiles').eq('public_uid','xyz789').maybeSingle()"
+js(it, "__r = {}; Campus.client().from('public_profiles').select('*').eq('public_uid','xyz789').maybeSingle()"
        ".then(function (r) { __r.p = r.data; });")
 _m1p = js(it, "__r.p")
 check("the public view carries nickname/school/uid",
@@ -4154,7 +4154,7 @@ check("an anonymous post never leaks its author uid",
       all(p.get("post_id") != "p-11" for p in _m1a), _m1a)
 check("an unapproved post never leaks its author uid",
       all(p.get("post_id") != "p-12" for p in _m1a), _m1a)
-js(it, "__r = {}; Campus.client().from('author_posts_public').eq('author_public_uid','abc123')"
+js(it, "__r = {}; Campus.client().from('author_posts_public').select('*').eq('author_public_uid','abc123')"
        ".then(function (r) { __r.b = r.data; });")
 _m1b = js(it, "__r.b") or []
 check("the author feed filters by public uid and only public posts",

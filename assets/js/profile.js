@@ -153,7 +153,7 @@
   /* 拉一次公开资料（带超时 + 可中断）。 */
   function loadPublicRow(uid) {
     var ctl = (typeof AbortController === "function") ? new AbortController() : null;
-    var q = C.client().from("public_profiles").eq("public_uid", uid);
+    var q = C.client().from("public_profiles").select("*").eq("public_uid", uid);
     if (ctl && typeof q.abortSignal === "function") q = q.abortSignal(ctl.signal);
     return withTimeout(q.maybeSingle(), PUBLIC_TIMEOUT_MS, "公开资料", ctl);
   }
@@ -260,7 +260,7 @@
           if (followBtn) followBtn.classList.add("hidden");
         });
 
-        C.client().from("author_posts_public").eq("author_public_uid", uid)
+        C.client().from("author_posts_public").select("*").eq("author_public_uid", uid)
           .order("created_at", { ascending: false })
           .then(function (ares) {
             var rows = (ares && ares.data) || [];

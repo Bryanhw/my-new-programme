@@ -3640,6 +3640,17 @@ check("R62b: 公开页失败前自动重试一次，且失败态带真实原因"
       "function retryOnce(" in _pro62 and "shortErr(err)" in _pro62)
 check("R62b: 公开页超时收紧到 6 秒（不再让人干等）",
       "PUBLIC_TIMEOUT_MS = 4000" in _pro62)
+# R63: supabase-js 的 from() 返回 QueryBuilder，没有 eq/order/maybeSingle；
+# 少了 select() 线上必崩（"from(...).eq is not a function"），stub 以前太宽容没抓到。
+_r63_bad = []
+for _f63 in sorted(os.listdir(JS_DIR)):
+    if not _f63.endswith(".js"):
+        continue
+    _src63 = read(os.path.join(JS_DIR, _f63))
+    for _m63 in re.finditer(r'\.from\("[a-z_]+"\)\s*\.(eq|order|limit|range|maybeSingle|single)\b', _src63):
+        _r63_bad.append("%s@%d" % (_f63, _src63[: _m63.start()].count(nl) + 1))
+check("R63: no .from(...).eq without .select() (real SDK has no eq on the query builder)",
+      not _r63_bad, ", ".join(_r63_bad))
 _sql62b = os.path.join(ROOT, "docs/supabase-comments-delete-fix.sql")
 check("R62b: 软删除补丁不再把 content 清成空串（这才是 comments_content_check 报错的根因）",
       os.path.exists(_sql62b)

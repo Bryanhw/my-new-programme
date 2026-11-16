@@ -866,6 +866,42 @@ function __failMode(tbl) {
   } catch (e) { return ''; }
 }
 
+/* 真实 supabase-js 的 from() 只给 PostgrestQueryBuilder：直接 .eq/.order/.maybeSingle
+   都是 "is not a function"。只有 select/insert/update/delete/upsert 之后才有这些方法。
+   stub 以前太宽容，所以 "from(...).eq(...)" 在测试里能过、线上必崩。现在照实模拟。 */
+function __strictFrom(builder) {
+  if (__mockOpts && __mockOpts.looseFrom) return builder;
+  var guarded = ['eq', 'order', 'limit', 'range', 'maybeSingle', 'single'];
+  var saved = {};
+  function lock() {
+    for (var i = 0; i < guarded.length; i++) {
+      (function (name) {
+        if (typeof builder[name] !== 'function' || saved[name]) return;
+        saved[name] = builder[name];
+        builder[name] = function () {
+          throw new TypeError('client.from(...).' + name + ' is not a function');
+        };
+      })(guarded[i]);
+    }
+  }
+  function unlock() {
+    for (var k in saved) builder[k] = saved[k];
+  }
+  lock();
+  var entries = ['select', 'insert', 'update', 'delete', 'upsert'];
+  for (var i = 0; i < entries.length; i++) {
+    (function (name) {
+      if (typeof builder[name] !== 'function') return;
+      var real = builder[name];
+      builder[name] = function () {
+        unlock();
+        return real.apply(builder, arguments);
+      };
+    })(entries[i]);
+  }
+  return builder;
+}
+
 function __q(table, store, clientOpts, getUid) {  var st = {
     table: table, op: null, payload: null, filters: [], select: null,
     orderCol: null, asc: true, limit: null, single: false, maybeSingle: false
@@ -1005,7 +1041,7 @@ function __makeClient(opts) {
         return { data: { subscription: { unsubscribe: function () {} } } };
       }
     },
-    from: function (table) { return __q(table, store, opts, sessionUid); },
+    from: function (table) { return __strictFrom(__q(table, store, opts, sessionUid)); },
     rpc: function (name) {
       __calls.push(['rpc', name]);
       if (opts.rpcMissing) {
