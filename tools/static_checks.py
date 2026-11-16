@@ -3696,7 +3696,10 @@ check("R65: 收回抱抱只走 unhug 这个 definer 通道",
       and "and user_id = v_uid" in _hgsql and "security definer" in _hgsql)
 check("R65: 前端只从视图拿计数，不直读表",
       'from("post_hugs")' in _hgjs and _hgjs.count('from("hugs")') == 1)
-check("R65: 卡片上的抱抱只有图标和数字",
+check("R65: 抱抱入口带看得见的字，且不依赖生僻 emoji",
+      '<span class="hug-label">\u62b1\u62b1</span>' in _hgjs
+      and "\U0001FAC2" not in _hgjs and "\U0001F917" in _hgjs)
+check("R65: 卡片上的抱抱带按钮与独立计数",
       'data-hug="' in _hgjs and "hug-count" in _hgjs
       and "抱抱一下（不公开是谁）" in _hgjs)
 check("R65: 晚到的计数就地补上，不重画整卡",

@@ -4854,10 +4854,14 @@ def _hug_seg(html, post_id):
 check("M5: 三张卡片都有抱抱按钮", _hh.count('data-hug="') == 3, _hh.count('data-hug="'))
 check("M5: 没抱过的帖子显示“两个人抱过”的计数（p-1 = 2）",
       'hug-count">2<' in _hug_seg(_hh, "p-1"), _hug_seg(_hh, "p-1"))
-check("M5: 我抱过的帖子是暖色 + \U0001F917", "hugged" in _hug_seg(_hh, "p-3")
-      and "\U0001F917" in _hug_seg(_hh, "p-3"), _hug_seg(_hh, "p-3"))
-check("M5: 没抱过的是 \U0001FAC2", "\U0001FAC2" in _hug_seg(_hh, "p-1"),
+check("M5: 抱过的帖子是暖色 + 💞",
+      "hugged" in _hug_seg(_hh, "p-3") and "\U0001F49E" in _hug_seg(_hh, "p-3")
+      and 'aria-pressed="true"' in _hug_seg(_hh, "p-3"), _hug_seg(_hh, "p-3"))
+check("M5: 没抱过的是 \U0001F917，且不再出现生僻 emoji",
+      "\U0001F917" in _hug_seg(_hh, "p-1") and "\U0001FAC2" not in _hh,
       _hug_seg(_hh, "p-1"))
+check("M5: 抱抱入口带看得见的字",
+      '<span class="hug-label">抱抱</span>' in _hug_seg(_hh, "p-1"))
 check("M5: 卡片上没有任何“谁抱的”痕迹", "u-9" not in _hh and "u-8" not in _hh)
 
 js(it, "__r = {}; Campus.toggleHug('p-2', false).then(function (v) { __r.v = v; }, function (e) { __r.err = String(e.message); });")

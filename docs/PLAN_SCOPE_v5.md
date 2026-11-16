@@ -318,7 +318,7 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
 - **2026-11-16 · 第 66 轮：V5-M5 匿名抱抱（v0.12 → v0.13）**：
   - **数据层** `docs/supabase-hugs.sql`：`hugs` 表（主键 `(post_id, user_id)`，天然幂等）+ 视图 `post_hugs`（只出 `post_id / hug_count / hugged_by_me`）。
   - **隐私**：`hugs` 的整表 select 对 anon / authenticated 撤销，只留取消时要用的 `post_id`；`user_id` 在接口层读不到（直接反查返回 42501）；写入由 RLS `auth.uid() = user_id` 兜住。视图是定义者语义（`security_invoker = false`），与 `post_likes` 同构。
-  - **前端** `app.js`：新增 `attachHugs`（读视图、迁移未跑时静默降级成 0/false）、`toggleHug`（insert / delete，重复抱把 23505 翻成「已经抱过这一下啦」）、`hugError`（42P01 / PGRST202 翻成「抱抱功能还没开启」）；卡片底栏在点赞与评论之后加「🫂 / 🤗 + 计数」，`fillCountsInDom` 顺带补抱抱这一格。
+  - **前端** `app.js`：新增 `attachHugs`（读视图、迁移未跑时静默降级成 0/false）、`toggleHug`（抱走 insert、收回走 `unhug` RPC，重复抱把 23505 翻成「已经抱过这一下啦」）、`hugError`（42P01 / PGRST202 翻成「抱抱功能还没开启」）；卡片底栏在点赞与评论之后加「🤗 / 💞 + 计数 + 「抱抱」二字」，`fillCountsInDom` 顺带补抱抱这一格。
   - **交互**：`home.js` 与 `feed.js` 各加 `[data-hug]` 分支，沿用点赞的乐观更新与失败回滚；CSS 加 `.hug-btn.hugged`（暖色，不放大不弹跳）。
   - **边界**：未登录不能抱（「登录后才能抱抱」）；匿名进入可以抱，同样只有计数；卡片上不出现任何账号痕迹。
   - **测试**：stub 实现 hugs 表（含主键冲突 23505、RLS 只删自己、读 user_id 报 42501）与 `post_hugs` 视图；run_tests 新增 18 个 M5 用例；static_checks 新增 R65 十二条。

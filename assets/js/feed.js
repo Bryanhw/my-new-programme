@@ -645,7 +645,8 @@
       hug.disabled = true;
       C.toggleHug(hugId, hugged).then(function (nowHugged) {
         hug.classList.toggle("hugged", nowHugged);
-        hug.firstElementChild.textContent = nowHugged ? "🤗" : "🫂";
+        hug.firstElementChild.textContent = nowHugged ? "💞" : "🤗";
+          hug.setAttribute("aria-pressed", nowHugged ? "true" : "false");
         var n = parseInt(hugNum.textContent, 10);
         hugNum.textContent = Math.max(0, (isNaN(n) ? 0 : n) + (nowHugged ? 1 : -1));
       }).catch(function (err) {

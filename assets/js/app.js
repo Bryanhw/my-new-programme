@@ -2942,10 +2942,16 @@ window.Campus = (function () {
     html += '<span class="comment-count">' + countText(post.comment_count) + "</span>";
     html += "</button>";
     // V5-M5：抱抱。只显示计数，不显示是谁抱的（服务端连名单都不给前端）。
+    // 图标特意避开 U+1FAC2（Unicode 14 的「拥抱」）—— 它在 Windows 10 与微信内置
+    // 浏览器里常常渲染成空白方块，计数为 0 时整颗按钮看起来就是空的；
+    // 这里用 🤗 / 💞（都在 Unicode 6），并且带「抱抱」两个字兜底。
     html += '<button class="like-btn hug-btn' + (post.hugged_by_me ? " hugged" : "") +
-      '" type="button" data-hug="' + escapeHtml(post.id) + '" title="抱抱一下（不公开是谁）">';
-    html += "<span>" + (post.hugged_by_me ? "🤗" : "🫂") + "</span>";
+      '" type="button" data-hug="' + escapeHtml(post.id) + '"' +
+      ' aria-pressed="' + (post.hugged_by_me ? "true" : "false") + '"' +
+      ' title="' + (post.hugged_by_me ? "已经抱过了，点一下收回" : "抱抱一下（不公开是谁）") + '">';
+    html += "<span>" + (post.hugged_by_me ? "💞" : "🤗") + "</span>";
     html += '<span class="hug-count">' + countText(post.hug_count) + "</span>";
+    html += '<span class="hug-label">抱抱</span>';
     html += "</button>";
     html += saveButtonHtml(post);           // F2：收藏（只存本机）
     html += '<span class="post-time">' + escapeHtml(timeAgo(post.created_at)) + "</span>";
