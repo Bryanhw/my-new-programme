@@ -1,9 +1,9 @@
 # PLAN_SCOPE_v5.md · 「校园拾光」V5 版本范围规划
 
-> 文档状态：**v0.11** · 2026-11-16（M0/M1 已上线；V5-1 私信全链路收口；M3 评论 @ + 站内提醒已写完，待站主执行 `docs/supabase-mentions.sql`）
+> 文档状态：**v0.12** · 2026-11-16（M0/M1 已上线；V5-1 私信全链路收口；M3 评论 @ + 站内提醒已上线；M4 一起听已写完，待站主执行 `docs/supabase-music.sql`）
 > 配套阅读：`PROJECT_SCOPE.md`（范围与边界）、`PLAN_phase1.md` / `PLAN_phase2.md`（阶段计划与验收）、`PLAN_SCOPE_v4.md`（V4 范围与轮次记录）
 > 线上站点：https://bryanhw.github.io/my-new-programme/
-> 工程基线（第 64 轮）：`tools/static_checks.py` **1193/0**、`tools/run_tests.py` **1028/0**、`tools/privacy_probe.py` **32/0**（5-8 段需 `E2E_PASSWORD`）；CI 见 `.github/workflows/ci.yml`
+> 工程基线（第 65 轮）：`tools/static_checks.py` **1217/0**、`tools/run_tests.py` **1074/0**、`tools/privacy_probe.py` **32/0**（5-8 段需 `E2E_PASSWORD`）；CI 见 `.github/workflows/ci.yml`
 
 ## 0. 一句话
 
@@ -305,5 +305,15 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
   - **测试**：stub 同步 mention 触发器语义与三个 RPC；run_tests 新增 11 个 M3 用例（互关放行/单向拒/自 @ 拒/不存在拒/匿名拒/通知归属/已读计数/@ 渲染转义）；static_checks 新增 R63 七条。
   - **工程基线**：static_checks **1193/0**、run_tests **1028/0**。
   - **待办（站主）**：在 Supabase SQL Editor 执行 `docs/supabase-mentions.sql`（幂等），@ 与提醒即全链路生效；执行前前端安静降级（候选为空、提醒区隐藏），发评论不受影响。
+- **2026-11-16 · 第 65 轮：V5-M4 一起听（v0.11 → v0.12）**：
+  - **数据层** `docs/supabase-music.sql`：`music_posts`（只存平台 + 规范化曲目 id，不存原始链接）、`music_invites`（同一对「歌 + 人」唯一）、`notifications` 类型扩到 `listen_invite` / `listen_accept`；六个 RPC：`publish_music` / `music_feed` / `invite_to_listen` / `respond_listen_invite` / `my_listen_invites` / `delete_music`。
+  - **白名单**：服务端只认 `music.163.com`（id）、`y.qq.com`（songDetail / songmid）、`bilibili.com`（BV / av），其余域名与认不出曲目 id 的链接直接拒绝；B 站的分享参数被丢弃。
+  - **隐私**：`music_posts` 只授只读；`music_invites` 完全不授权前端，读写全走 definer RPC；`music_feed` 的 `mine` 只反映「我」与这条歌的邀约状态，别人的 pending 邀约既不可见、也不计入「一起听」人数。
+  - **前端** `music.html` + `assets/js/music.js`：发布（链接 + 一句话）、音乐专区卡片（网易云 outchain 播放器 / B 站官方播放器 / QQ 音乐跳转）、「邀请一起听」（候选只来自互关）、收到邀约可直接接受/婉拒、作者可删歌；匿名与未登录只读，不显示发布表单。
+  - **入口**：全站「更多」菜单新增「一起听」（七个二级入口），「我的」页也有一个直达链接。
+  - **衔接**：「我的 → 🔔 提醒」现在能识别两类一起听提醒，文案与跳转都指向音乐专区。
+  - **测试**：stub 实现六个 RPC（含白名单解析与通知写入）；run_tests 新增 40+ 个 M4 用例；static_checks 新增 R64 九条；菜单项数护栏从 6 改为 7。
+  - **工程基线**：static_checks **1217/0**、run_tests **1074/0**。
+  - **待办（站主）**：执行 `docs/supabase-music.sql`（幂等）。执行前专区会提示「一起听功能还没开启」，不影响其它页面。
 
 

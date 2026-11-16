@@ -15,7 +15,7 @@ import esprima
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (tools/ -> repo)
 JS_DIR = os.path.join(ROOT, "assets", "js")
 PAGES = ["index.html", "feed.html", "post.html", "login.html", "reset.html", "profile.html",
-         "faq.html", "feedback.html", "messages.html"]
+         "faq.html", "feedback.html", "messages.html", "music.html"]
 PAGE_SCRIPTS = {
     "index.html": "home.js",
     "feed.html": "feed.js",
@@ -26,6 +26,7 @@ PAGE_SCRIPTS = {
     "faq.html": "faq.js",
     "feedback.html": "feedback.js",
     "messages.html": "messages.js",
+    "music.html": "music.js",
 }
 
 failures = []
@@ -61,7 +62,7 @@ for name in js_files:
 # (it must be loaded by a page and covered by a test), not an accident.
 EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "campus-picker.js", "campuses.js", "circles.js",
                "config.js", "faq.js", "feed.js", "feedback.js", "home.js",
-               "hotwords.js", "messages.js", "post.js", "profile.js", "reset.js"]
+               "hotwords.js", "messages.js", "music.js", "post.js", "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
       js_files)
 
@@ -168,7 +169,7 @@ for page in MENU_PAGES:
           'class="nav-btn"' in head and "M4 7h16M4 12h16M4 17h16" in head)
     check("sheet markup inside the header on " + page,
           'class="menu-sheet"' in head and "menu-text" in head)
-    check("6 secondary items on " + page, html.count('class="menu-item"') == 6,
+    check("7 secondary items on " + page, html.count('class="menu-item"') == 7,
           html.count('class="menu-item"'))
     check("faq is in the menu on " + page, "常见问题" in head and 'href="faq.html"' in head)
     check("feedback is in the menu on " + page,
@@ -3635,6 +3636,39 @@ check("R63: 我的页有提醒区，读写都走 RPC",
       "see profile.html / profile.js")
 check("R63: @ 高亮与提醒样式存在",
       ".comment-at {" in _m3css and ".notice-item {" in _m3css)
+print("- R64: V5-M4 一起听（白名单 + 邀约 + 通知）")
+_m4sql = read(os.path.join(ROOT, "docs/supabase-music.sql"))
+_m4js = read(os.path.join(ROOT, "assets/js/music.js"))
+_m4html = read(os.path.join(ROOT, "music.html"))
+_m4css = read(os.path.join(ROOT, "assets/css/style.css"))
+check("R64: 迁移建 music_posts / music_invites / 六个以上 RPC",
+      "create table if not exists public.music_posts" in _m4sql
+      and "create table if not exists public.music_invites" in _m4sql
+      and _m4sql.count("create or replace function public.") >= 6,
+      "see docs/supabase-music.sql")
+check("R64: 白名单只有网易云 / QQ 音乐 / B 站，没有 YouTube",
+      "music\\.163\\.com" in _m4sql and "y\\.qq\\.com" in _m4sql
+      and "bilibili\\.com" in _m4sql and "youtube.com" not in _m4sql.lower())
+check("R64: 音乐帖只授只读，邀请表完全不授权前端",
+      "grant select on public.music_posts to anon, authenticated" in _m4sql
+      and "revoke all on public.music_invites from anon, authenticated" in _m4sql)
+check("R64: 前端只走 RPC，不裸读音乐表",
+      'from("music_posts")' not in _m4js and 'from("music_invites")' not in _m4js
+      and _m4js.count('rpc("') >= 6)
+check("R64: 页面有发布 / 邀约 / 专区三块",
+      'id="publish-card"' in _m4html and 'id="invites-card"' in _m4html
+      and 'id="music-feed"' in _m4html and "assets/js/music.js" in _m4html)
+check("R64: 匿名 / 未登录只读，不显示发布表单",
+      "publishCard.hidden = !me" in _m4js and "isAnonymous" in _m4js)
+check("R64: 卡片与嵌入样式走令牌",
+      ".music-card {" in _m4css and ".music-embed-video" in _m4css
+      and ".music-badge {" in _m4css)
+check("R64: 一起听的两类提醒都在类型白名单里",
+      "'mention', 'listen_invite', 'listen_accept'" in _m4sql)
+check("R64: 每个页面的菜单里都有一起听",
+      all('href="music.html"' in read(os.path.join(ROOT, p))
+          for p in ("index.html", "feed.html", "post.html",
+                    "profile.html", "faq.html", "feedback.html", "login.html")))
 print("- R61: 我的页私信入口 / 未读角标 / 仅互相关注开关")
 _pro61 = read(os.path.join(ROOT, "assets/js/profile.js"))
 _html61 = read(os.path.join(ROOT, "profile.html"))

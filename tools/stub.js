@@ -1382,10 +1382,25 @@ function __makeClient(opts) {
             for (var mci = 0; mci < (store.comments || []).length; mci++) {
               if (store.comments[mci].id === mnn.ref_id) { mnc = store.comments[mci]; break; }
             }
+            var mnFrom = mnc ? (mnc.display_name || '\u4e00\u4f4d\u540c\u5b66') : null;
+            if (mnFrom === null && mnn.type !== 'mention') {
+              for (var mni2 = 0; mni2 < (store.music_invites || []).length; mni2++) {
+                var mnInv = store.music_invites[mni2];
+                if (mnInv.id !== mnn.ref_id) continue;
+                var mnOther = mnn.type === 'listen_accept' ? mnInv.invitee_uid : mnInv.inviter_uid;
+                for (var mni3 = 0; mni3 < (store.profiles || []).length; mni3++) {
+                  if (store.profiles[mni3].public_uid === mnOther && store.profiles[mni3].nickname) {
+                    mnFrom = store.profiles[mni3].nickname;
+                    break;
+                  }
+                }
+                break;
+              }
+            }
             mnOut.push({
               id: mnn.id, type: mnn.type, ref_id: mnn.ref_id, body: mnn.body,
               post_id: mnc ? mnc.post_id : null,
-              from_nick: mnc ? (mnc.display_name || '\u4e00\u4f4d\u540c\u5b66') : '\u4e00\u4f4d\u540c\u5b66',
+              from_nick: mnFrom || '\u4e00\u4f4d\u540c\u5b66',
               read_at: mnn.read_at || null, created_at: mnn.created_at
             });
           }
@@ -1404,6 +1419,258 @@ function __makeClient(opts) {
           }
         }
         return P.resolve({ data: mrCount, error: null });
+      }
+
+      /* ---------------- V5-M4 一起听（音乐专区） ---------------- */
+      if (name === 'publish_music') {
+        var pmArgs = arguments[1] || {};
+        var pmMe = __myPublicUid();
+        if (!pmMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '匿名身份不能发歌，请先用账号登录' } });
+        }
+        var pmUrl = String(pmArgs.p_url == null ? '' : pmArgs.p_url).replace(/^\s+|\s+$/g, '');
+        var pmNote = String(pmArgs.p_note == null ? '' : pmArgs.p_note).replace(/^\s+|\s+$/g, '');
+        if (!pmNote) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '写一句话吧' } });
+        }
+        if (pmNote.length > 200) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '一句话最多 200 字' } });
+        }
+        if (pmUrl.length < 8) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '链接看起来不对' } });
+        }
+        if (!/^https?:\/\//i.test(pmUrl)) pmUrl = 'https://' + pmUrl;
+
+        var pmPlat = '';
+        var pmTrack = '';
+        var pmM = null;
+        if (/^https?:\/\/([a-z0-9-]+\.)*music\.163\.com\//i.test(pmUrl)) {
+          pmPlat = 'netease';
+          pmM = pmUrl.match(/[?&#]id=([0-9]{3,20})/) || pmUrl.match(/\/song\/([0-9]{3,20})/);
+          pmTrack = pmM ? pmM[1] : '';
+        } else if (/^https?:\/\/([a-z0-9-]+\.)*y\.qq\.com\//i.test(pmUrl)) {
+          pmPlat = 'qq';
+          pmM = pmUrl.match(/\/songDetail\/([A-Za-z0-9]{6,40})/)
+             || pmUrl.match(/[?&]songmid=([A-Za-z0-9]{6,40})/)
+             || pmUrl.match(/[?&]songid=([0-9]{3,20})/);
+          pmTrack = pmM ? pmM[1] : '';
+        } else if (/^https?:\/\/([a-z0-9-]+\.)*bilibili\.com\//i.test(pmUrl)) {
+          pmPlat = 'bilibili';
+          pmM = pmUrl.match(/(BV[0-9A-Za-z]{10})/);
+          if (pmM) {
+            pmTrack = pmM[1];
+          } else {
+            pmM = pmUrl.match(/[?&/]av([0-9]{1,15})/);
+            pmTrack = pmM ? ('av' + pmM[1]) : '';
+          }
+        } else {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '只支持网易云 / QQ 音乐 / B 站 的链接' } });
+        }
+        if (!pmTrack) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '没从链接里认出这首歌，请复制歌曲页或视频页的完整链接' } });
+        }
+
+        store.music_posts = store.music_posts || [];
+        var pmId = 'm-' + (store.music_posts.length + 1);
+        store.music_posts.unshift({
+          id: pmId, user_uid: pmMe, platform: pmPlat, track_id: pmTrack,
+          note: pmNote, is_deleted: false, created_at: new Date().toISOString()
+        });
+        return P.resolve({ data: pmId, error: null });
+      }
+
+      if (name === 'music_feed') {
+        var mfArgs = arguments[1] || {};
+        var mfLimit = Number(mfArgs.p_limit || 30);
+        if (!(mfLimit > 0)) mfLimit = 30;
+        if (mfLimit > 60) mfLimit = 60;
+        var mfMe = __myPublicUid();
+        var mfRows = (store.music_posts || []).filter(function (m) { return !m.is_deleted; });
+        mfRows.sort(function (a, b) {
+          return String(a.created_at) < String(b.created_at) ? 1 : -1;
+        });
+        var mfOut = [];
+        for (var mfi = 0; mfi < mfRows.length && mfOut.length < mfLimit; mfi++) {
+          var mfM = mfRows[mfi];
+          var mfNick = '\u4e00\u4f4d\u540c\u5b66';
+          for (var mfpi = 0; mfpi < (store.profiles || []).length; mfpi++) {
+            if (store.profiles[mfpi].public_uid === mfM.user_uid && store.profiles[mfpi].nickname) {
+              mfNick = store.profiles[mfpi].nickname;
+              break;
+            }
+          }
+          var mfListeners = 1;
+          var mfMine = null;
+          for (var mfii = 0; mfii < (store.music_invites || []).length; mfii++) {
+            var mfI = store.music_invites[mfii];
+            if (mfI.music_id !== mfM.id) continue;
+            if (mfI.status === 'accepted') mfListeners++;
+            if (mfMe && (mfI.inviter_uid === mfMe || mfI.invitee_uid === mfMe)) mfMine = mfI.status;
+          }
+          mfOut.push({
+            id: mfM.id, platform: mfM.platform, track_id: mfM.track_id, note: mfM.note,
+            user_uid: mfM.user_uid, nickname: mfNick, listeners: mfListeners,
+            mine: mfMine, created_at: mfM.created_at
+          });
+        }
+        return P.resolve({ data: mfOut, error: null });
+      }
+
+      if (name === 'invite_to_listen') {
+        var ilArgs = arguments[1] || {};
+        var ilMe = __myPublicUid();
+        if (!ilMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '匿名身份不能邀请别人，请先用账号登录' } });
+        }
+        var ilMusic = String(ilArgs.p_music_id || '');
+        var ilUid = String(ilArgs.p_invitee_uid || '');
+        if (!/^[a-z0-9]{4,16}$/.test(ilUid)) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '没找到这个人' } });
+        }
+        if (ilUid === ilMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '不能邀请自己' } });
+        }
+        var ilPerson = null;
+        for (var ilpi = 0; ilpi < (store.profiles || []).length; ilpi++) {
+          if (store.profiles[ilpi].public_uid === ilUid) { ilPerson = store.profiles[ilpi]; break; }
+        }
+        if (!ilPerson) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '没找到这个人' } });
+        }
+        var ilSong = null;
+        for (var ilsi = 0; ilsi < (store.music_posts || []).length; ilsi++) {
+          if (store.music_posts[ilsi].id === ilMusic && !store.music_posts[ilsi].is_deleted) {
+            ilSong = store.music_posts[ilsi];
+            break;
+          }
+        }
+        if (!ilSong) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '这首歌不在架上了' } });
+        }
+        store.music_invites = store.music_invites || [];
+        for (var ili = 0; ili < store.music_invites.length; ili++) {
+          var ilI = store.music_invites[ili];
+          if (ilI.music_id === ilMusic && ilI.inviter_uid === ilMe && ilI.invitee_uid === ilUid) {
+            if (ilI.status === 'accepted') {
+              return P.resolve({ data: null, error: { code: 'P0001', message: '你们已经在听这首歌了' } });
+            }
+            if (ilI.status === 'pending') {
+              return P.resolve({ data: ilI.id, error: null });
+            }
+            ilI.status = 'pending';
+            ilI.responded_at = null;
+            ilI.created_at = new Date().toISOString();
+            return P.resolve({ data: ilI.id, error: null });
+          }
+        }
+        var ilId = 'iv-' + (store.music_invites.length + 1);
+        store.music_invites.push({
+          id: ilId, music_id: ilMusic, inviter_uid: ilMe, invitee_uid: ilUid,
+          status: 'pending', created_at: new Date().toISOString(), responded_at: null
+        });
+        store.notifications = store.notifications || [];
+        store.notifications.push({
+          id: 'n-' + (store.notifications.length + 1), user_uid: ilUid,
+          type: 'listen_invite', ref_id: ilId, body: ilSong.note,
+          read_at: null, created_at: new Date().toISOString()
+        });
+        return P.resolve({ data: ilId, error: null });
+      }
+
+      if (name === 'respond_listen_invite') {
+        var rlArgs = arguments[1] || {};
+        var rlMe = __myPublicUid();
+        if (!rlMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '请先用账号登录' } });
+        }
+        var rlId = String(rlArgs.p_invite_id || '');
+        var rlInv = null;
+        for (var rli = 0; rli < (store.music_invites || []).length; rli++) {
+          if (store.music_invites[rli].id === rlId) { rlInv = store.music_invites[rli]; break; }
+        }
+        if (!rlInv) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '没找到这条邀请' } });
+        }
+        if (rlInv.invitee_uid !== rlMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '这条邀请不是给你的' } });
+        }
+        if (rlInv.status !== 'pending') {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '这条邀请已经处理过了' } });
+        }
+        var rlStatus = rlArgs.p_accept ? 'accepted' : 'declined';
+        rlInv.status = rlStatus;
+        rlInv.responded_at = new Date().toISOString();
+        if (rlStatus === 'accepted') {
+          var rlSong = null;
+          for (var rlsi = 0; rlsi < (store.music_posts || []).length; rlsi++) {
+            if (store.music_posts[rlsi].id === rlInv.music_id) { rlSong = store.music_posts[rlsi]; break; }
+          }
+          store.notifications = store.notifications || [];
+          store.notifications.push({
+            id: 'n-' + (store.notifications.length + 1), user_uid: rlInv.inviter_uid,
+            type: 'listen_accept', ref_id: rlInv.id,
+            body: rlSong ? rlSong.note : '\u4e00\u9996\u6b4c',
+            read_at: null, created_at: new Date().toISOString()
+          });
+        }
+        return P.resolve({ data: rlStatus, error: null });
+      }
+
+      if (name === 'my_listen_invites') {
+        var mlMe = __myPublicUid();
+        var mlOut = [];
+        if (mlMe) {
+          for (var mli = 0; mli < (store.music_invites || []).length; mli++) {
+            var mlI = store.music_invites[mli];
+            if (mlI.inviter_uid !== mlMe && mlI.invitee_uid !== mlMe) continue;
+            var mlSong = null;
+            for (var mlsi = 0; mlsi < (store.music_posts || []).length; mlsi++) {
+              if (store.music_posts[mlsi].id === mlI.music_id && !store.music_posts[mlsi].is_deleted) {
+                mlSong = store.music_posts[mlsi];
+                break;
+              }
+            }
+            if (!mlSong) continue;
+            var mlOut2 = mlI.inviter_uid === mlMe ? mlI.invitee_uid : mlI.inviter_uid;
+            var mlNick = '\u4e00\u4f4d\u540c\u5b66';
+            for (var mlpi = 0; mlpi < (store.profiles || []).length; mlpi++) {
+              if (store.profiles[mlpi].public_uid === mlOut2 && store.profiles[mlpi].nickname) {
+                mlNick = store.profiles[mlpi].nickname;
+                break;
+              }
+            }
+            mlOut.push({
+              invite_id: mlI.id, music_id: mlI.music_id, platform: mlSong.platform,
+              track_id: mlSong.track_id, note: mlSong.note,
+              direction: mlI.inviter_uid === mlMe ? 'out' : 'in',
+              other_uid: mlOut2, other_nick: mlNick,
+              status: mlI.status, created_at: mlI.created_at
+            });
+          }
+          mlOut.sort(function (a, b) {
+            return String(a.created_at) < String(b.created_at) ? 1 : -1;
+          });
+        }
+        return P.resolve({ data: mlOut, error: null });
+      }
+
+      if (name === 'delete_music') {
+        var dmArgs = arguments[1] || {};
+        var dmMe = __myPublicUid();
+        if (!dmMe) {
+          return P.resolve({ data: null, error: { code: 'P0001', message: '请先用账号登录' } });
+        }
+        var dmId = String(dmArgs.p_music_id || '');
+        var dmHit = false;
+        for (var dmi = 0; dmi < (store.music_posts || []).length; dmi++) {
+          var dmM = store.music_posts[dmi];
+          if (dmM.id === dmId && dmM.user_uid === dmMe && !dmM.is_deleted) {
+            dmM.is_deleted = true;
+            dmHit = true;
+            break;
+          }
+        }
+        return P.resolve({ data: dmHit, error: null });
       }
 
       if (name === 'send_drift_letter') {

@@ -804,16 +804,30 @@
   function renderNotification(n) {
     var who = n.from_nick || "一位同学";
     var body = String(n.body || "");
-    var href = n.post_id
-      ? ("post.html?id=" + encodeURIComponent(String(n.post_id)) + "&r=" + Date.now())
-      : "feed.html";
+    var type = String(n.type || "mention");
+    var line, href, empty;
+    if (type === "listen_invite") {
+      line = "邀你一起听";
+      href = "music.html?r=" + Date.now();
+      empty = "点开去一起听";
+    } else if (type === "listen_accept") {
+      line = "接受了一起听";
+      href = "music.html?r=" + Date.now();
+      empty = "点开看看";
+    } else {
+      line = "在评论里 @ 了你";
+      href = n.post_id
+        ? ("post.html?id=" + encodeURIComponent(String(n.post_id)) + "&r=" + Date.now())
+        : "feed.html";
+      empty = "点开看看这条评论";
+    }
     return '<div class="notice-item' + (n.read_at ? "" : " is-unread") + '">' +
       '<div class="notice-item-top">' +
-        "<strong>" + C.escapeHtml(who) + "</strong> 在评论里 @ 了你" +
+        "<strong>" + C.escapeHtml(who) + "</strong> " + line +
         "<span>" + C.escapeHtml(C.timeAgo(n.created_at || "")) + "</span>" +
       "</div>" +
       '<a class="notice-item-body" href="' + C.escapeHtml(href) + '">' +
-        (body ? C.escapeHtml(body) : "点开看看这条评论") + "</a>" +
+        (body ? C.escapeHtml(body) : empty) + "</a>" +
       "</div>";
   }
 

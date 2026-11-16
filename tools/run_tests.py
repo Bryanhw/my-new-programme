@@ -26,6 +26,7 @@ PAGES = {
     "faq.html": ["assets/js/faq.js"],
     "feedback.html": ["assets/js/feedback.js"],
     "messages.html": ["assets/js/messages.js"],
+    "music.html": ["assets/js/music.js"],
 }
 
 
@@ -4594,6 +4595,239 @@ print("- 查不到这个 UID：明确说「找不到」，不假装在加载")
 it = load("profile.html", "mock-logged", pre="window.location.search='?uid=nobody666';" + PUB_SEED)
 card = js(it, "document.getElementById('public-card').innerHTML")
 check("找不到时给的是「找不到这个主页」", "找不到这个主页" in card, card[:200])
+
+print()
+print("=" * 70)
+print("SCENARIO M4 - 一起听（音乐专区 / 白名单解析 / 邀约 / 提醒）")
+print("=" * 70)
+
+M4_SEED = r"""
+(function () {
+  var st = __mockOpts.store;
+  for (var i = 0; i < st.profiles.length; i++) {
+    if (st.profiles[i].id === 'u-1') { st.profiles[i].public_uid = 'abc123'; }
+  }
+  var has = {};
+  for (var j = 0; j < st.profiles.length; j++) has[st.profiles[j].id] = true;
+  if (!has['u-9']) st.profiles.push({ id: 'u-9', phone: null, school: 'Other U',
+    nickname: 'Grace', public_uid: 'xyz789', created_at: '2026-10-01T00:00:00.000Z' });
+  if (!has['u-8']) st.profiles.push({ id: 'u-8', phone: null, school: 'Other U',
+    nickname: 'Hank', public_uid: 'kwm437', created_at: '2026-10-01T00:00:00.000Z' });
+  st.follows = [
+    { follower_uid: 'abc123', followee_uid: 'xyz789', created_at: '2026-10-02T00:00:00.000Z' },
+    { follower_uid: 'xyz789', followee_uid: 'abc123', created_at: '2026-10-02T00:00:00.000Z' }
+  ];
+  st.music_posts = [];
+  st.music_invites = [];
+  st.notifications = [];
+  return true;
+})()
+"""
+
+M4_POSTS = r"""
+(function () {
+  var st = __mockOpts.store;
+  st.music_posts = [
+    { id: 'm-1', user_uid: 'abc123', platform: 'netease', track_id: '1824045033',
+      note: '夜曲', is_deleted: false, created_at: '2026-11-16T10:00:00.000Z' },
+    { id: 'm-2', user_uid: 'xyz789', platform: 'qq', track_id: '0039MnYb0qxYhV',
+      note: '周末一起听', is_deleted: false, created_at: '2026-11-16T09:00:00.000Z' },
+    { id: 'm-3', user_uid: 'kwm437', platform: 'bilibili', track_id: 'BV1GJ411x7h7',
+      note: 'Live', is_deleted: false, created_at: '2026-11-16T08:00:00.000Z' }
+  ];
+  return true;
+})()
+"""
+
+it = load("music.html", "mock-logged", pre=M4_SEED)
+check("M4: 音乐专区页能加载", js(it, "!!document.getElementById('music-feed')"))
+
+print("- M4: 只认白名单平台，且把链接解析成曲目标识")
+js(it, "__m1 = {}; Campus.client().rpc('publish_music',"
+       " { p_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', p_note: 'x' })"
+       ".then(function (r) { __m1.err = r.error && r.error.message; });")
+check("M4: YouTube 链接被拒", "只支持网易云" in (js(it, "__m1.err") or ""), js(it, "__m1.err"))
+
+js(it, "__m2 = {}; Campus.client().rpc('publish_music',"
+       " { p_url: 'https://music.163.com/song?id=1824045033', p_note: '夜曲' })"
+       ".then(function (r) { __m2.id = r.data; __m2.err = r.error && r.error.message; });")
+check("M4: 网易云链接发布成功", js(it, "__m2.id") == "m-1", js(it, "__m2.err"))
+_m4p = js(it, "__mockOpts.store.music_posts[0]") or {}
+check("M4: 网易云解析出歌曲 id", _m4p.get("platform") == "netease" and _m4p.get("track_id") == "1824045033", _m4p)
+
+js(it, "Campus.client().rpc('publish_music', { p_url: 'https://y.qq.com/n/ryqq/songDetail/0039MnYb0qxYhV', p_note: 'qq' });")
+js(it, "Campus.client().rpc('publish_music', { p_url: 'https://www.bilibili.com/video/BV1GJ411x7h7?share_source=copy', p_note: 'live' });")
+_m4all = js(it, "__mockOpts.store.music_posts.map(function (m) { return m.platform + ':' + m.track_id; })")
+check("M4: QQ 音乐与 B 站也能解析（B 站去掉分享参数）",
+      "qq:0039MnYb0qxYhV" in _m4all and "bilibili:BV1GJ411x7h7" in _m4all, _m4all)
+
+js(it, "__m3 = {}; Campus.client().rpc('publish_music', { p_url: 'https://example.com/song/1', p_note: 'n' })"
+       ".then(function (r) { __m3.err = r.error && r.error.message; });")
+check("M4: 白名单外的域名一律拒绝", "只支持网易云" in (js(it, "__m3.err") or ""), js(it, "__m3.err"))
+
+js(it, "__m4 = {}; Campus.client().rpc('publish_music', { p_url: 'https://music.163.com/', p_note: 'n' })"
+       ".then(function (r) { __m4.err = r.error && r.error.message; });")
+check("M4: 认不出曲目 id 时给出人话", "没从链接里认出" in (js(it, "__m4.err") or ""), js(it, "__m4.err"))
+
+js(it, "__m5 = {}; Campus.client().rpc('publish_music', { p_url: 'https://music.163.com/song?id=1824045033', p_note: '  ' })"
+       ".then(function (r) { __m5.err = r.error && r.error.message; });")
+check("M4: 空的一句话发不出去", "写一句话吧" in (js(it, "__m5.err") or ""), js(it, "__m5.err"))
+
+print("- M4: 列表渲染 —— 平台徽标 / 官方嵌入 / 跳转")
+it = load("music.html", "mock-logged", pre=M4_SEED + "\n;" + M4_POSTS)
+js(it, "__drain();")
+_html = js(it, "document.getElementById('music-feed').innerHTML") or ""
+check("M4: 卡片带平台徽标",
+      "music-badge p-netease" in _html and "music-badge p-qq" in _html and "music-badge p-bilibili" in _html,
+      _html[:200])
+check("M4: 网易云走官方 outchain 播放器",
+      "music.163.com/outchain/player" in _html, _html[:200])
+check("M4: B 站走官方 player.bilibili.com",
+      "player.bilibili.com/player.html" in _html and "BV1GJ411x7h7" in _html, _html[:200])
+check("M4: QQ 音乐没有官方嵌入，只给跳转",
+      "y.qq.com/n/ryqq/songDetail/0039MnYb0qxYhV" in _html and "music-jump" in _html,
+      "no-jump" if "music-jump" not in _html else "ok")
+check("M4: 一句话和作者都渲染出来", "夜曲" in _html and "@abc123" in _html, _html[:200])
+
+print("- M4: 匿名访客能看，但不能发")
+it = load("music.html", "mock-anon", pre=M4_SEED + "\n;" + M4_POSTS)
+js(it, "__drain();")
+check("M4: 匿名也能浏览专区", "夜曲" in (js(it, "document.getElementById('music-feed').innerHTML") or ""))
+check("M4: 匿名看不到发布表单",
+      js(it, "document.getElementById('publish-card').hidden") is True)
+js(it, "__m6 = {}; Campus.client().rpc('publish_music', { p_url: 'https://music.163.com/song?id=1', p_note: 'n' })"
+       ".then(function (r) { __m6.err = r.error && r.error.message; });")
+check("M4: 匿名直接调接口也发不了", "匿名" in (js(it, "__m6.err") or ""), js(it, "__m6.err"))
+
+print("- M4: 邀请一起听")
+it = load("music.html", "mock-logged", pre=M4_SEED + "\n;" + M4_POSTS)
+js(it, "__drain();")
+js(it, "__i1 = {}; Campus.client().rpc('invite_to_listen', { p_music_id: 'm-1', p_invitee_uid: 'xyz789' })"
+       ".then(function (r) { __i1.id = r.data; __i1.err = r.error && r.error.message; });")
+check("M4: 邀请成功并回到邀请 id", js(it, "__i1.id") == "iv-1", js(it, "__i1.err"))
+_n1 = js(it, "__mockOpts.store.notifications") or []
+check("M4: 被邀人收到一条一起听提醒",
+      len(_n1) == 1 and _n1[0]["user_uid"] == "xyz789" and _n1[0]["type"] == "listen_invite", _n1)
+
+js(it, "__i2 = {}; Campus.client().rpc('invite_to_listen', { p_music_id: 'm-1', p_invitee_uid: 'abc123' })"
+       ".then(function (r) { __i2.err = r.error && r.error.message; });")
+check("M4: 不能邀请自己", "不能邀请自己" in (js(it, "__i2.err") or ""), js(it, "__i2.err"))
+
+js(it, "__i3 = {}; Campus.client().rpc('invite_to_listen', { p_music_id: 'm-1', p_invitee_uid: 'zzz999' })"
+       ".then(function (r) { __i3.err = r.error && r.error.message; });")
+check("M4: 不存在的人邀不到", "没找到这个人" in (js(it, "__i3.err") or ""), js(it, "__i3.err"))
+
+js(it, "__i4 = {}; Campus.client().rpc('invite_to_listen', { p_music_id: 'nope', p_invitee_uid: 'xyz789' })"
+       ".then(function (r) { __i4.err = r.error && r.error.message; });")
+check("M4: 不在架上的歌邀不到", "不在架上" in (js(it, "__i4.err") or ""), js(it, "__i4.err"))
+
+js(it, "Campus.client().rpc('invite_to_listen', { p_music_id: 'm-1', p_invitee_uid: 'xyz789' });")
+_cnt = js(it, "(__mockOpts.store.music_invites || []).length")
+check("M4: 重复邀请不会刷出第二条记录", _cnt == 1, _cnt)
+
+print("- M4: 邀约只有当事人可见")
+_feed = js(it, "(__ff = {}, Campus.client().rpc('music_feed', { p_limit: 30 }).then(function (r) { __ff.d = r.data; }), __ff.d)") or []
+_byid = dict((x["id"], x) for x in _feed) if isinstance(_feed, list) else {}
+check("M4: 我发起的邀约在我这里显示 pending",
+      (_byid.get("m-1") or {}).get("mine") == "pending", _byid.get("m-1"))
+_it2 = load("music.html", "mock-logged", pre=M4_SEED + "\n;" + M4_POSTS + "\n;" + r"""
+(function () {
+  __mockOpts.store.music_invites = [
+    { id: 'iv-9', music_id: 'm-1', inviter_uid: 'xyz789', invitee_uid: 'kwm437',
+      status: 'pending', created_at: '2026-11-16T11:00:00.000Z', responded_at: null }
+  ];
+  __mockOpts.store.notifications = [];
+  return true;
+})()
+""")
+js(_it2, "__drain();")
+_feed2 = js(_it2, "(__fg = {}, Campus.client().rpc('music_feed', { p_limit: 30 }).then(function (r) { __fg.d = r.data; }), __fg.d)") or []
+_byid2 = dict((x["id"], x) for x in _feed2) if isinstance(_feed2, list) else {}
+check("M4: 别人的邀约在我这里看不到",
+      (_byid2.get("m-1") or {}).get("mine") is None, (_byid2.get("m-1") or {}).get("mine"))
+check("M4: 别人的 pending 邀约不计入「一起听」人数",
+      (_byid2.get("m-1") or {}).get("listeners") == 1, (_byid2.get("m-1") or {}).get("listeners"))
+
+print("- M4: 接受邀请")
+it = load("music.html", "mock-logged", pre=M4_SEED + "\n;" + M4_POSTS + "\n;" + r"""
+(function () {
+  __mockOpts.store.music_invites = [
+    { id: 'iv-1', music_id: 'm-1', inviter_uid: 'xyz789', invitee_uid: 'abc123',
+      status: 'pending', created_at: '2026-11-16T11:00:00.000Z', responded_at: null },
+    { id: 'iv-2', music_id: 'm-2', inviter_uid: 'xyz789', invitee_uid: 'kwm437',
+      status: 'pending', created_at: '2026-11-16T11:00:00.000Z', responded_at: null }
+  ];
+  __mockOpts.store.notifications = [
+    { id: 'n-1', user_uid: 'abc123', type: 'listen_invite', ref_id: 'iv-1',
+      body: '夜曲', read_at: null, created_at: '2026-11-16T11:00:00.000Z' }
+  ];
+  return true;
+})()
+""")
+js(it, "__drain();")
+_inv = js(it, "document.getElementById('invites').innerHTML") or ""
+check("M4: 收到邀约时页面顶部出现邀约区",
+      js(it, "document.getElementById('invites-card').hidden") is False and "邀你一起听" in _inv, _inv[:200])
+check("M4: 只列出给我的邀约", "夜曲" in _inv, _inv[:200])
+
+js(it, "__r1 = {}; Campus.client().rpc('respond_listen_invite', { p_invite_id: 'iv-1', p_accept: true })"
+       ".then(function (r) { __r1.d = r.data; __r1.err = r.error && r.error.message; });")
+check("M4: 接受后状态是 accepted", js(it, "__r1.d") == "accepted", js(it, "__r1.err"))
+_n2 = js(it, "__mockOpts.store.notifications") or []
+check("M4: 接受后邀请人收到一条提醒",
+      any(n.get("user_uid") == "xyz789" and n.get("type") == "listen_accept" for n in _n2) if isinstance(_n2, list) else False, _n2)
+
+js(it, "__r2 = {}; Campus.client().rpc('respond_listen_invite', { p_invite_id: 'iv-1', p_accept: false })"
+       ".then(function (r) { __r2.err = r.error && r.error.message; });")
+check("M4: 已经处理过的邀请不能再改", "已经处理过" in (js(it, "__r2.err") or ""), js(it, "__r2.err"))
+
+js(it, "__r3 = {}; Campus.client().rpc('respond_listen_invite', { p_invite_id: 'iv-2', p_accept: true })"
+       ".then(function (r) { __r3.err = r.error && r.error.message; });")
+check("M4: 别人的邀请不能替你接受", "不是给你的" in (js(it, "__r3.err") or ""), js(it, "__r3.err"))
+
+_feed3 = js(it, "(__fh = {}, Campus.client().rpc('music_feed', { p_limit: 30 }).then(function (r) { __fh.d = r.data; }), __fh.d)") or []
+_byid3 = dict((x["id"], x) for x in _feed3) if isinstance(_feed3, list) else {}
+check("M4: 接受后这首歌显示 2 人一起听",
+      (_byid3.get("m-1") or {}).get("listeners") == 2, (_byid3.get("m-1") or {}).get("listeners"))
+
+print("- M4: 删歌 / 提醒文案")
+js(it, "__d1 = {}; Campus.client().rpc('delete_music', { p_music_id: 'm-2' })"
+       ".then(function (r) { __d1.d = r.data; });")
+check("M4: 不能删别人的歌", js(it, "__d1.d") is not True, js(it, "__d1.d"))
+js(it, "__d2 = {}; Campus.client().rpc('delete_music', { p_music_id: 'm-1' })"
+       ".then(function (r) { __d2.d = r.data; });")
+check("M4: 作者可以软删自己的歌", js(it, "__d2.d") is True, js(it, "__d2.d"))
+_feed4 = js(it, "(__fi = {}, Campus.client().rpc('music_feed', { p_limit: 30 }).then(function (r) { __fi.d = r.data; }), __fi.d)") or []
+check("M4: 删掉后不再出现在专区",
+      all(x["id"] != "m-1" for x in _feed4) if isinstance(_feed4, list) else False)
+_notes = js(it, "(__fn = {}, Campus.client().rpc('my_notifications', { p_limit: 20 }).then(function (r) { __fn.d = r.data; }), __fn.d)") or []
+check("M4: 一起听提醒也能读到发起人昵称",
+      any(n.get("type") == "listen_invite" and n.get("from_nick") == "Grace" for n in _notes) if isinstance(_notes, list) else False,
+      _notes)
+
+print("- M4: 「我的」页的提醒能跳回一起听")
+it = load("profile.html", "mock-logged", pre=M4_SEED + "\n;" + r"""
+(function () {
+  __mockOpts.store.music_posts = [
+    { id: 'm-1', user_uid: 'xyz789', platform: 'netease', track_id: '1824045033',
+      note: '夜曲', is_deleted: false, created_at: '2026-11-16T10:00:00.000Z' }
+  ];
+  __mockOpts.store.music_invites = [
+    { id: 'iv-1', music_id: 'm-1', inviter_uid: 'xyz789', invitee_uid: 'abc123',
+      status: 'pending', created_at: '2026-11-16T11:00:00.000Z', responded_at: null }
+  ];
+  __mockOpts.store.notifications = [
+    { id: 'n-2', user_uid: 'abc123', type: 'listen_invite', ref_id: 'iv-1',
+      body: '夜曲', read_at: null, created_at: '2026-11-16T11:00:00.000Z' }
+  ];
+  return true;
+})()
+""")
+js(it, "__drain(); __drain();")
+_nh = js(it, "document.getElementById('notice-list').innerHTML") or ""
+check("M4: 一起听邀约在「我的」页说成「邀你一起听」", "邀你一起听" in _nh, _nh[:200])
+check("M4: 一起听提醒点开去音乐专区", "music.html" in _nh, _nh[:200])
+check("M4: 提醒里带上邀请人昵称", "Grace" in _nh, _nh[:200])
 
 print()
 print("=" * 70)

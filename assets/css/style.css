@@ -3350,3 +3350,176 @@ body.modal-open { overflow: hidden; }
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ==========================================================================
+   V5-M4 一起听（音乐专区）
+   嵌入卡片用平台官方播放器；QQ 音乐没有官方嵌入，只给跳转。
+   ========================================================================== */
+.music-publish {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+  margin-top: 18px;
+}
+.music-publish-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.music-publish-row .btn { align-self: flex-end; }
+.music-section { margin-bottom: 8px; }
+
+.music-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 14px 10px;
+  margin-bottom: 12px;
+}
+.music-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.music-badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  border: 1px solid transparent;
+}
+.music-badge.p-netease { color: #C0392B; background: #FDECEA; border-color: #F6D5D0; }
+.music-badge.p-qq      { color: #1B7A4B; background: #E8F7EF; border-color: #CDEBDB; }
+.music-badge.p-bilibili{ color: #0B6FA4; background: #E7F3FB; border-color: #CDE4F4; }
+.music-author {
+  color: var(--ink-soft);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-author:hover { color: var(--brand-strong); }
+.music-time { margin-left: auto; flex: none; }
+
+.music-note {
+  margin: 8px 0;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  word-break: break-word;
+}
+.music-embed {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #F6EADA;
+}
+.music-embed iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+}
+.music-embed-video { aspect-ratio: 16 / 9; }
+.music-embed-video iframe { height: 100%; }
+.music-embed-audio iframe { height: 86px; }
+
+.music-jump {
+  display: inline-block;
+  margin: 2px 0 4px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: #F6EADA;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+}
+.music-jump:hover { color: var(--brand-strong); }
+
+.music-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.music-listeners.is-idle { color: var(--ink-faint); }
+.music-state {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #F6EADA;
+  color: var(--ink-soft);
+}
+.music-state.is-on { background: #E8F7EF; color: #1B7A4B; }
+.music-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.music-pick {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.music-pick[hidden] { display: none; }
+.music-pick-note {
+  width: 100%;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.music-chip {
+  border: 1px solid var(--line);
+  background: #FFFDF9;
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.music-chip:hover { border-color: var(--brand); color: var(--brand-strong); }
+
+.invite-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.invite-line {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.invite-line strong { color: var(--ink); }
+.invite-song {
+  margin: 6px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  word-break: break-word;
+}
+.invite-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (min-width: 640px) {
+  .music-publish-row { flex-direction: row; align-items: center; }
+  .music-publish-row .btn { align-self: auto; flex: none; }
+  .music-publish-row .input { flex: 1; min-width: 0; }
+}
