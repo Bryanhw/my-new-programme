@@ -196,6 +196,26 @@
     root.addEventListener("click", function (e) {
       // 用户动过预览区了（点赞 / 展开评论 / 看图）：计数回来时不再整体重画
       latestTouched = true;
+      // V5-M5：抱抱。与点赞同一套乐观更新；界面永远只动数字，不出现任何人名。
+      var hug = e.target.closest ? e.target.closest("[data-hug]") : null;
+      if (hug) {
+        var hugId = hug.getAttribute("data-hug");
+        var hugged = hug.classList.contains("hugged");
+        var hugNum = hug.lastElementChild;
+        hug.disabled = true;
+        C.toggleHug(hugId, hugged).then(function (nowHugged) {
+          hug.classList.toggle("hugged", nowHugged);
+          hug.firstElementChild.textContent = nowHugged ? "🤗" : "🫂";
+          var n = parseInt(hugNum.textContent, 10);
+          hugNum.textContent = Math.max(0, (isNaN(n) ? 0 : n) + (nowHugged ? 1 : -1));
+        }).catch(function (err) {
+          C.showNotice(noticeEl, "warn", err.message);
+        }).then(function () {
+          hug.disabled = false;
+        });
+        return;
+      }
+
       var btn = e.target.closest ? e.target.closest("[data-like]") : null;
       if (!btn) return;
       var id = btn.getAttribute("data-like");

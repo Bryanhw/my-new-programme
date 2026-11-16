@@ -361,6 +361,7 @@ function __publicUidOf(store, userId) {
 function __tableRows(store, table, uid) {
   if (table === 'posts') return store.posts;
   if (table === 'likes') return store.likes;
+  if (table === 'hugs') return store.hugs || [];
   if (table === 'profiles') return store.profiles;
   if (table === 'reports') return store.reports;
   /* 视图 my_posts：真实库里由 auth.uid() 在服务端过滤，
@@ -444,6 +445,26 @@ function __tableRows(store, table, uid) {
     var lrow = [];
     for (var li = 0; li < aggOrder.length; li++) lrow.push(agg[aggOrder[li]]);
     return lrow;
+  }
+  /* V5-M5 视图 post_hugs：只给「计数 + 我抱过没有」，不含 user_id。
+     hugs 基表的 select 同样收口（只有 post_id 能读），所以「谁抱了哪条」
+     在接口层不可能获得 —— 这里照实模拟，连字段都不带。 */
+  if (table === 'post_hugs') {
+    var hagg = {};
+    var haggOrder = [];
+    var hrows = store.hugs || [];
+    for (var ph = 0; ph < hrows.length; ph++) {
+      var hk = hrows[ph];
+      if (!hagg.hasOwnProperty(hk.post_id)) {
+        hagg[hk.post_id] = { post_id: hk.post_id, hug_count: 0, hugged_by_me: false };
+        haggOrder.push(hk.post_id);
+      }
+      hagg[hk.post_id].hug_count++;
+      if (uid && hk.user_id === uid) hagg[hk.post_id].hugged_by_me = true;
+    }
+    var hout = [];
+    for (var hi2 = 0; hi2 < haggOrder.length; hi2++) hout.push(hagg[haggOrder[hi2]]);
+    return hout;
   }
   /* V5-4 视图 public_profiles：只暴露公开 UID / 昵称 / 学校 / 加入时间，
      绝不含 phone（红线）。匿名账号没有 public_uid，永远进不来。 */
@@ -592,6 +613,20 @@ function __resolveQuery(st, store, uid, clientOpts) {
       for (var lfi = 0; lfi < st.filters.length; lfi++) likesTouched += ' ' + st.filters[lfi][0];
       if (likesTouched.indexOf('*') >= 0 || likesTouched.indexOf('user_id') >= 0
           || likesTouched.indexOf('created_at') >= 0) {
+        return {
+          data: null,
+          error: { code: '42501', message: 'permission denied for column user_id' }
+        };
+      }
+    }
+    if (st.table === 'hugs') {
+      /* V5-M5：hugs 的 select 收口与 likes 同构 —— 只留 post_id（取消抱抱
+         要按它过滤），user_id / created_at 一律 42501。
+         「谁抱了哪条」在接口层不存在，想要计数只能读视图 post_hugs。 */
+      var hugsTouched = String(st.select || '*');
+      for (var hfi = 0; hfi < st.filters.length; hfi++) hugsTouched += ' ' + st.filters[hfi][0];
+      if (hugsTouched.indexOf('*') >= 0 || hugsTouched.indexOf('user_id') >= 0
+          || hugsTouched.indexOf('created_at') >= 0) {
         return {
           data: null,
           error: { code: '42501', message: 'permission denied for column user_id' }
@@ -840,6 +875,22 @@ function __resolveQuery(st, store, uid, clientOpts) {
       return { data: echo, error: null };
     } else if (st.table === 'likes') {
       store.likes.push(row);
+    } else if (st.table === 'hugs') {
+      /* 主键 (post_id, user_id)：同一条重复抱要报 23505。
+         真实库靠主键拒绝，前端据此提示「已经抱过这一下啦」，
+         计数也不会被加两次。 */
+      store.hugs = store.hugs || [];
+      var hDupe = false;
+      for (var hx = 0; hx < store.hugs.length; hx++) {
+        if (store.hugs[hx].post_id === row.post_id && store.hugs[hx].user_id === row.user_id) hDupe = true;
+      }
+      if (hDupe) {
+        return {
+          data: null,
+          error: { code: '23505', message: 'duplicate key value violates unique constraint "hugs_pkey"' }
+        };
+      }
+      store.hugs.push(row);
     } else {
       store.profiles.push(row);
     }
@@ -876,6 +927,21 @@ function __resolveQuery(st, store, uid, clientOpts) {
       store.likes = keptLikes;
       __calls.push(['delete', st.table, removedLikes.length]);
       return { data: removedLikes, error: null };
+    }
+    if (st.table === 'hugs') {
+      /* RLS 策略 hugs_delete_self：只放行 auth.uid() = user_id 的那一行。
+         前端取消抱抱时只按 post_id 过滤（user_id 那一列读不到），
+         所以「不会删掉别人的拥抱」由这条策略保证 —— 照实模拟。 */
+      store.hugs = store.hugs || [];
+      var keptHugs = [];
+      var removedHugs = [];
+      for (var hgx = 0; hgx < rows.length; hgx++) {
+        var hitsHug = __match(rows[hgx], st.filters) && !!uid && rows[hgx].user_id === uid;
+        if (hitsHug) removedHugs.push(rows[hgx]); else keptHugs.push(rows[hgx]);
+      }
+      store.hugs = keptHugs;
+      __calls.push(['delete', st.table, removedHugs.length]);
+      return { data: removedHugs, error: null };
     }
     var keep = [];
     var removed = [];
@@ -1043,7 +1109,7 @@ function __q(table, store, clientOpts, getUid) {  var st = {
 
 function __makeClient(opts) {
   opts = opts || {};
-  var store = opts.store || { posts: [], likes: [], profiles: [], reports: [], comments: [] };
+  var store = opts.store || { posts: [], likes: [], hugs: [], profiles: [], reports: [], comments: [] };
   if (!store.reports) store.reports = [];
   if (!store.comments) store.comments = [];
   if (!store.feedback) store.feedback = [];
@@ -1237,7 +1303,7 @@ function __makeClient(opts) {
           }
           return P.resolve({ data: true, error: null });
         }
-        var keep = [];
+    var keep = [];
         for (var fu = 0; fu < (store.follows || []).length; fu++) {
           if (!(store.follows[fu].follower_uid === fMe && store.follows[fu].followee_uid === fTarget)) {
             keep.push(store.follows[fu]);

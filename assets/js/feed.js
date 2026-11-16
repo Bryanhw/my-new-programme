@@ -636,6 +636,27 @@
       return;
     }
 
+    // V5-M5：抱抱（只动计数，界面不出现任何人名）
+    var hug = e.target.closest ? e.target.closest("[data-hug]") : null;
+    if (hug) {
+      var hugId = hug.getAttribute("data-hug");
+      var hugged = hug.classList.contains("hugged");
+      var hugNum = hug.lastElementChild;
+      hug.disabled = true;
+      C.toggleHug(hugId, hugged).then(function (nowHugged) {
+        hug.classList.toggle("hugged", nowHugged);
+        hug.firstElementChild.textContent = nowHugged ? "🤗" : "🫂";
+        var n = parseInt(hugNum.textContent, 10);
+        hugNum.textContent = Math.max(0, (isNaN(n) ? 0 : n) + (nowHugged ? 1 : -1));
+      }).catch(function (err) {
+        C.showNotice(noticeEl, "warn", err.message);
+        setTimeout(function () { C.hideNotice(noticeEl); }, 5000);
+      }).then(function () {
+        hug.disabled = false;
+      });
+      return;
+    }
+
     var btn = e.target.closest ? e.target.closest("[data-like]") : null;
     if (!btn) return;
 

@@ -1035,6 +1035,17 @@ main:focus { outline: none; }
 }
 .like-btn:disabled { cursor: default; opacity: 0.8; }
 
+/* V5-M5：抱抱。比点赞更暖一点、更安静一点 —— 抱过之后只把底色换成暖金，
+   不放大、不弹跳，也不显示任何人名（服务端根本不给名单）。 */
+.hug-btn.hugged {
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+.hug-btn.hugged span:first-child {
+  transform: scale(1.04);
+  transition: transform 0.2s var(--ease);
+}
+
 /* F2：收藏按钮。和点赞键同一副骨架，但状态差别做得明显一点 ——
    「这条我存过了」是要一眼扫出来的信息，不能只差一个浅色底。
    aria-pressed 与 .saved 同步变化（见 app.js 的 refreshSaveButtons）。 */

@@ -425,6 +425,46 @@ check("counts are non-negative integers",
                          for r in rows),
       [r.get("like_count") for r in rows[:3]])
 
+# ---------------------------------------------------------------- hugs side
+print()
+print("8b) hug records never hand out account uuids (run AFTER the hugs migration)")
+DENIAL_HUGS = [
+    ("select user_id", "/rest/v1/hugs?select=post_id,user_id&limit=1"),
+    ("select the column alone", "/rest/v1/hugs?select=user_id&limit=1"),
+    ("select everything", "/rest/v1/hugs?select=*&limit=1"),
+    ("read without naming columns", "/rest/v1/hugs?limit=1"),
+    ("filter by a known uuid", "/rest/v1/hugs?select=post_id&user_id=eq." + UID_A),
+    ("filter by a stranger uuid", "/rest/v1/hugs?select=post_id&user_id=eq." + STRANGER),
+    ("order by user_id", "/rest/v1/hugs?select=post_id&order=user_id.desc&limit=1"),
+]
+_hugs_missing = False
+for label, path in DENIAL_HUGS:
+    st, body = req("GET", path)
+    if st == 404:
+        _hugs_missing = True
+        continue
+    check("hugs: cannot " + label,
+          st in (400, 401, 403) and code_of(body) == "42501",
+          (st, code_of(body), msg_of(body)))
+if _hugs_missing:
+    print("        note: hugs table not there yet (migration pending) — skipped")
+
+st, rows = req("GET", "/rest/v1/post_hugs?select=post_id,hug_count,hugged_by_me&limit=10")
+if st == 200:
+    rows = rows if isinstance(rows, list) else []
+    check("the post_hugs view answers 200", st == 200, (st, msg_of(rows)))
+    check("hug view rows carry exactly the three safe keys",
+          bool(rows) and all(sorted(r.keys()) == ["hug_count", "hugged_by_me", "post_id"] for r in rows),
+          (len(rows), [sorted(r.keys()) for r in rows[:1]]))
+    st2, body2 = req("GET", "/rest/v1/post_hugs?select=user_id&limit=1")
+    check("the hug view has no user_id column at all",
+          code_of(body2) in ("42703", "42501"), (st2, code_of(body2), msg_of(body2)))
+    check("a signed-out visitor is never marked as a hugger",
+          bool(rows) and all(r.get("hugged_by_me") is False for r in rows),
+          ([r.get("hugged_by_me") for r in rows[:3]], len(rows)))
+else:
+    print("        note: post_hugs not there yet (migration pending) — skipped")
+
 # ------------------------------------------------------------- hole code (D1)
 print("9) the stable hole code is a display column, never a lookup key")
 # Two legitimate states, and the probe must accept both: before the anon-code

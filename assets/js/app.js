@@ -505,6 +505,34 @@ window.Campus = (function () {
       });
   }
 
+  /* V5-M5：给一批帖子补上抱抱数与「我抱过没有」。
+   * 读取走视图 post_hugs：它只给「计数 + 我抱过没有」，不含 user_id。
+   * hugs 表的读权限已经被收口（见 docs/supabase-hugs.sql），这里直读表会 42501，
+   * 也会重新暴露「谁抱了谁」。迁移还没跑时整段静默降级成 0 / false ——
+   * 抱抱按钮照常显示，点了会得到一个明确的「功能还没开启」，不影响点赞与阅读。 */
+  function attachHugs(posts) {
+    if (!posts || !posts.length) return Promise.resolve(posts);
+
+    var ids = posts.map(function (p) { return p.id; });
+
+    return client.from("post_hugs").select("post_id, hug_count, hugged_by_me").in("post_id", ids)
+      .then(function (res) {
+        var map = {};
+        ((res && res.data) || []).forEach(function (r) { map[r.post_id] = r; });
+
+        posts.forEach(function (p) {
+          var row = map[p.id];
+          p.hug_count = row ? (row.hug_count || 0) : 0;
+          p.hugged_by_me = !!(row && row.hugged_by_me);
+        });
+        return posts;
+      })
+      .catch(function () {
+        posts.forEach(function (p) { p.hug_count = 0; p.hugged_by_me = false; });
+        return posts;
+      });
+  }
+
   /* 第 59 轮 / V5-4：给一批帖子补上「作者公开UID」（仅非匿名作者有）。
    * 读取走视图 post_authors_public：它只对「已通过 + 非匿名」的帖子返回
    * author_public_uid，匿名帖 / 未过审帖一律查不到（作者仍是黑盒，匿名墙不动）。
@@ -848,8 +876,7 @@ window.Campus = (function () {
    * 5. 点赞
    * ------------------------------------------------------------------ */
 
-  function toggleLike(postId, currentlyLiked) {
-    if (!client) return Promise.reject(new Error(configError));
+  function toggleLike(postId, currentlyLiked) {    if (!client) return Promise.reject(new Error(configError));
     return getIdentity().then(function (id) {
       if (!id.user) throw new Error("登录后才能回应");
       if (currentlyLiked) {
@@ -870,6 +897,44 @@ window.Campus = (function () {
           return true;
         });
     });
+  }
+
+  /* V5-M5：抱抱一下 / 收回抱抱。
+   * 与点赞同一套写法，但这里连「谁抱的」都不存在前端路径上：
+   *   * 写：insert / delete 自己那一行，RLS 只放行 auth.uid() = user_id；
+   *   * 读：只能读视图 post_hugs 的计数与 hugged_by_me；
+   *   * 取消时过滤条件只带 post_id（user_id 这一列前端读不到，带上会 42501）。
+   * 一条只能抱一次靠主键 (post_id, user_id) 保证：重复点不会变成 2。 */
+  function toggleHug(postId, currentlyHugged) {
+    if (!client) return Promise.reject(new Error(configError));
+    return getIdentity().then(function (id) {
+      if (!id.user) throw new Error("登录后才能抱抱");
+      if (currentlyHugged) {
+        return client.from("hugs").delete()
+          .eq("post_id", postId)
+          .then(function (res) {
+            if (res.error) throw new Error(hugError(res.error));
+            return false;
+          });
+      }
+      return client.from("hugs").insert({ post_id: postId, user_id: id.user.id })
+        .then(function (res) {
+          if (res.error) throw new Error(hugError(res.error));
+          return true;
+        });
+    });
+  }
+
+  /* 抱抱写入失败时的说法：迁移没跑（表/视图不存在）不该报一串英文 */
+  function hugError(err) {
+    var msg = String((err && err.message) || err || "");
+    if (/42P01|PGRST202|does not exist|schema cache/i.test(msg)) {
+      return "抱抱功能还没开启，先等等站主";
+    }
+    if (/23505|duplicate key/i.test(msg)) {
+      return "已经抱过这一下啦";
+    }
+    return msg || "没抱上，稍后再试";
   }
 
   /* ------------------------------------------------------------------
@@ -1715,7 +1780,7 @@ window.Campus = (function () {
   function attachEngagement(posts) {
     if (!posts || !posts.length) return Promise.resolve(posts || []);
     return Promise.all([
-      attachLikes(posts), attachComments(posts), attachAuthors(posts), attachMine(posts)
+      attachLikes(posts), attachComments(posts), attachHugs(posts), attachAuthors(posts), attachMine(posts)
     ]).then(function () {
       return posts;
     });
@@ -1764,6 +1829,13 @@ window.Campus = (function () {
       var commentNum = card.querySelector(".comment-count");
       if (commentNum && commentNum.textContent === COUNT_PLACEHOLDER) {
         commentNum.textContent = countText(p.comment_count);
+        filled++;
+      }
+
+      // 抱抱数（V5-M5）：只补数字，不碰「我抱过没有」的图标（那可能是刚点的乐观状态）
+      var hugNum = card.querySelector("[data-hug] .hug-count");
+      if (hugNum && hugNum.textContent === COUNT_PLACEHOLDER) {
+        hugNum.textContent = countText(p.hug_count);
         filled++;
       }
     }
@@ -2868,6 +2940,12 @@ window.Campus = (function () {
     html += "<span>💬</span>";
     html += '<span class="comment-count">' + countText(post.comment_count) + "</span>";
     html += "</button>";
+    // V5-M5：抱抱。只显示计数，不显示是谁抱的（服务端连名单都不给前端）。
+    html += '<button class="like-btn hug-btn' + (post.hugged_by_me ? " hugged" : "") +
+      '" type="button" data-hug="' + escapeHtml(post.id) + '" title="抱抱一下（不公开是谁）">';
+    html += "<span>" + (post.hugged_by_me ? "🤗" : "🫂") + "</span>";
+    html += '<span class="hug-count">' + countText(post.hug_count) + "</span>";
+    html += "</button>";
     html += saveButtonHtml(post);           // F2：收藏（只存本机）
     html += '<span class="post-time">' + escapeHtml(timeAgo(post.created_at)) + "</span>";
     html += "</div>";
@@ -3740,6 +3818,8 @@ window.Campus = (function () {
     fillCountsInDom: fillCountsInDom,
     deletePost: deletePost,
     toggleLike: toggleLike,
+    // V5-M5：匿名抱抱（只给计数，不给名单）
+    toggleHug: toggleHug,
     imageUrl: imageUrl,
     // A1：图片展示三件套 —— 变换地址 / srcset / 原图浮层
     renderImageUrl: renderImageUrl,

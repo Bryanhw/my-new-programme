@@ -1,9 +1,9 @@
 # PLAN_SCOPE_v5.md · 「校园拾光」V5 版本范围规划
 
-> 文档状态：**v0.12** · 2026-11-16（M0/M1 已上线；V5-1 私信全链路收口；M3 评论 @ + 站内提醒已上线；M4 一起听已写完，待站主执行 `docs/supabase-music.sql`）
+> 文档状态：**v0.13** · 2026-11-16（M0/M1 已上线；V5-1 私信全链路收口；M3 评论 @ + 站内提醒已上线；M4 一起听已写完，待站主执行 `docs/supabase-music.sql`；M5 匿名抱抱已写完，待站主执行 `docs/supabase-hugs.sql`）
 > 配套阅读：`PROJECT_SCOPE.md`（范围与边界）、`PLAN_phase1.md` / `PLAN_phase2.md`（阶段计划与验收）、`PLAN_SCOPE_v4.md`（V4 范围与轮次记录）
 > 线上站点：https://bryanhw.github.io/my-new-programme/
-> 工程基线（第 65 轮）：`tools/static_checks.py` **1217/0**、`tools/run_tests.py` **1074/0**、`tools/privacy_probe.py` **32/0**（5-8 段需 `E2E_PASSWORD`）；CI 见 `.github/workflows/ci.yml`
+> 工程基线（第 66 轮）：`tools/static_checks.py` **1229/0**、`tools/run_tests.py` **1092/0**、`tools/privacy_probe.py` **44/0**（新增抱抱探针；5-8 段需 `E2E_PASSWORD`）；CI 见 `.github/workflows/ci.yml`
 
 ## 0. 一句话
 
@@ -315,5 +315,14 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
   - **测试**：stub 实现六个 RPC（含白名单解析与通知写入）；run_tests 新增 40+ 个 M4 用例；static_checks 新增 R64 九条；菜单项数护栏从 6 改为 7。
   - **工程基线**：static_checks **1217/0**、run_tests **1074/0**。
   - **待办（站主）**：执行 `docs/supabase-music.sql`（幂等）。执行前专区会提示「一起听功能还没开启」，不影响其它页面。
+- **2026-11-16 · 第 66 轮：V5-M5 匿名抱抱（v0.12 → v0.13）**：
+  - **数据层** `docs/supabase-hugs.sql`：`hugs` 表（主键 `(post_id, user_id)`，天然幂等）+ 视图 `post_hugs`（只出 `post_id / hug_count / hugged_by_me`）。
+  - **隐私**：`hugs` 的整表 select 对 anon / authenticated 撤销，只留取消时要用的 `post_id`；`user_id` 在接口层读不到（直接反查返回 42501）；写入由 RLS `auth.uid() = user_id` 兜住。视图是定义者语义（`security_invoker = false`），与 `post_likes` 同构。
+  - **前端** `app.js`：新增 `attachHugs`（读视图、迁移未跑时静默降级成 0/false）、`toggleHug`（insert / delete，重复抱把 23505 翻成「已经抱过这一下啦」）、`hugError`（42P01 / PGRST202 翻成「抱抱功能还没开启」）；卡片底栏在点赞与评论之后加「🫂 / 🤗 + 计数」，`fillCountsInDom` 顺带补抱抱这一格。
+  - **交互**：`home.js` 与 `feed.js` 各加 `[data-hug]` 分支，沿用点赞的乐观更新与失败回滚；CSS 加 `.hug-btn.hugged`（暖色，不放大不弹跳）。
+  - **边界**：未登录不能抱（「登录后才能抱抱」）；匿名进入可以抱，同样只有计数；卡片上不出现任何账号痕迹。
+  - **测试**：stub 实现 hugs 表（含主键冲突 23505、RLS 只删自己、读 user_id 报 42501）与 `post_hugs` 视图；run_tests 新增 18 个 M5 用例；static_checks 新增 R65 十二条。
+  - **工程基线**：static_checks **1229/0**、run_tests **1092/0**。
+  - **待办（站主）**：执行 `docs/supabase-hugs.sql`（幂等）。执行前点抱抱只会提示「抱抱功能还没开启」，不影响点赞 / 评论 / 阅读。
 
 

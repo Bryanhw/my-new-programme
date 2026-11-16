@@ -1495,10 +1495,11 @@ check("R18/U2: countText is what decides: a real number, or the placeholder",
       "function countText(n)" in r18_app
       and '(typeof n === "number" && isFinite(n))' in r18_app
       and 'return COUNT_PLACEHOLDER' in r18_app)
-check("R18/U2: the card prints both counts through countText, never a raw field",
-      r18_foot.count("countText(") == 2
+check("R18/U2: the card prints every count through countText, never a raw field",
+      r18_foot.count("countText(") == 3
       and "countText(post.like_count)" in r18_foot
-      and "countText(post.comment_count)" in r18_foot,
+      and "countText(post.comment_count)" in r18_foot
+      and "countText(post.hug_count)" in r18_foot,
       r18_foot.count("countText("))
 check("R18/U2: countText is exported for the pages that repaint counts later",
       "countText: countText" in r18_app)
@@ -3669,6 +3670,43 @@ check("R64: 每个页面的菜单里都有一起听",
       all('href="music.html"' in read(os.path.join(ROOT, p))
           for p in ("index.html", "feed.html", "post.html",
                     "profile.html", "faq.html", "feedback.html", "login.html")))
+print("- R65: V5-M5 匿名抱抱（只给计数，不给名单）")
+_hgsql = read(os.path.join(ROOT, "docs/supabase-hugs.sql"))
+_hgjs = sources["app.js"]
+_hghome = read(os.path.join(ROOT, "assets/js/home.js"))
+_hgfeed = read(os.path.join(ROOT, "assets/js/feed.js"))
+_hgcss = read(os.path.join(ROOT, "assets/css/style.css"))
+_hgview = _hgsql.split("create view public.post_hugs", 1)[-1].split("grant select on public.post_hugs", 1)[0]
+check("R65: 迁移建 hugs 表与 post_hugs 视图",
+      "create table if not exists public.hugs" in _hgsql
+      and "create view public.post_hugs" in _hgsql)
+check("R65: hugs 的整表读取被撤销，只留过滤用的 post_id",
+      "revoke all on public.hugs from anon, authenticated" in _hgsql
+      and "grant select (post_id) on public.hugs" in _hgsql
+      and "on public.hugs to service_role" in _hgsql)
+check("R65: 视图只输出计数与“我抱过没有”，不含 user_id",
+      "hug_count" in _hgview and "hugged_by_me" in _hgview
+      and "user_id," not in _hgview and "as user_id" not in _hgview)
+check("R65: 写入靠 RLS 只放行自己",
+      "for insert to authenticated with check (auth.uid() = user_id)" in _hgsql
+      and "for delete to authenticated using (auth.uid() = user_id)" in _hgsql)
+check("R65: 前端只从视图拿计数",
+      'from("post_hugs")' in _hgjs and _hgjs.count('from("hugs")') == 2)
+check("R65: 卡片上的抱抱只有图标和数字",
+      'data-hug="' in _hgjs and "hug-count" in _hgjs
+      and "抱抱一下（不公开是谁）" in _hgjs)
+check("R65: 晚到的计数就地补上，不重画整卡",
+      '"[data-hug] .hug-count"' in _hgjs)
+check("R65: 重复抱靠主键挡住，并给人话",
+      "23505" in _hgjs and "已经抱过" in _hgjs)
+check("R65: 迁移没跑时说得明白",
+      "PGRST202" in _hgjs and "抱抱功能还没开启" in _hgjs)
+check("R65: 两个列表页都能点抱抱",
+      'closest("[data-hug]")' in _hghome and 'closest("[data-hug]")' in _hgfeed)
+check("R65: 抱过的按钮有独立暖色状态", ".hug-btn.hugged" in _hgcss)
+check("R65: 文档同步（README 与 PLAN 都提到抱抱）",
+      "抱抱" in read(os.path.join(ROOT, "README.md"))
+      and "V5-6" in read(os.path.join(ROOT, "docs/PLAN_SCOPE_v5.md")))
 print("- R61: 我的页私信入口 / 未读角标 / 仅互相关注开关")
 _pro61 = read(os.path.join(ROOT, "assets/js/profile.js"))
 _html61 = read(os.path.join(ROOT, "profile.html"))

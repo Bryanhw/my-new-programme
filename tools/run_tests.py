@@ -4829,6 +4829,77 @@ check("M4: 一起听邀约在「我的」页说成「邀你一起听」", "邀�
 check("M4: 一起听提醒点开去音乐专区", "music.html" in _nh, _nh[:200])
 check("M4: 提醒里带上邀请人昵称", "Grace" in _nh, _nh[:200])
 
+print("- M5: 匿名抱抱（只给计数，永远不给名单）")
+M5_SEED = r"""
+(function () {
+  var st = __mockOpts.store;
+  st.hugs = [
+    { post_id: 'p-1', user_id: 'u-9' },
+    { post_id: 'p-1', user_id: 'u-8' },
+    { post_id: 'p-3', user_id: 'u-1' }
+  ];
+  return true;
+})()
+"""
+it = load("feed.html", "mock-logged", pre=M5_SEED)
+js(it, "__drain(); __drain();")
+_hh = js(it, "document.getElementById('feed').innerHTML") or ""
+
+
+def _hug_seg(html, post_id):
+    i = html.find('data-hug="%s"' % post_id)
+    return "" if i < 0 else html[max(0, i - 260):i + 260]
+
+
+check("M5: 三张卡片都有抱抱按钮", _hh.count('data-hug="') == 3, _hh.count('data-hug="'))
+check("M5: 没抱过的帖子显示“两个人抱过”的计数（p-1 = 2）",
+      'hug-count">2<' in _hug_seg(_hh, "p-1"), _hug_seg(_hh, "p-1"))
+check("M5: 我抱过的帖子是暖色 + \U0001F917", "hugged" in _hug_seg(_hh, "p-3")
+      and "\U0001F917" in _hug_seg(_hh, "p-3"), _hug_seg(_hh, "p-3"))
+check("M5: 没抱过的是 \U0001FAC2", "\U0001FAC2" in _hug_seg(_hh, "p-1"),
+      _hug_seg(_hh, "p-1"))
+check("M5: 卡片上没有任何“谁抱的”痕迹", "u-9" not in _hh and "u-8" not in _hh)
+
+js(it, "__r = {}; Campus.toggleHug('p-2', false).then(function (v) { __r.v = v; }, function (e) { __r.err = String(e.message); });")
+check("M5: 抱一下成功", js(it, "__r.v") is True, js(it, "__r.err"))
+check("M5: 抱抱记录多了一条", js(it, "__mockOpts.store.hugs.length") == 4)
+
+js(it, "__r = {}; Campus.toggleHug('p-2', false).then(function (v) { __r.v = v; }, function (e) { __r.err = String(e.message); });")
+check("M5: 同一条抱第二次被主键挡住，并且是一句人话",
+      "已经抱过" in str(js(it, "__r.err")), js(it, "__r.err"))
+check("M5: 重复抱没有把计数加两次", js(it, "__mockOpts.store.hugs.length") == 4)
+
+js(it, "__r = {}; Campus.toggleHug('p-2', true).then(function (v) { __r.v = v; }, function (e) { __r.err = String(e.message); });")
+check("M5: 可以收回抱抱", js(it, "__r.v") is False, js(it, "__r.err"))
+check("M5: 收回后计数减回去", js(it, "__mockOpts.store.hugs.length") == 3)
+
+js(it, "__r = {}; Campus.toggleHug('p-1', true).then(function (v) { __r.v = v; }, function (e) { __r.err = String(e.message); });")
+check("M5: 取消“我没抱过的那条”不会删掉别人的拥抱",
+      js(it, "__mockOpts.store.hugs.length") == 3,
+      js(it, "__mockOpts.store.hugs.length"))
+
+_hv = js(it, "(__hr = {}, Campus.client().from('post_hugs').select('post_id, hug_count, hugged_by_me')"
+             ".then(function (r) { __hr.d = r.data; }), __hr.d)") or []
+check("M5: 抱抱视图只给三列（post_id / 计数 / 我抱过没有）",
+      bool(_hv) and all(set(r.keys()) == {"post_id", "hug_count", "hugged_by_me"} for r in _hv),
+      _hv)
+check("M5: 抱抱视图里没有 user_id", "user_id" not in str(_hv))
+check("M5: 视图里的计数与卡片一致",
+      [r for r in _hv if r["post_id"] == "p-1"][0]["hug_count"] == 2, _hv)
+
+_hu = load("feed.html", "mock-logged")
+js(_hu, "__r = {}; Campus.client().from('hugs').select('post_id, user_id')"
+       ".then(function (r) { __r.code = r && r.error && r.error.code; });")
+check("M5: 直接拿 uuid 反查“谁抱了哪条”被拒（42501）",
+      str(js(_hu, "__r.code")) == "42501", js(_hu, "__r.code"))
+
+_it3 = load("feed.html", "mock-login", pre=M5_SEED)
+js(_it3, "__r = {}; Campus.toggleHug('p-1', false).then(function (v) { __r.v = v; }, function (e) { __r.err = String(e.message); });")
+check("M5: 没登录的人抱不了，提示也说明白",
+      "登录后才能抱抱" in str(js(_it3, "__r.err")), js(_it3, "__r.err"))
+check("M5: 没登录那次没有留下记录",
+      js(_it3, "__mockOpts.store.hugs.length") == 3)
+
 print()
 print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
