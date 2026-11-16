@@ -695,8 +695,11 @@ check("app.js reads comments through the view",
 check("app.js counts through the counts view", 'from("post_comment_counts")' in appjs)
 check("app.js never selects the comments table",
       re.search(r'from\("comments"\)\s*\n?\s*\.select\(', appjs) is None)
-check("comment delete owns the row via the soft-delete rpc, never a raw table delete",
-      'client.rpc("soft_delete_comment"' in appjs and 'from("comments").delete()' not in appjs)
+check("comment delete goes through the server-side rpc first (ownership is checked there)",
+      'client.rpc("soft_delete_comment"' in appjs)
+check("the raw delete is only the fallback for old databases (RLS comments_delete_self still guards it)",
+      'if (msg.indexOf("comments_content_check") < 0)' in appjs
+      and 'from("comments").delete()' in appjs)
 check("app.js writes comments as approved", 'status: "approved"' in appjs)
 check("app.js renames via the database function", 'client.rpc("sync_my_display_name")' in appjs)
 check("app.js keeps one naming rule", "function buildDisplayName(profile, identity)" in appjs)
@@ -3632,6 +3635,19 @@ check("R62: 公开模式把「我的」卡片一起藏起来",
       in _pro62.replace("\n      ", " "))
 check("R62: [hidden] 不再被 display:flex 顶掉（头像按钮不会在公开页露出来）",
       ".profile-avatar-actions[hidden]" in _css63)
+check("R62b: 公开页失败前自动重试一次，且失败态带真实原因",
+      "function retryOnce(" in _pro62 and "shortErr(err)" in _pro62)
+check("R62b: 公开页超时收紧到 6 秒（不再让人干等）",
+      "PUBLIC_TIMEOUT_MS = 6000" in _pro62)
+_sql62b = os.path.join(ROOT, "docs/supabase-comments-delete-fix.sql")
+check("R62b: 软删除补丁不再把 content 清成空串（这才是 comments_content_check 报错的根因）",
+      os.path.exists(_sql62b)
+      and "content      = '（该评论已删除）'" in read(_sql62b)
+      and "content     = ''" not in read(_sql62b))
+check("R62b: 撞 content_check 时前端退回真删除",
+      "comments_content_check" in _app63 and 'from("comments").delete()' in _app63)
+check("R62b: 已软删的评论不计入「💬 N」",
+      "comments.filter(function (c) { return !c.is_deleted; }).length" in _app63)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

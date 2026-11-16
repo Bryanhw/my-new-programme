@@ -416,7 +416,7 @@ function __tableRows(store, table, uid) {
     var counts = {};
     for (var pt = 0; pt < (store.comments || []).length; pt++) {
       var c2 = store.comments[pt];
-      if (c2.status !== 'approved') continue;
+      if (c2.status !== 'approved' || c2.deleted_at) continue;
       if (!counts.hasOwnProperty(c2.post_id)) { counts[c2.post_id] = 0; seen.push(c2.post_id); }
       counts[c2.post_id]++;
     }
@@ -831,7 +831,10 @@ function __resolveQuery(st, store, uid, clientOpts) {
     var keep = [];
     var removed = [];
     for (var m = 0; m < rows.length; m++) {
-      if (__match(rows[m], st.filters)) removed.push(rows[m]); else keep.push(rows[m]);
+      var hitRow = __match(rows[m], st.filters);
+      /* RLS comments_delete_self：只能删自己的评论 */
+      if (hitRow && st.table === 'comments' && !(uid && rows[m].author_id === uid)) hitRow = false;
+      if (hitRow) removed.push(rows[m]); else keep.push(rows[m]);
     }
     if (st.table === 'posts') store.posts = keep;
     else if (st.table === 'likes') store.likes = keep;
@@ -1075,6 +1078,12 @@ function __makeClient(opts) {
         return P.resolve({ data: n, error: null });
       }
       if (name === 'soft_delete_comment') {
+        /* 没打过 docs/supabase-comments-delete-fix.sql 的旧库：把 content 清成空串撞 comments_content_check，
+           整次软删除失败。前端应当退回真删除。 */
+        if (__mockOpts && __mockOpts.softDeleteBroken) {
+          return P.resolve({ data: null, error: { code: '23514',
+            message: 'new row for relation "comments" violates check constraint "comments_content_check"' } });
+        }
         /* 软删除自己的评论（对齐 docs/supabase-comments-soft-delete.sql 的 RPC，
            只放行本人，并把内容/署名一并清空，占位不带身份；回复不级联删除）。 */
         var cargs = arguments[1] || {};
@@ -1088,7 +1097,7 @@ function __makeClient(opts) {
               return P.resolve({ data: null, error: { code: 'P0001', message: '只能删除自己的评论' } });
             }
             store.comments[ci].deleted_at = '2026-09-23T12:00:00.000Z';
-            store.comments[ci].content = '';
+            store.comments[ci].content = '（该评论已删除）';
             store.comments[ci].display_name = '';
             store.comments[ci].school = null;
             break;

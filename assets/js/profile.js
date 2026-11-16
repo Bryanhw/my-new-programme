@@ -119,7 +119,8 @@
 
   /* 公开主页（只读）。核心红线：这里能看到的只有公开 UID / 昵称 / 学校 /
    * 计数，绝不读 author_id 或 phone；匿名作者没有公开 UID，自然进不来。 */
-  var PUBLIC_TIMEOUT_MS = 10000;   // 公开页最多等这么久，等不到就给人话 + 重试
+  var PUBLIC_TIMEOUT_MS = 6000;    // 公开页最多等这么久，等不到就给人话 + 重试
+  var PUBLIC_RETRY_MS   = 400;     // 失败后自动再试一次的间隔
 
   /* 第 62 轮补充：站主点 @UID 进来后卡在「加载中…」永远不动。
    * 根因是这条链**一个 catch 都没有**：请求被拒（网络 / 令牌过期 / 视图没建）
@@ -145,6 +146,30 @@
         reject(e);
       });
     });
+  }
+
+  /* 拉一次公开资料（带超时）。 */
+  function loadPublicRow(uid) {
+    return withTimeout(
+      C.client().from("public_profiles").eq("public_uid", uid).maybeSingle(),
+      PUBLIC_TIMEOUT_MS, "公开资料"
+    );
+  }
+
+  /* 手机网络抖一下就整页报错太糙：失败先自动再试一次，仍失败才麻烦用户。 */
+  function retryOnce(fn) {
+    return fn().catch(function () {
+      return new Promise(function (resolve) {
+        setTimeout(resolve, PUBLIC_RETRY_MS);
+      }).then(fn);
+    });
+  }
+
+  /* 失败态里带一句真实原因（截断），站主看一眼就知道是网络还是权限。 */
+  function shortErr(err) {
+    var m = (err && err.message) ? String(err.message) : "";
+    if (!m) return "";
+    return m.length > 80 ? m.slice(0, 80) + "…" : m;
   }
 
   /* 公开页的失败态：一句人话 + 重试 + 回广场。任何一步失败都走这里。 */
@@ -187,10 +212,7 @@
       return;
     }
 
-    withTimeout(
-      C.client().from("public_profiles").eq("public_uid", uid).maybeSingle(),
-      PUBLIC_TIMEOUT_MS, "公开资料"
-    )
+    retryOnce(function () { return loadPublicRow(uid); })
       .then(function (res) {
         if (res && res.error) {
           paintPublicFailure(pubCard, "这个主页暂时读不到", "服务端没有返回资料，请稍后重试。");
@@ -262,10 +284,12 @@
         });
       })
       .catch(function (err) {
-        paintPublicFailure(pubCard, "主页加载失败",
-          (err && err.message && err.message.indexOf("没有响应") >= 0)
-            ? "网络有点慢，点了「重试」再看一次。"
-            : "网络或服务暂时不可用，点了「重试」再看一次。");
+        var slow = !!(err && err.message && err.message.indexOf("没有响应") >= 0);
+        var hint = slow
+          ? "网络有点慢（已经自动重试过一次），点「重试」再看一次。"
+          : "网络或服务暂时不可用（已经自动重试过一次），点「重试」再看一次。";
+        var why = shortErr(err);
+        paintPublicFailure(pubCard, "主页加载失败", why ? hint + "（" + why + "）" : hint);
       });
   }
 

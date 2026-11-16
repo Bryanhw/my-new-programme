@@ -1278,9 +1278,9 @@ def run_h():
     check("the comment is soft-deleted, not removed (the row stays)",
           js(it, "__mockOpts.store.comments.length") == 5,
           js(it, "__mockOpts.store.comments.length"))
-    check("the deleted comment is marked and emptied (no identity, no content)",
+    check("the deleted comment keeps a legal placeholder (empty content violates comments_content_check)",
           js(it, "(function(){for(var i=0;i<__mockOpts.store.comments.length;i++){var x=__mockOpts.store.comments[i];"
-                 " if(x.id==='c-1'){return x.deleted_at!=null && x.content==='' && x.display_name==='';}} return false;})()")
+                 " if(x.id==='c-1'){return x.deleted_at!=null && String(x.content).length>0 && String(x.content).indexOf('已删除')>=0 && x.display_name==='';}} return false;})()")
              is True,
           js(it, "JSON.stringify(__mockOpts.store.comments[0])"))
     check("its reply is no longer cascaded away (kept, to be folded on screen)",
@@ -1293,9 +1293,22 @@ def run_h():
     check("view forwards is_deleted (soft-delete contract)",
           js(it, "__r2") is not None and js(it, "__r2.is_deleted") is True,
           js(it, "JSON.stringify(__r2)"))
-    check("the soft-deleted row is stripped on screen (no identity, no content)",
-          js(it, "__r2.content") == "" and js(it, "__r2.display_name") == "",
+    check("the soft-deleted row carries no identity (content is a placeholder)",
+          js(it, "__r2.display_name") == "" and "已删除" in str(js(it, "__r2.content")),
           js(it, "JSON.stringify(__r2)"))
+
+    print("- 旧库的软删撞 comments_content_check：前端退回真删除")
+    it = load("feed.html", "mock-logged")
+    seed_comments(it)
+    js(it, "__mockOpts.softDeleteBroken = true;")
+    js(it, "__r = {}; Campus.deleteComment('c-3')"
+           ".then(function () { __r.ok = true; }, function (e) { __r.ok = false; __r.err = String(e.message); });")
+    check("删除结果不再是 content_check 报错", js(it, "__r.ok") is True, js(it, "__r.err"))
+    check("退回来的是真删除", js(it, "JSON.stringify(__calls).indexOf('\"delete\",\"comments\"')") >= 0,
+          js(it, "JSON.stringify(__calls)"))
+    check("这一行真的没了",
+          js(it, "(function(){for(var i=0;i<__mockOpts.store.comments.length;i++){"
+                 "if(String(__mockOpts.store.comments[i].id)==='c-3')return false;}return true;})()") is True)
 
     print("- attachEngagement fills in the per-post counts (A6: the list itself comes back first)")
     it = load("feed.html", "mock-logged")
@@ -4428,15 +4441,23 @@ print("- 请求被拒（网络错 / 令牌过期）：给一句人话 + 重试�
 it = load("profile.html", "mock-logged",
           pre=PUB_URL +
               "__mockOpts.failTable = 'public_profiles'; __mockOpts.failMode = 'reject';" + PUB_SEED)
+js(it, "__drain(); __drain();")
 card = js(it, "document.getElementById('public-card').innerHTML")
 check("失败态写明「主页加载失败」", "主页加载失败" in card, card[:200])
 check("给了重试按钮", 'id="public-retry"' in card, card[:200])
 check("不再留着「加载中」", "加载中" not in card, card[:200])
+check("失败前自动重试过一次（一共请求 2 次）",
+      js(it, "__calls.filter(function(c){return c[1]==='public_profiles';}).length") == 2,
+      js(it, "__calls.filter(function(c){return c[1]==='public_profiles';}).length"))
+check("失败态里带真实原因", "Failed to fetch" in card, card[:260])
 
 print("- 请求一直不返回：超时兜底，同样有出口")
 it = load("profile.html", "mock-logged",
           pre=PUB_URL +
               "__mockOpts.failTable = 'public_profiles'; __mockOpts.failMode = 'hang';" + PUB_SEED)
+js(it, "__drain();")
+js(it, "__drain();")
+js(it, "__drain();")
 js(it, "__drain();")
 card = js(it, "document.getElementById('public-card').innerHTML")
 check("超时之后也有失败态和重试", "主页加载失败" in card and 'id="public-retry"' in card, card[:200])

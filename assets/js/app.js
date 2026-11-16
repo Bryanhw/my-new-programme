@@ -1796,11 +1796,21 @@ window.Campus = (function () {
     });
   }
 
-  /** 删除自己的一条评论：软删除（服务端只放行本人，顺手清空内容与署名） */
+  /** 删除自己的一条评论：优先走软删除（服务端只放行本人）。
+   *  旧库上的 soft_delete_comment 会把 content 清成空串，撞 comments_content_check
+   *  → 直接报「删除失败」。这时退回真删除；RLS 的 comments_delete_self
+   *  同样只放行作者本人，权限口径不变（docs/supabase-comments-delete-fix.sql 是正规修法）。 */
   function deleteComment(commentId) {
     if (!client) return Promise.reject(new Error(configError));
     return client.rpc("soft_delete_comment", { p_comment_id: commentId }).then(function (res) {
-      if (res.error) throw new Error("删除失败：" + res.error.message);
+      if (!res.error) return;
+      var msg = String(res.error.message || "");
+      if (msg.indexOf("comments_content_check") < 0) {
+        throw new Error("删除失败：" + msg);
+      }
+      return client.from("comments").delete().eq("id", commentId).then(function (dg) {
+        if (dg && dg.error) throw new Error("删除失败：" + dg.error.message);
+      });
     });
   }
 
@@ -2024,7 +2034,8 @@ window.Campus = (function () {
       st.loading = false;
       st.loaded = true;
       st.comments = comments;
-      updateCommentCount(postId, comments.length);
+      // 已软删的评论仍留在列表里当占位（回复链不断），但不计入「💬 N」
+      updateCommentCount(postId, comments.filter(function (c) { return !c.is_deleted; }).length);
       renderCommentZone(postId);
     }).catch(function (err) {
       st.loading = false;
