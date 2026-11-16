@@ -56,14 +56,15 @@
   }
 
   /* 带超时的请求：返回 {ok,status,ms,text,err} */
-  function probe(label, url, headers, ms) {
+  function probe(label, url, headers, ms, extra) {
     var row = add(label, "wait", "请求中…");
     var t0 = Date.now();
     var ctl = null;
     var timer = null;
     try { ctl = new AbortController(); timer = setTimeout(function () { ctl.abort(); }, ms || 15000); } catch (e) {}
     var opts = { headers: headers || {}, cache: "no-store" };
-    if (ctl) opts.signal = ctl.signal;
+    if (extra) for (var k in extra) opts[k] = extra[k];
+    if (ctl && !opts.signal) opts.signal = ctl.signal;
     return fetch(url, opts).then(function (r) {
       return r.text().then(function (t) {
         return { ok: r.ok, status: r.status, text: t };
@@ -119,7 +120,7 @@
       if (!m) { add("版本 · 解析", "bad", "没在 profile.html 里找到 app.js 版本号"); return; }
       return probe("版本 · app.js?v=" + v, origin + "assets/js/app.js?v=" + v, {}, 15000).then(function (r2) {
         var txt = r2.text || "";
-        var isNew = txt.indexOf("comments_content_check") >= 0 && txt.indexOf("fillCountsInDom") >= 0;
+        var isNew = txt.indexOf("fillCountsInDom") >= 0 && txt.indexOf("my_mutual_follows") >= 0;
         add("版本 · 是否新版", isNew ? "ok" : "bad",
             isNew ? "新版（含本轮修复标记）· " + v : "旧版（缓存文件，缺少本轮修复）· " + v);
         return probe("版本 · profile.js 新旧", origin + "assets/js/profile.js", {}, 15000).then(function (r3) {
@@ -160,7 +161,33 @@
     });
   }
 
-  checkVersion().then(checkNet).then(function () {
+  /* 3. V5-M3：评论 @ / 站内提醒的 RPC 是否已经在服务端生效 */
+  function checkM3() {
+    var h = hdr({ "Content-Type": "application/json" });
+    function post(name) {
+      return probe("M3 · rpc " + name, BASE + "/rest/v1/rpc/" + name, h, 15000,
+        { method: "POST", body: "{}" });
+    }
+    function usable(r) {
+      if (!r.ok) return false;
+      var t = String(r.text || "").trim();
+      return t === "" || t.charAt(0) === "[";
+    }
+    return post("my_mutual_follows").then(function (r) {
+      var ok = usable(r);
+      add("数据 · 评论 @（互关候选）", ok ? "ok" : "bad", ok
+        ? "已生效（这页没登录，返回空列表是正常的）"
+        : "HTTP " + r.status + " · " + String(r.text || "").slice(0, 120) + " → 迁移可能还没执行");
+      return post("my_notifications");
+    }).then(function (r) {
+      var ok = usable(r);
+      add("数据 · 站内提醒", ok ? "ok" : "bad", ok
+        ? "已生效（这页没登录，返回空列表是正常的）"
+        : "HTTP " + r.status + " · " + String(r.text || "").slice(0, 120) + " → 迁移可能还没执行");
+    });
+  }
+
+  checkVersion().then(checkNet).then(checkM3).then(function () {
     judge();
   }).catch(function (e) {
     verdict.textContent = "自检脚本自身出错：" + String(e && e.message || e);
