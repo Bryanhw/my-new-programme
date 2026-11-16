@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>自检 · 校园拾光</title>
+<style>
+  body { margin:0; padding:18px 16px 40px; font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+         background:#FFF8F0; color:#2B2118; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  p.tip { margin:0 0 16px; color:#8A7768; font-size:13px; }
+  .row { display:flex; gap:8px; align-items:flex-start; padding:9px 12px; margin:0 0 8px;
+         background:#fff; border:1px solid #F0DCC8; border-radius:12px; }
+  .mark { flex:0 0 auto; font-weight:700; }
+  .ok { color:#1E8E4E; } .bad { color:#C0392B; } .wait { color:#B07C3A; }
+  .name { font-weight:600; }
+  .detail { color:#6B5A4C; word-break:break-all; font-size:12.5px; }
+  .verdict { margin-top:18px; padding:12px 14px; border-radius:12px; background:#fff;
+             border:1px solid #F0DCC8; font-size:14px; }
+  code { background:#F6EADA; padding:1px 5px; border-radius:5px; font-size:12.5px; }
+  .mono { font-family:ui-monospace,Consolas,monospace; font-size:12.5px; }
+</style>
+</head>
+<body>
+<h1>自检 · 校园拾光</h1>
+<p class="tip">把这个页面的结果整屏截图发回来就行。它只做读取，不会改任何数据。</p>
+<div id="list"></div>
+<div class="verdict" id="verdict">正在检查…</div>
+
+<script src="assets/js/config.js"></script>
+<script>
+(function () {
+  var C = window.CAMPUS_CONFIG || {};
+  var BASE = String(C.SUPABASE_URL || "").replace(/\/+$/, "");
+  var KEY = C.SUPABASE_ANON_KEY || "";
+  var list = document.getElementById("list");
+  var verdict = document.getElementById("verdict");
+  var rows = [];
+
+  function add(name, cls, detail) {
+    var row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = '<div class="mark ' + cls + '">' + (cls === "ok" ? "✔" : cls === "bad" ? "✘" : "…") +
+      '</div><div><div class="name"></div><div class="detail"></div></div>';
+    row.querySelector(".name").textContent = name;
+    row.querySelector(".detail").textContent = detail || "";
+    list.appendChild(row);
+    rows.push({ name: name, cls: cls, detail: detail || "" });
+    return row;
+  }
+
+  function hdr(extra) {
+    var h = { apikey: KEY, Authorization: "Bearer " + KEY };
+    if (extra) for (var k in extra) h[k] = extra[k];
+    return h;
+  }
+
+  /* 带超时的请求：返回 {ok,status,ms,text,err} */
+  function probe(label, url, headers, ms) {
+    var row = add(label, "wait", "请求中…");
+    var t0 = Date.now();
+    var ctl = null;
+    var timer = null;
+    try { ctl = new AbortController(); timer = setTimeout(function () { ctl.abort(); }, ms || 15000); } catch (e) {}
+    var opts = { headers: headers || {}, cache: "no-store" };
+    if (ctl) opts.signal = ctl.signal;
+    return fetch(url, opts).then(function (r) {
+      return r.text().then(function (t) {
+        return { ok: r.ok, status: r.status, text: t };
+      });
+    }).then(function (res) {
+      var dt = Date.now() - t0;
+      if (timer) clearTimeout(timer);
+      row.querySelector(".mark").className = "mark " + (res.ok ? "ok" : "bad");
+      row.querySelector(".mark").textContent = res.ok ? "✔" : "✘";
+      row.querySelector(".detail").textContent = "HTTP " + res.status + " · " + dt + " ms";
+      res.ms = dt;
+      return res;
+    }).catch(function (err) {
+      var dt = Date.now() - t0;
+      if (timer) clearTimeout(timer);
+      row.querySelector(".mark").className = "mark bad";
+      row.querySelector(".mark").textContent = "✘";
+      row.querySelector(".detail").textContent = dt + " ms · " + (err && err.name === "AbortError"
+        ? "超时（请求发出去了，没有任何回应）" : String(err && err.message || err));
+      return { ok: false, status: 0, err: err, ms: dt };
+    });
+  }
+
+  function judge() {
+    var net = rows.filter(function (r) { return /Supabase|连通/.test(r.name); });
+    var netOk = net.length && net.every(function (r) { return r.cls === "ok"; });
+    var verRow = rows.filter(function (r) { return /版本/.test(r.name); })[0];
+    var fresh = verRow && /新版/.test(verRow.detail);
+
+    var msg;
+    if (!netOk) {
+      msg = "结论：这台设备到 Supabase 的网络不通（见上面红色那几行）。页面无论新旧都会一直转圈——这是线路问题，不是代码问题。可以换 Wi-Fi / 手机热点再试一次对比。";
+    } else if (!fresh) {
+      msg = "结论：网络正常，但浏览器拿到的是旧版文件（缓存）。请关掉页面重新打开，或把链接后面加 &r=" + Date.now() + " 再试一次。";
+    } else {
+      msg = "结论：网络正常，文件也是最新版。如果这时主页仍然转圈，请把这个截图发回来，我按上面的状态码继续查。";
+    }
+    verdict.textContent = msg;
+  }
+
+  /* 0. 页面本身 */
+  var origin = location.origin + location.pathname.replace(/[^/]*$/, "");
+  add("本地页面", "ok", location.href);
+  add("时间", "ok", new Date().toLocaleString());
+  add("浏览器", "ok", navigator.userAgent);
+  add("在线状态", navigator.onLine ? "ok" : "bad", navigator.onLine ? "online" : "offline");
+
+  /* 1. 版本：页面引用的 app.js ?v= 与真正取到的内容对不对得上 */
+  function checkVersion() {
+    return probe("版本 · profile.html 引用", origin + "profile.html", {}, 15000).then(function (r) {
+      var m = r.text && r.text.match(/assets\/js\/app\.js\?v=([A-Za-z0-9._-]+)/);
+      var v = m ? m[1] : "";
+      if (!m) { add("版本 · 解析", "bad", "没在 profile.html 里找到 app.js 版本号"); return; }
+      return probe("版本 · app.js?v=" + v, origin + "assets/js/app.js?v=" + v, {}, 15000).then(function (r2) {
+        var txt = r2.text || "";
+        var isNew = txt.indexOf("comments_content_check") >= 0 && txt.indexOf("fillCountsInDom") >= 0;
+        add("版本 · 是否新版", isNew ? "ok" : "bad",
+            isNew ? "新版（含本轮修复标记）· " + v : "旧版（缓存文件，缺少本轮修复）· " + v);
+        return probe("版本 · profile.js 新旧", origin + "assets/js/profile.js", {}, 15000).then(function (r3) {
+          var t3 = r3.text || "";
+          var ok3 = t3.indexOf("retryOnce") >= 0 && t3.indexOf("PUBLIC_TIMEOUT_MS = 6000") >= 0;
+          add("版本 · profile.js 是否新版", ok3 ? "ok" : "bad",
+              ok3 ? "新版（含 6 秒超时 + 自动重试）" : "旧版（缓存文件）");
+        });
+      });
+    });
+  }
+
+  /* 2. 网络：Supabase 可达性 */
+  function checkNet() {
+    if (!BASE) { add("Supabase 配置", "bad", "config.js 里没有 SUPABASE_URL"); return Promise.resolve(); }
+    return probe("Supabase 连通（根路径）", BASE + "/rest/v1/", hdr(), 15000).then(function () {
+      return probe("Supabase 查询 public_profiles（列表）",
+        BASE + "/rest/v1/public_profiles?select=public_uid&limit=3", hdr(), 15000);
+    }).then(function (r) {
+      var first = "";
+      try {
+        var arr = JSON.parse(r.text || "[]");
+        if (arr.length) first = arr[0].public_uid || "";
+        add("数据 · 公开主页行数", arr.length ? "ok" : "bad", "返回 " + arr.length + " 行");
+      } catch (e) {
+        add("数据 · 解析", "bad", "返回的不是 JSON：" + String(r.text || "").slice(0, 120));
+      }
+      if (!first) return;
+      add("数据 · 取样 UID", "ok", first);
+      /* 与页面完全一致的请求：Accept: object（maybeSingle） */
+      return probe("Supabase 查询单条（maybeSingle 同款请求）",
+        BASE + "/rest/v1/public_profiles?select=*&public_uid=" + encodeURIComponent(first) + "&limit=1",
+        hdr({ Accept: "application/vnd.pgrst.object+json" }), 15000).then(function (r2) {
+        add("数据 · 单条结果", r2.ok ? "ok" : "bad", r2.ok
+          ? "拿到 1 条资料（昵称等字段齐全）"
+          : "HTTP " + r2.status + " · " + String(r2.text || "").slice(0, 120));
+      });
+    });
+  }
+
+  checkVersion().then(checkNet).then(function () {
+    judge();
+  }).catch(function (e) {
+    verdict.textContent = "自检脚本自身出错：" + String(e && e.message || e);
+  });
+})();
+</script>
+</body>
+</html>
