@@ -1438,7 +1438,7 @@ check("A6: the counts are fetched as one parallel step, not two serial ones",
       and "attachAuthors(posts)" in _ae and "attachMine(posts)" in _ae)
 check("V5-4: the author public-uid lookup joins the same parallel step",
       "attachAuthors(posts)" in _ae and "attachAuthors: attachAuthors" in a1_app)
-check("R63/F1: the delete-share entry rides the same parallel step via attachMine",
+check("R62/F1: the delete-share entry rides the same parallel step via attachMine",
       "function attachMine(posts)" in a1_app
       and "attachMine(posts)" in _ae
       and 'from("my_posts")' in _fn_body(a1_app, "attachMine")
@@ -1521,7 +1521,7 @@ check("R18/F1: only one card menu is open at a time",
 check("R18/F1: the card click delegate routes the menu, the copy, the hide and the delete",
       'closest("[data-post-menu]")' in r18_app and 'closest("[data-copy-link]")' in r18_app
       and 'closest("[data-hide-post]")' in r18_app and 'closest("[data-del-post]")' in r18_app)
-check("R63/F1: the delete entry shows only on my own posts, and double-confirms",
+check("R62/F1: the delete entry shows only on my own posts, and double-confirms",
       "post.is_mine" in r18_app and "data-del-post" in r18_app
       and 'confirm("确定要删除这篇分享吗？删掉就不能恢复了。")' in r18_app
       and "function delOwnPost(id)" in r18_app
@@ -3594,6 +3594,31 @@ check("R60/profile.js 洞号信收件箱与 DM 未读也走 RPC（无裸表 sele
       and 'list_rooms' in read(os.path.join(ROOT, "assets/js/profile.js")),
       "profile.js uses list_my_drift_letters/list_rooms")
 
+
+print("- R62: 计数横杠就地回填 + 作者区直发私信")
+_app63 = sources["app.js"]
+_feed63 = sources["feed.js"]
+_home63 = sources["home.js"]
+_pro63 = sources["profile.js"]
+_css63 = read(os.path.join(ROOT, "assets/css/style.css"))
+check("R62: fillCountsInDom 有实现且导出（三页共用）",
+      "function fillCountsInDom(posts)" in _app63
+      and "fillCountsInDom: fillCountsInDom," in _app63)
+check("R62: 只替换占位符，已显示的数字不动（不把刚点的赞闪回去）",
+      "likeNum.textContent === COUNT_PLACEHOLDER" in _app63
+      and "commentNum.textContent === COUNT_PLACEHOLDER" in _app63)
+check("R62: 广场/首页/我的 都在整卡重画之前先就地补数",
+      _feed63.count("C.fillCountsInDom(") == 1
+      and _home63.count("C.fillCountsInDom(") == 1
+      and _pro63.count("C.fillCountsInDom(") == 2,
+      "%s/%s/%s" % (_feed63.count("C.fillCountsInDom("),
+                    _home63.count("C.fillCountsInDom("),
+                    _pro63.count("C.fillCountsInDom(")))
+check("R62: 非匿名帖作者区给直发私信入口",
+      'class="post-dm" href="messages.html?with=' in _app63)
+check("R62: 私信入口写在 author_public_uid 分支里（匿名帖不会长出来）",
+      _app63.find('class="post-dm"') > _app63.find("if (post.author_public_uid) {"))
+check("R62: .post-dm 胶囊样式存在", ".post-dm {" in _css63)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

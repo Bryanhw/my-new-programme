@@ -393,6 +393,8 @@ function __tableRows(store, table, uid) {
     for (var pc = 0; pc < (store.comments || []).length; pc++) {
       var cc = store.comments[pc];
       if (cc.status !== 'approved') continue;
+      /* is_deleted 对齐 docs/supabase-comments-soft-delete.sql 的视图：
+         deleted_at 非空即已软删占位 */
       vis.push({
         id: cc.id,
         post_id: cc.post_id,
@@ -402,6 +404,7 @@ function __tableRows(store, table, uid) {
         school: cc.school || null,
         content: cc.content,
         created_at: cc.created_at,
+        is_deleted: !!cc.deleted_at,
         is_mine: !!(uid && cc.author_id === uid)
       });
     }

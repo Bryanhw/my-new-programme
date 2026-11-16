@@ -386,6 +386,8 @@
       paintMyPosts(rows);
       if (!rows.length || !C.attachEngagement) return;
       C.attachEngagement(rows).then(function () {
+        // 第 62 轮：占位符就地换成数字（动过我的发布也补，不重画免得收起评论）
+        if (C.fillCountsInDom) C.fillCountsInDom(rows);
         if (mySeq !== myPostSeq || mineTouched) return;
         paintMyPosts(rows);
       });
@@ -516,6 +518,8 @@
 
       if (!ordered.length || !C.attachEngagement) return;
       C.attachEngagement(ordered).then(function () {
+        // 第 62 轮：占位符就地换成数字（切走了也不怕：找不到卡片就什么都不做）
+        if (C.fillCountsInDom) C.fillCountsInDom(ordered);
         if (mineTab !== "saves") return;      // 人已经走开了就别再动 DOM
         paintSaves(ordered, missing);
       });

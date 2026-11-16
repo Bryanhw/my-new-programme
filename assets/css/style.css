@@ -2991,6 +2991,25 @@ body.modal-open { overflow: hidden; }
 }
 .post-author-uid:hover { text-decoration: underline; }
 
+/* 第 63 轮：作者区的「私信」直达入口（非匿名帖才有）——
+   参考小红书 / B 站：昵称旁边一个浅色小胶囊，点一下直接进对话页。 */
+.post-dm {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--brand-text);
+  background: var(--brand-ghost);
+  border: 1px solid var(--brand-soft);
+  border-radius: 999px;
+  text-decoration: none;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.post-dm:hover { text-decoration: none; filter: brightness(0.96); }
+
 /* 公开主页：头部横向排布（左头像，右昵称+@UID/学校） */
 .public-head {
   display: flex;

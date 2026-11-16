@@ -179,6 +179,8 @@
       paintLatest(rows);
       if (!rows.length || !C.attachEngagement) return;
       C.attachEngagement(rows).then(function () {
+        // 第 62 轮：占位符就地换成数字（动过预览区也补，不重画免得收起评论）
+        if (C.fillCountsInDom) C.fillCountsInDom(rows);
         if (mySeq !== latestSeq || latestTouched) return;
         paintLatest(rows);
       });

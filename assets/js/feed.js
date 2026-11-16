@@ -455,6 +455,9 @@
       //   期间又刷新过（seq 变了）也跳过，新的一轮会自己补。
       if (C.attachEngagement) {
         C.attachEngagement(loaded).then(function () {
+          // 第 62 轮：先把仍是「–」的计数就地补上 —— 用户动过也要补，
+          // 否则横杠会一直挂着（这就是「看不到有几条评论」的由来）。
+          if (C.fillCountsInDom) C.fillCountsInDom(loaded);
           if (mySeq !== seq || touched) return;
           renderAll();
         });

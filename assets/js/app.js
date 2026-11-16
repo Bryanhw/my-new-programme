@@ -1702,6 +1702,56 @@ window.Campus = (function () {
     });
   }
 
+  /* 第 62 轮：把「晚到的计数」就地补到已经画出来的卡片上。
+   *
+   * 起因（站主验收）：广场 / 首页 / 我的 都是「先画卡片、计数晚半拍」。卡片上的
+   * 计数格子一开始印的是占位符 —— countText 拿不到数字时返回「–」。计数回来以后
+   * 原逻辑是整卡重画一次把它换成数字，但只要用户在这半拍里动过这批卡片（点开评论、
+   * 点过赞、看过图），重画就会被守卫跳过，数字于是永远停在「–」，看起来就像
+   * 「评论数加载失败」。
+   *
+   * 这里只做最小 DOM 更新：按 data-post-id 找到卡片，把**仍是占位符**的计数格换成
+   * 真实数字。三点克制：
+   *   1. 不重画整卡 —— 用户刚点开的评论区、正在写的回复都原样留着；
+   *   2. 只替换占位符 —— 已经显示出来的数字（可能含刚点赞的乐观值）一律不动，
+   *      免得把用户手快点的赞闪回旧数；
+   *   3. 不动「点没点过赞」的图标和样式 —— 那同样可能是刚点的乐观状态。
+   * 返回真正补上的格子数，方便自测；没有 DOM（测试替身）时安全返回 0。
+   */
+  function fillCountsInDom(posts) {
+    if (!posts || !posts.length || typeof document === "undefined") return 0;
+
+    var filled = 0;
+
+    for (var i = 0; i < posts.length; i++) {
+      var p = posts[i];
+      if (!p || !p.id) continue;
+
+      var card = document.querySelector('[data-post-id="' + p.id + '"]');
+      if (!card) continue;
+
+      // 点赞数：按钮里第一个 span 是图标，第二个 span 是数字
+      var likeBtn = card.querySelector("[data-like]");
+      if (likeBtn) {
+        var spans = likeBtn.getElementsByTagName("span");
+        var likeNum = spans && spans[1];
+        if (likeNum && likeNum.textContent === COUNT_PLACEHOLDER) {
+          likeNum.textContent = countText(p.like_count);
+          filled++;
+        }
+      }
+
+      // 评论数：底栏那个 .comment-count
+      var commentNum = card.querySelector(".comment-count");
+      if (commentNum && commentNum.textContent === COUNT_PLACEHOLDER) {
+        commentNum.textContent = countText(p.comment_count);
+        filled++;
+      }
+    }
+
+    return filled;
+  }
+
   /**
    * 发布评论 / 回复
    * @param {string} postId   帖子 id
@@ -2612,9 +2662,16 @@ window.Campus = (function () {
     // V5-4：非匿名帖的作者公开UID入口（attachAuthors 从 post_authors_public 取）
     // —— 匿名帖 author_public_uid 恒为 null，这里自然不出现，匿名墙不动。
     if (post.author_public_uid) {
+      var authorUid = encodeURIComponent(post.author_public_uid);
       html += '<a class="post-author-uid" href="profile.html?uid=' +
-        encodeURIComponent(post.author_public_uid) +
+        authorUid +
         '" aria-label="进入发布者主页">@' + escapeHtml(post.author_public_uid) + '</a>';
+      // 第 62 轮：作者区直接给一个「私信」入口（参考小红书 / B 站）——
+      // 不用先进主页再点「发私信」。匿名帖 author_public_uid 恒 null，
+      // 这里同样不出现，匿名墙一动不动；点进去若未登录 / 未实名，
+      // 私信页自己会提示先登录，不会漏发。
+      html += '<a class="post-dm" href="messages.html?with=' + authorUid +
+        '" aria-label="给这个作者发私信">私信</a>';
     }
     html += "</div>";
     html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + "</div>";
@@ -3539,6 +3596,7 @@ window.Campus = (function () {
     commentAuthorName: commentAuthorName,
     // 计数与帖子分开取：调用方先画卡片，再用它补点赞数 / 评论数（见 attachEngagement）
     attachEngagement: attachEngagement,
+    fillCountsInDom: fillCountsInDom,
     deletePost: deletePost,
     toggleLike: toggleLike,
     imageUrl: imageUrl,

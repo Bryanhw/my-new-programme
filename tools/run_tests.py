@@ -448,7 +448,7 @@ def run_b():
     check("a missing id falls back to the old wording", ZH_NICK in no_id, no_id[:200])
     check("a missing id never invents a code", "anon-stamp" not in no_id, no_id[:200])
 
-    print("- delete whole share (R63, menu entry gated on is_mine)")
+    print("- delete whole share (R62, menu entry gated on is_mine)")
     it = load("feed.html", "mock-logged")
     zh_mine = "\u5220\u9664\u8fd9\u7bc7\u5206\u4eab"   # 删除这篇分享
     def mcard(pid, mine):
@@ -1285,6 +1285,17 @@ def run_h():
           js(it, "JSON.stringify(__mockOpts.store.comments[0])"))
     check("its reply is no longer cascaded away (kept, to be folded on screen)",
           js(it, "JSON.stringify(__mockOpts.store.comments).indexOf('a reply')") >= 0)
+    # 同步线上的视图契约：post_comments 必须把 is_deleted 透传给前端
+    # （docs/supabase-comments-soft-delete.sql 第 60-72 行），否则会复现
+    # "column post_comments.is_deleted does not exist / 评论加载失败"
+    js(it, "__r2 = null; Campus.listComments('p-1').then(function (rows) {"
+           " for (var i = 0; i < rows.length; i++) { if (rows[i].id === 'c-1') __r2 = rows[i]; } });")
+    check("view forwards is_deleted (soft-delete contract)",
+          js(it, "__r2") is not None and js(it, "__r2.is_deleted") is True,
+          js(it, "JSON.stringify(__r2)"))
+    check("the soft-deleted row is stripped on screen (no identity, no content)",
+          js(it, "__r2.content") == "" and js(it, "__r2.display_name") == "",
+          js(it, "JSON.stringify(__r2)"))
 
     print("- attachEngagement fills in the per-post counts (A6: the list itself comes back first)")
     it = load("feed.html", "mock-logged")
@@ -2951,6 +2962,55 @@ late = js(it, "document.getElementById('latest').innerHTML")
 check("the counts land in the preview as well", like_count(late, "p-1") == "2", late[:200])
 check("and the handler is still attached exactly once",
       js(it, "document.getElementById('latest')._h.click.length") == 1)
+
+print("- R62: the late counts still land after the reader has touched the cards")
+it = load("feed.html", "mock-logged", pre="__mockOpts.holdStats = true;")
+js(it, "__fillCalls = 0; __realFill = Campus.fillCountsInDom;"
+       " Campus.fillCountsInDom = function (posts) { __fillCalls++; return __realFill(posts); };")
+js(it, "document.getElementById('feed').dispatch('click', { button: 0,"
+       " preventDefault: function () {},"
+       " target: { closest: function () { return null; } } });")
+check("the reader touching the feed is what used to leave the dash behind",
+      js(it, "__heldStats.length") == 2, js(it, "__heldStats.length"))
+js(it, "__beforeRelease = document.getElementById('feed').innerHTML;")
+js(it, "__releaseStats();")
+check("the counts are still pushed into the cards after a touch",
+      js(it, "__fillCalls") == 1, js(it, "__fillCalls"))
+check("and the whole card is not redrawn, so an opened comment box stays open",
+      js(it, "__beforeRelease === document.getElementById('feed').innerHTML") is True)
+
+print("- R62: fillCountsInDom swaps placeholders only")
+it = load("feed.html", "mock-logged")
+js(it, "__likeNum = { textContent: '\\u2013' };"
+       " __commentNum = { textContent: '\\u2013' };"
+       " __likeBtn = { getElementsByTagName: function () { return [null, __likeNum]; } };"
+       " __card = { querySelector: function (s) {"
+       "   return s === '.comment-count' ? __commentNum : __likeBtn; } };"
+       " document.querySelector = function () { return __card; };")
+check("both dashes are replaced by real numbers",
+      js(it, "Campus.fillCountsInDom([{ id: 'p-1', like_count: 2, comment_count: 3 }])") == 2,
+      js(it, "__likeNum.textContent"))
+check("the like slot now reads 2", js(it, "__likeNum.textContent") == "2", js(it, "__likeNum.textContent"))
+check("the comment slot now reads 3", js(it, "__commentNum.textContent") == "3",
+      js(it, "__commentNum.textContent"))
+check("a second pass leaves an already-shown number alone",
+      js(it, "Campus.fillCountsInDom([{ id: 'p-1', like_count: 99, comment_count: 99 }])") == 0)
+check("so a freshly-liked optimistic number is never flashed back",
+      js(it, "__likeNum.textContent") == "2", js(it, "__likeNum.textContent"))
+check("an empty batch is harmless", js(it, "Campus.fillCountsInDom([])") == 0)
+
+print("- R62: the author area offers a one-tap way into a private message")
+it = load("feed.html", "mock-logged")
+card = js(it, "Campus.renderPostCard({ id: 'p-dm', content: 'hi',"
+              " created_at: new Date().toISOString(), author_public_uid: 'u-77' })")
+check("a non-anonymous post links straight into the conversation",
+      'class="post-dm" href="messages.html?with=u-77"' in card, card[:400])
+check("and the author's profile is still one tap away",
+      'profile.html?uid=u-77' in card and '@u-77</a>' in card, card[:400])
+anon = js(it, "Campus.renderPostCard({ id: 'p-anon', content: 'hi', is_anonymous: true,"
+              " anon_code: 'A1B2C3', created_at: new Date().toISOString() })")
+check("an anonymous post never grows a DM shortcut (the wall stays put)",
+      "post-dm" not in anon and "messages.html?with=" not in anon, anon[:400])
 
 print("- A6: WebP when the device can take it, JPEG when it cannot")
 it = load("feed.html", "mock-logged", pre="__mockOpts.canvasWebp = true;")
