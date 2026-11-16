@@ -2674,8 +2674,11 @@ window.Campus = (function () {
     // —— 匿名帖 author_public_uid 恒为 null，这里自然不出现，匿名墙不动。
     if (post.author_public_uid) {
       var authorUid = encodeURIComponent(post.author_public_uid);
+      // 第 63 轮：GitHub Pages 给 HTML 发的 Cache-Control 是 max-age=600，
+      // 发版后点进来还是旧页（旧页又引用旧 JS），于是「修了也看不到」。
+      // 带上时间戳参数，每次点击都绕过 HTML 缓存，拿到当前线上页。
       html += '<a class="post-author-uid" href="profile.html?uid=' +
-        authorUid +
+        authorUid + '&r=' + Date.now() +
         '" aria-label="进入发布者主页">@' + escapeHtml(post.author_public_uid) + '</a>';
       // 第 62 轮：作者区直接给一个「私信」入口（参考小红书 / B 站）——
       // 不用先进主页再点「发私信」。匿名帖 author_public_uid 恒 null，
