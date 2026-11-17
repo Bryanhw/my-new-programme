@@ -3593,3 +3593,52 @@ body.modal-open { overflow: hidden; }
   background: var(--brand-soft);
   color: var(--brand-text);
 }
+
+/* ---------------------------------------------------------------------------
+   提醒中心（V5 第 68 轮）：一页看全 @ / 一起听 / 私信，分类筛选 + 往前翻页。
+   列表项本身复用 .notice-item，这里只管「容器 + 分类条 + 底部按钮」。
+   --------------------------------------------------------------------------- */
+.notice-center {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px 6px;
+}
+.nc-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px 0 6px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.nc-tabs::-webkit-scrollbar { display: none; }
+.nc-tab {
+  flex: none;
+  border: 0;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  cursor: pointer;
+}
+.nc-tab.is-on {
+  background: var(--brand-soft);
+  color: var(--brand-text);
+  font-weight: 600;
+}
+.nc-tab:focus-visible {
+  outline: 2px solid var(--brand-strong);
+  outline-offset: 2px;
+}
+.nc-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 0 12px;
+}
+@media (max-width: 520px) {
+  .notice-center { padding: 14px 14px 4px; }
+}

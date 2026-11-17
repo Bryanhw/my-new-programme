@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#CB9243">
+<link rel="preconnect" href="https://gvmqmzgzwnvseubpvqdx.supabase.co" crossorigin>
+<link rel="dns-prefetch" href="https://gvmqmzgzwnvseubpvqdx.supabase.co">
+<meta name="description" content="站内提醒：谁 @ 了你、谁邀你一起听、谁给你发了私信。">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="校园拾光">
+<meta property="og:url" content="https://bryanhw.github.io/my-new-programme/notifications.html">
+<meta property="og:title" content="站内提醒 · 校园拾光">
+<meta property="og:description" content="谁 @ 了你、谁邀你一起听、谁给你发了私信。">
+<meta property="og:image" content="https://bryanhw.github.io/my-new-programme/assets/img/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+<title>站内提醒 · 校园拾光</title>
+<link rel="stylesheet" href="assets/css/style.css?v=f288db48">
+</head>
+<body>
+
+<a class="skip-link" href="#main">跳到主要内容</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">🔔</span>
+      <span>站内提醒</span>
+    </a>
+    <nav class="nav-actions" aria-label="站点导航">
+      <a class="header-login" href="login.html" aria-label="登录或注册">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8.2" r="3.6"/>
+          <path d="M5.2 19.4a6.9 6.9 0 0 1 13.6 0"/>
+        </svg>
+        <span class="header-login-text">登录 / 注册</span>
+      </a>
+      <button class="header-signout" type="button" hidden>退出登录</button>
+      <details class="nav-more" id="tab-more">
+        <summary class="nav-btn" aria-label="更多入口" title="更多">
+          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none"
+               stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16"/>
+          </svg>
+        </summary>
+        <div class="menu-sheet">
+          <a class="menu-item" data-tab="feed" href="feed.html">
+            <span class="menu-icon">🌿</span>
+            <span class="menu-text"><b>内容广场</b><small>看看同学们在聊什么</small></span>
+          </a>
+          <a class="menu-item" data-tab="profile" href="profile.html">
+            <span class="menu-icon">🙂</span>
+            <span class="menu-text"><b>我的</b><small>我的发布 · 评论 · 收藏</small></span>
+          </a>
+          <a class="menu-item" data-tab="music" href="music.html">
+            <span class="menu-icon">🎧</span>
+            <span class="menu-text"><b>一起听</b><small>发一首歌，邀同学一起</small></span>
+          </a>
+          <a class="menu-item" data-tab="drift" href="drift.html">
+            <span class="menu-icon">🌊</span>
+            <span class="menu-text"><b>漂流祝福</b><small>每天拆一只同圈的瓶子</small></span>
+          </a>
+          <a class="menu-item" data-tab="faq" href="faq.html">
+            <span class="menu-icon">❓</span>
+            <span class="menu-text"><b>常见问题</b><small>匿名、图片、找回内容</small></span>
+          </a>
+          <a class="menu-item" data-tab="feedback" href="feedback.html">
+            <span class="menu-icon">📮</span>
+            <span class="menu-text"><b>意见反馈</b><small>告诉站主可以改哪里</small></span>
+          </a>
+          <div class="menu-sep"></div>
+          <a class="menu-item" data-tab="login" href="login.html">
+            <span class="menu-icon">🔑</span>
+            <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
+          </a>
+          <a class="menu-item" data-tab="about" href="index.html#about">
+            <span class="menu-icon">🌤</span>
+            <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
+          </a>
+        </div>
+      </details>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap" id="main" tabindex="-1">
+
+  <div class="notice notice-info" id="notice" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+
+  <section class="notice-center" aria-labelledby="nc-title">
+    <div class="row-between">
+      <p class="text-sm on-gold" id="nc-title">全部提醒</p>
+      <span class="hint" id="nc-summary"></span>
+    </div>
+
+    <div class="nc-tabs" role="tablist" aria-label="按类型查看提醒">
+      <button class="nc-tab is-on" type="button" role="tab" aria-selected="true" data-type="" id="nc-tab-all">全部</button>
+      <button class="nc-tab" type="button" role="tab" aria-selected="false" data-type="mention" id="nc-tab-mention">@ 提到</button>
+      <button class="nc-tab" type="button" role="tab" aria-selected="false" data-type="listen" id="nc-tab-listen">一起听</button>
+      <button class="nc-tab" type="button" role="tab" aria-selected="false" data-type="dm" id="nc-tab-dm">私信</button>
+    </div>
+
+    <p class="hint" id="nc-loading">正在读取…</p>
+
+    <div id="nc-list"></div>
+
+    <p class="hint" id="nc-empty" hidden>这里还很安静。有人 @ 你、邀你一起听、或给你发私信时，会出现在这里。</p>
+
+    <p class="hint" id="nc-login" hidden>
+      登录之后才能看到自己的提醒。<a href="login.html">登录 / 注册</a>
+    </p>
+
+    <p class="hint" id="nc-anon" hidden>
+      当前是匿名身份，提醒只属于公开账号。<a href="login.html">登录自己的账号</a> 就能看到。
+    </p>
+
+    <div class="nc-foot">
+      <button class="btn btn-soft btn-sm" id="nc-read-all" type="button" hidden>把这一类都标为已读</button>
+      <button class="btn btn-ghost btn-sm" id="nc-more" type="button" hidden>再看更早的</button>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-brand">校园拾光</div>
+  <p class="footer-line">把今天的心事和光，留在这里</p>
+  <p class="footer-note">提醒只给你自己看，别人看不到你的提醒列表</p>
+  <p class="footer-legal">
+    本网页含有 AI 生成的产物，未侵犯版权；用户发言不代表网站所有者的观点；
+    网站所有者将对不合规的帖子进行下架处理；烦请用户谨慎发言。
+  </p>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="assets/js/config.js?v=07936165"></script>
+<script src="assets/vendor/supabase.js?v=dff1e545"></script>
+<script src="assets/js/campuses.js?v=e0ed4bde"></script>
+<script src="assets/js/circles.js?v=f6e3aaf5"></script>
+<script src="assets/js/app.js?v=8e2c777c"></script>
+<script src="assets/js/notifications.js?v=4d752305"></script>
+</body>
+</html>

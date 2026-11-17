@@ -348,3 +348,26 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
   - **工程基线**：static_checks **1274/0**、run_tests **1121/0**、
     privacy_probe **44/0**（4d 段要等迁移执行后才会真正比较）。
   - **待办（站主）**：执行 `docs/supabase-drift.sql`（幂等）；执行前三张表直读会 404。
+
+- **2026-11-17 · 第 68 轮：工程质量打底 + 提醒中心收口（C2 + A7/B2，v0.14 → v0.15）**：
+  - **C2**：`tools/version_assets.py` 的 `PAGES` 从硬编码改成扫根目录 `*.html`，
+    「新增页面忘了登记版本串」这类事故从此不会再有；顺手补上 `check.html` 漏掉的
+    `config.js` 版本串。
+  - **A7 私信进提醒**：`docs/supabase-notify-center.sql` 把 `notifications.type`
+    扩到 `dm`；`send_message` 发完私信后，只有当收件人**没有任何未读私信提醒**时
+    才补一条（正文留空）—— 连发十条也只多一行，且私信内容永远不落进提醒。
+  - **B2 提醒中心**：新页 `notifications.html` + `assets/js/notifications.js`；
+    四类 tab（全部 / @ 提到 / 一起听 / 私信）、`p_before` 游标翻页（20 条/次）、
+    分类已读、未读摘要；「我的」页的提醒区缩成最近 3 条 + 「全部提醒」入口。
+  - **RPC**：`my_notifications(p_limit, p_before, p_type)`（旧 `(int)` 签名显式 drop，
+    避免 PostgREST 二义）、`my_unread_counts()`、`mark_notifications_read(p_type)`；
+    `listen` 为一组，同时命中邀请与接受。
+  - **红线**：匿名评论的 @ 提醒 `from_uid` 恒为 null；`notifications` 基表仍只授
+    select；提醒文案不含私信正文。
+  - **测试**：stub 同步三件套与 `send_message` 的提醒语义；run_tests 新增 19 条
+    （分类、翻页、分类已读、连发去重、未登录/匿名人话态）；static_checks 登记新页
+    与新 JS；privacy_probe 新增 4e（提醒基表 anon 不可读、两个 RPC 给游客空列表）。
+  - **工程基线**：static_checks **1296/0**、run_tests **1140/0**、
+    privacy_probe **54/0**（4d 已在线上转绿）。
+  - **待办（站主）**：执行 `docs/supabase-notify-center.sql`；C1（跑满
+    privacy_probe 5-8 段）需要一对测试账号的密码。

@@ -277,6 +277,38 @@ check("a signed-out visitor cannot use send_message",
 
 # ------------------------------------------------------- drift notes (V5-M7)
 print()
+# ------------------------------------------- notification centre (round 68)
+print()
+print("4e) the notification centre only ever shows me my own things")
+for label, path in [
+    ("read all notifications", "/rest/v1/notifications?select=*&limit=1"),
+    ("read notification bodies", "/rest/v1/notifications?select=body&limit=1"),
+    ("read who a notification is for", "/rest/v1/notifications?select=user_uid&limit=1"),
+]:
+    st, body = req("GET", path)
+    if st == 404:
+        print("        note: notifications table not there yet - skipped")
+        continue
+    check("notifications: a signed-out visitor cannot " + label,
+          st in (400, 401, 403) and code_of(body) in ("42501", "401", "PGRST301"),
+          (st, code_of(body), msg_of(body)))
+
+st, body = req("POST", "/rest/v1/rpc/my_notifications", {"p_limit": 20})
+if st == 404:
+    print("        note: my_notifications not there yet - skipped")
+else:
+    rows = body if isinstance(body, list) else None
+    check("notifications: my_notifications hands a signed-out caller an empty list",
+          st == 200 and rows == [], (st, msg_of(body)))
+
+st, body = req("POST", "/rest/v1/rpc/my_unread_counts", {})
+if st == 404:
+    print("        note: my_unread_counts not there yet - skipped")
+else:
+    rows = body if isinstance(body, list) else None
+    check("notifications: my_unread_counts hands a signed-out caller an empty list",
+          st == 200 and rows == [], (st, msg_of(body)))
+
 print("4d) drift bottles never hand out the author (run AFTER the drift migration)")
 DENIAL_DRIFT = [
     ("select everything", "/rest/v1/drift_notes?select=*&limit=1"),

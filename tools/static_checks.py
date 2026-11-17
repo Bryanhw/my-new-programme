@@ -15,7 +15,8 @@ import esprima
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (tools/ -> repo)
 JS_DIR = os.path.join(ROOT, "assets", "js")
 PAGES = ["index.html", "feed.html", "post.html", "login.html", "reset.html", "profile.html",
-         "faq.html", "feedback.html", "messages.html", "music.html", "drift.html"]
+         "faq.html", "feedback.html", "messages.html", "music.html", "drift.html",
+         "notifications.html"]
 PAGE_SCRIPTS = {
     "index.html": "home.js",
     "feed.html": "feed.js",
@@ -28,6 +29,7 @@ PAGE_SCRIPTS = {
     "messages.html": "messages.js",
     "music.html": "music.js",
     "drift.html": "drift.js",
+    "notifications.html": "notifications.js",
 }
 
 failures = []
@@ -63,7 +65,8 @@ for name in js_files:
 # (it must be loaded by a page and covered by a test), not an accident.
 EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "campus-picker.js", "campuses.js", "circles.js",
                "config.js", "drift.js", "faq.js", "feed.js", "feedback.js", "home.js",
-               "hotwords.js", "messages.js", "music.js", "post.js", "profile.js", "reset.js"]
+               "hotwords.js", "messages.js", "music.js", "notifications.js", "post.js",
+               "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
       js_files)
 
@@ -159,7 +162,7 @@ for page in PAGES:
 
 print("8) header nav + tabbar contract")
 TABBED = ["index.html", "feed.html", "post.html", "profile.html", "faq.html", "feedback.html"]
-MENU_PAGES = TABBED + ["login.html", "drift.html"]
+MENU_PAGES = TABBED + ["login.html", "drift.html", "notifications.html"]
 menu_targets = set()
 for page in MENU_PAGES:
     html = read(os.path.join(ROOT, page))
@@ -3633,11 +3636,11 @@ check("R63: 前端 @ 候选只来自 my_mutual_follows，提交带 mention_uid",
       and "payload.mention_uid = mentionUid" in _m3app
       and "data-comment-at" in _m3app,
       "see assets/js/app.js")
-check("R63: 我的页有提醒区，读写都走 RPC",
+check("R63: 我的页有提醒区（读走 RPC），已读入口在提醒中心",
       'id="notice-card"' in _m3html
       and "my_notifications" in _m3pro
-      and "mark_notifications_read" in _m3pro,
-      "see profile.html / profile.js")
+      and "mark_notifications_read" in read(os.path.join(JS_DIR, "notifications.js")),
+      "see profile.html / profile.js / notifications.js")
 check("R63: @ 高亮与提醒样式存在",
       ".comment-at {" in _m3css and ".notice-item {" in _m3css)
 print("- R64: V5-M4 一起听（白名单 + 邀约 + 通知）")

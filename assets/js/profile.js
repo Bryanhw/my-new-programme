@@ -35,7 +35,6 @@
   var dmMutual    = document.getElementById("dm-mutual-toggle");
   var noticeCard  = document.getElementById("notice-card");
   var noticeList  = document.getElementById("notice-list");
-  var noticeReadAll = document.getElementById("notice-read-all");
   var driftCard   = document.getElementById("drift-card");
   var driftEl     = document.getElementById("drift-list");
 
@@ -773,7 +772,7 @@
   function loadNotifications() {
     if (!noticeCard || !noticeList) return;
     if (!currentUser || currentIsAnon) { noticeCard.classList.add("hidden"); return; }
-    C.client().rpc("my_notifications", { p_limit: 20 }).then(function (res) {
+    C.client().rpc("my_notifications", { p_limit: 3 }).then(function (res) {
       var rows = (res && !res.error && res.data) || [];
       if (!rows.length) {
         noticeCard.classList.add("hidden");
@@ -781,24 +780,10 @@
       }
       noticeCard.classList.remove("hidden");
       noticeList.innerHTML = rows.map(renderNotification).join("");
-      var unread = rows.filter(function (r) { return !r.read_at; }).length;
-      if (noticeReadAll) noticeReadAll.hidden = !unread;
     }).catch(function () {
-      // 数据层还没迁 M3 时不打扰：安静藏起来，别把整页拖红
+      // 数据层还没迁移时不打扰：安静藏起来，别把整页拖红
       noticeCard.classList.add("hidden");
     });
-
-    if (noticeReadAll) {
-      noticeReadAll.onclick = function () {
-        noticeReadAll.disabled = true;
-        C.client().rpc("mark_notifications_read").then(function () {
-          noticeReadAll.disabled = false;
-          loadNotifications();
-        }).catch(function () {
-          noticeReadAll.disabled = false;
-        });
-      };
-    }
   }
 
   function renderNotification(n) {
@@ -814,6 +799,12 @@
       line = "接受了一起听";
       href = "music.html?r=" + Date.now();
       empty = "点开看看";
+    } else if (type === "dm") {
+      line = "给你发了一条私信";
+      href = "messages.html" + (n.from_uid
+        ? "?with=" + encodeURIComponent(String(n.from_uid))
+        : "?r=" + Date.now());
+      empty = "点开去回一句";
     } else {
       line = "在评论里 @ 了你";
       href = n.post_id

@@ -1384,6 +1384,22 @@ function __makeClient(opts) {
         var smId = 'dm-' + ((store.direct_messages || []).length + 1);
         store.direct_messages.push({ id: smId, sender_uid: sMe, recipient_uid: sTo, body: sBody,
           created_at: (store.now ? store.now : '2026-09-23T00:00:00.000Z'), read_at: null });
+        /* 与 docs/supabase-notify-center.sql 同口径：只留「有私信」这件事，
+           没有未读时才插，连发十条不会刷屏 */
+        store.notifications = store.notifications || [];
+        var smUnread = false;
+        for (var sni = 0; sni < store.notifications.length; sni++) {
+          var snn = store.notifications[sni];
+          if (snn.user_uid === sTo && snn.type === 'dm' && !snn.read_at) { smUnread = true; break; }
+        }
+        if (!smUnread) {
+          store.notifications.push({
+            id: 'n-' + (store.notifications.length + 1),
+            user_uid: sTo, type: 'dm', ref_id: smId, body: '',
+            read_at: null,
+            created_at: (store.now ? store.now : '2026-09-23T00:00:00.000Z')
+          });
+        }
         return P.resolve({ data: smId, error: null });
       }
       if (name === 'list_rooms') {
@@ -1459,50 +1475,113 @@ function __makeClient(opts) {
         return P.resolve({ data: mfOut, error: null });
       }
       if (name === 'my_notifications') {
+        /* 与 docs/supabase-notify-center.sql 同口径：
+           按类型筛选（listen 为一组）、按 created_at 向前翻页、最多 100 条 */
         var mnMe = __myPublicUid();
-        var mnOut = [];
+        var mnArgs = arguments[1] || {};
+        var mnLimit = Math.max(1, Math.min(Number(mnArgs.p_limit || 20) || 20, 100));
+        var mnType = mnArgs.p_type || null;
+        var mnBefore = mnArgs.p_before || null;
+        var mnAll = [];
         if (mnMe) {
-          for (var mni = (store.notifications || []).length - 1; mni >= 0; mni--) {
+          for (var mni = 0; mni < (store.notifications || []).length; mni++) {
             var mnn = store.notifications[mni];
             if (mnn.user_uid !== mnMe) continue;
-            var mnc = null;
-            for (var mci = 0; mci < (store.comments || []).length; mci++) {
-              if (store.comments[mci].id === mnn.ref_id) { mnc = store.comments[mci]; break; }
+            if (mnType === 'listen') {
+              if (mnn.type !== 'listen_invite' && mnn.type !== 'listen_accept') continue;
+            } else if (mnType && mnn.type !== mnType) {
+              continue;
             }
-            var mnFrom = mnc ? (mnc.display_name || '\u4e00\u4f4d\u540c\u5b66') : null;
-            if (mnFrom === null && mnn.type !== 'mention') {
-              for (var mni2 = 0; mni2 < (store.music_invites || []).length; mni2++) {
-                var mnInv = store.music_invites[mni2];
+            if (mnBefore && !(String(mnn.created_at) < String(mnBefore))) continue;
+
+            var mnComment = null;
+            for (var mci = 0; mci < (store.comments || []).length; mci++) {
+              if (store.comments[mci].id === mnn.ref_id) { mnComment = store.comments[mci]; break; }
+            }
+
+            var mnFrom = null, mnFromUid = null;
+            if (mnn.type === 'mention' && mnComment) {
+              mnFrom = mnComment.display_name || null;
+              /* 匿名评论永远不给 UID：红线 */
+              if (!mnComment.is_anonymous && mnComment.author_id) {
+                mnFromUid = __publicUidOf(store, mnComment.author_id) || null;
+              }
+            }
+            if (mnn.type === 'listen_invite' || mnn.type === 'listen_accept') {
+              for (var mli = 0; mli < (store.music_invites || []).length; mli++) {
+                var mnInv = store.music_invites[mli];
                 if (mnInv.id !== mnn.ref_id) continue;
-                var mnOther = mnn.type === 'listen_accept' ? mnInv.invitee_uid : mnInv.inviter_uid;
-                for (var mni3 = 0; mni3 < (store.profiles || []).length; mni3++) {
-                  if (store.profiles[mni3].public_uid === mnOther && store.profiles[mni3].nickname) {
-                    mnFrom = store.profiles[mni3].nickname;
+                mnFromUid = mnn.type === 'listen_accept' ? mnInv.invitee_uid : mnInv.inviter_uid;
+                for (var mpi = 0; mpi < (store.profiles || []).length; mpi++) {
+                  if (store.profiles[mpi].public_uid === mnFromUid) {
+                    mnFrom = store.profiles[mpi].nickname || null;
                     break;
                   }
                 }
                 break;
               }
             }
-            mnOut.push({
+            if (mnn.type === 'dm') {
+              for (var mdi = 0; mdi < (store.direct_messages || []).length; mdi++) {
+                var mnDm = store.direct_messages[mdi];
+                if (mnDm.id !== mnn.ref_id) continue;
+                mnFromUid = mnDm.sender_uid;
+                for (var mdpi = 0; mdpi < (store.profiles || []).length; mdpi++) {
+                  if (store.profiles[mdpi].public_uid === mnFromUid) {
+                    mnFrom = store.profiles[mdpi].nickname || null;
+                    break;
+                  }
+                }
+                break;
+              }
+            }
+
+            mnAll.push({
               id: mnn.id, type: mnn.type, ref_id: mnn.ref_id, body: mnn.body,
-              post_id: mnc ? mnc.post_id : null,
+              post_id: mnComment ? mnComment.post_id : null,
               from_nick: mnFrom || '\u4e00\u4f4d\u540c\u5b66',
+              from_uid: mnFromUid || null,
               read_at: mnn.read_at || null, created_at: mnn.created_at
             });
           }
         }
-        return P.resolve({ data: mnOut, error: null });
+        mnAll.sort(function (a, b) {
+          if (a.created_at === b.created_at) return 0;
+          return a.created_at < b.created_at ? 1 : -1;
+        });
+        return P.resolve({ data: mnAll.slice(0, mnLimit), error: null });
+      }
+      if (name === 'my_unread_counts') {
+        var muMe = __myPublicUid();
+        var muMap = {}, muOut = [];
+        if (muMe) {
+          for (var mui = 0; mui < (store.notifications || []).length; mui++) {
+            var mun = store.notifications[mui];
+            if (mun.user_uid !== muMe || mun.read_at) continue;
+            muMap[mun.type] = (muMap[mun.type] || 0) + 1;
+          }
+          for (var muk in muMap) {
+            if (muMap.hasOwnProperty(muk)) muOut.push({ type: muk, n: muMap[muk] });
+          }
+        }
+        return P.resolve({ data: muOut, error: null });
       }
       if (name === 'mark_notifications_read') {
         var mrMe = __myPublicUid();
+        var mrArgs = arguments[1] || {};
+        var mrType = mrArgs.p_type || null;
         var mrCount = 0;
         if (mrMe) {
           for (var mri = 0; mri < (store.notifications || []).length; mri++) {
-            if (store.notifications[mri].user_uid === mrMe && !store.notifications[mri].read_at) {
-              store.notifications[mri].read_at = new Date().toISOString();
-              mrCount++;
+            var mrn = store.notifications[mri];
+            if (mrn.user_uid !== mrMe || mrn.read_at) continue;
+            if (mrType === 'listen') {
+              if (mrn.type !== 'listen_invite' && mrn.type !== 'listen_accept') continue;
+            } else if (mrType && mrn.type !== mrType) {
+              continue;
             }
+            mrn.read_at = new Date().toISOString();
+            mrCount++;
           }
         }
         return P.resolve({ data: mrCount, error: null });

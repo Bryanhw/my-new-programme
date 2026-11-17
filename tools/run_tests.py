@@ -28,6 +28,7 @@ PAGES = {
     "messages.html": ["assets/js/messages.js"],
     "music.html": ["assets/js/music.js"],
     "drift.html": ["assets/js/drift.js"],
+    "notifications.html": ["assets/js/notifications.js"],
 }
 
 
@@ -5031,6 +5032,100 @@ js(_ddirect, "__e = {}; Campus.client().from('drift_notes').select('*')"
 js(_ddirect, "__drain();")
 check("M6: 前端直读 drift_notes 被拒（42501）",
       str(js(_ddirect, "__e.code")) == "42501", js(_ddirect, "__e.code"))
+
+print()
+print("N) 提醒中心（第 68 轮：私信进提醒 + 分类 / 翻页 / 分类已读）")
+
+NC_SEED = r"""
+(function () {
+  var st = __mockOpts.store;
+  st.profiles[0].public_uid = 'abc123';
+  st.profiles[0].nickname = 'TestNick';
+  st.profiles.push({ id: 'u-2', public_uid: 'zzz999', nickname: 'Zed', school: 'Test Univ' });
+  st.comments = [{
+    id: 'c-1', post_id: 'p-1', author_id: 'u-2', is_anonymous: false,
+    display_name: 'Zed', content: 'hi @abc123', status: 'approved',
+    created_at: '2026-11-16T10:00:00.000Z'
+  }];
+  st.direct_messages = [{
+    id: 'dm-1', sender_uid: 'zzz999', recipient_uid: 'abc123',
+    body: 'only-in-the-thread', created_at: '2026-11-16T11:00:00.000Z', read_at: null
+  }];
+  st.music_invites = [{
+    id: 'inv-1', inviter_uid: 'zzz999', invitee_uid: 'abc123',
+    music_id: 'm-1', status: 'pending'
+  }];
+  st.music_posts = [{ id: 'm-1', platform: 'netease', track_id: '1', note: '晴天' }];
+  st.notifications = [
+    { id: 'n-1', user_uid: 'abc123', type: 'mention', ref_id: 'c-1',
+      body: 'hi @abc123', read_at: null, created_at: '2026-11-16T10:00:00.000Z' },
+    { id: 'n-2', user_uid: 'abc123', type: 'dm', ref_id: 'dm-1',
+      body: '', read_at: null, created_at: '2026-11-16T11:00:00.000Z' },
+    { id: 'n-3', user_uid: 'abc123', type: 'listen_invite', ref_id: 'inv-1',
+      body: '晴天', read_at: null, created_at: '2026-11-16T09:00:00.000Z' }
+  ];
+})();
+"""
+
+_nc = load("notifications.html", "mock-logged", pre=NC_SEED, modules=True)
+js(_nc, "__drain(); __drain();")
+
+_nc_html = str(js(_nc, "document.getElementById('nc-list').innerHTML"))
+check("NC: 三类提醒都渲染出来",
+      "@ 了你" in _nc_html and "给你发了一条私信" in _nc_html and "邀你一起听" in _nc_html,
+      _nc_html[:160])
+check("NC: 私信提醒里没有私信正文（正文只在会话里）",
+      "only-in-the-thread" not in _nc_html)
+check("NC: 私信提醒带发件人公开 UID，可直接进会话",
+      "with=zzz999" in _nc_html, _nc_html[:160])
+check("NC: 未读条数写在摘要里",
+      str(js(_nc, "document.getElementById('nc-summary').textContent")).strip() != "",
+      js(_nc, "document.getElementById('nc-summary').textContent"))
+check("NC: 列表非空时不显示空态",
+      str(js(_nc, "document.getElementById('nc-empty').hidden")) == "True")
+
+js(_nc, "document.getElementById('nc-tab-dm').click(); __drain();")
+_nc_dm = str(js(_nc, "document.getElementById('nc-list').innerHTML"))
+check("NC: 只看私信时只剩私信",
+      "给你发了一条私信" in _nc_dm and "@ 了你" not in _nc_dm, _nc_dm[:160])
+check("NC: 分类按钮的选中态跟着切换",
+      str(js(_nc, "document.getElementById('nc-tab-dm').getAttribute('aria-selected')")) == "true")
+
+js(_nc, "document.getElementById('nc-tab-listen').click(); __drain();")
+_nc_listen = str(js(_nc, "document.getElementById('nc-list').innerHTML"))
+check("NC: 一起听分类把邀请与接受放在同一组",
+      "邀你一起听" in _nc_listen and "给你发了一条私信" not in _nc_listen, _nc_listen[:160])
+
+js(_nc, "document.getElementById('nc-tab-all').click(); __drain();")
+js(_nc, "document.getElementById('nc-read-all').click(); __drain();")
+_nc_read = js(_nc, "JSON.stringify(__mockOpts.store.notifications.map(function(n){return !!n.read_at;}))")
+check("NC: 全部已读把三类都标掉了", str(_nc_read) == "[true,true,true]", _nc_read)
+
+_nc_limit = load("notifications.html", "mock-logged", pre=NC_SEED, modules=True)
+js(_nc_limit, "__e = {}; Campus.client().rpc('my_notifications', { p_limit: 2 })"
+               ".then(function (r) { __e.n = (r && r.data || []).length; }); __drain();")
+check("NC: p_limit 生效（一次只取这么多）", str(js(_nc_limit, "__e.n")) == "2", js(_nc_limit, "__e.n"))
+
+_nc_send = load("notifications.html", "mock-logged", pre=NC_SEED, modules=True)
+js(_nc_send, "Campus.client().rpc('send_message', { p_recipient_uid: 'zzz999', p_body: 'a' })"
+             ".then(function () {}); __drain();")
+js(_nc_send, "Campus.client().rpc('send_message', { p_recipient_uid: 'zzz999', p_body: 'b' })"
+             ".then(function () {}); __drain();")
+_nc_dmcount = js(_nc_send, "String(__mockOpts.store.notifications.filter(function (n) {"
+                           " return n.user_uid === 'zzz999' && n.type === 'dm'; }).length)")
+check("NC: 连发两条私信只留一条未读提醒（不刷屏）", str(_nc_dmcount) == "1", _nc_dmcount)
+
+_nc_guest = load("notifications.html", "mock-login")
+js(_nc_guest, "__drain(); __drain();")
+check("NC: 没登录时说人话，不假装空列表",
+      str(js(_nc_guest, "document.getElementById('nc-login').hidden")) == "False")
+check("NC: 没登录时不渲染任何列表项",
+      str(js(_nc_guest, "document.getElementById('nc-list').innerHTML")).strip() == "")
+
+_nc_anon = load("notifications.html", "mock-anon")
+js(_nc_anon, "__drain(); __drain();")
+check("NC: 匿名身份看不到提醒（提醒只属于公开账号）",
+      str(js(_nc_anon, "document.getElementById('nc-anon').hidden")) == "False")
 
 print()
 print("=" * 70)

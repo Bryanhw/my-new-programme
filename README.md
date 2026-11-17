@@ -398,6 +398,22 @@ window.CAMPUS_CONFIG = {
   正文里的 `@uid` 在评论中渲染成可点主页链接；匿名内容照旧不带任何公开 UID。
 - ✅ 站主已在 Supabase 执行 `docs/supabase-mentions.sql`，@ 与提醒已全链路生效。
 
+### 提醒中心（第 68 轮）
+
+提醒从「我的」页的一小块，升级成独立一页 `notifications.html`：按类型看、按时间往前翻、
+可以只清某一类。数据层在 `docs/supabase-notify-center.sql`（幂等）：
+
+- 四种提醒：`mention`（评论 @）、`listen_invite` / `listen_accept`（一起听）、
+  `dm`（有人给你发私信）；
+- **私信终于会提醒了**：`send_message` 发完顺手给收件人留一条，但只记「有人发消息」，
+  **不写正文**，正文永远只在会话里；对方连发十条也只留一条未读，不刷屏；
+- `my_notifications(p_limit, p_before, p_type)` 支持分类与翻页，
+  `my_unread_counts()` 给角标，`mark_notifications_read(p_type)` 可只清一类；
+- 匿名评论的 @ 提醒 `from_uid` 永远为空 —— 匿名红线不动；
+- 「我的」页只放最近 3 条 + 「全部提醒」入口，未读详情都在提醒中心；
+- ⏳ 待站主执行 `docs/supabase-notify-center.sql`；执行前提醒中心显示
+  「提醒还没开启」，@ / 一起听 / 私信本身不受影响。
+
 ### 一起听（音乐专区，V5-M4）
 
 把一首歌发给同学，两个人听同一首。数据层在 `docs/supabase-music.sql`（幂等，可重复执行）：

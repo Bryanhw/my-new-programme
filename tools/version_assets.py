@@ -27,11 +27,20 @@ import sys
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(TOOLS_DIR)
 
-PAGES = [
-    "index.html", "feed.html", "post.html", "login.html",
-    "reset.html", "profile.html", "faq.html", "feedback.html",
-    "messages.html", "music.html", "drift.html",
-]
+def discover_pages():
+    """Every *.html sitting at the repo root, in a stable order.
+
+    This used to be a hand-written list, and adding `drift.html` silently
+    left its assets unversioned because nobody remembered to edit it.
+    Scanning the root keeps `?v=` coverage automatic for every new page.
+    """
+    return sorted(
+        name for name in os.listdir(ROOT)
+        if name.endswith(".html") and os.path.isfile(os.path.join(ROOT, name))
+    )
+
+
+PAGES = discover_pages()
 
 # Only CSS/JS under assets/ (never images, never external URLs).
 ASSET_RE = re.compile(
