@@ -376,6 +376,14 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
   - **C1 ✅（2026-11-17）**：`privacy_probe` 全量 **113/0** —— 游客侧 56 条
     + 登录态 5–8 段（`--write` 下的匿名帖归属证明、M2 私信隔离、7c 私信提醒往返）。
     测试账号 `13900000011` / `13900000012`，密码在本机 `.deepworks/tmp/e2e.env`。
+  - **M4 真实链路 ✅（2026-11-17）**：探针 7d 把「发歌 → 邀请 → 被邀请人收到提醒
+    （正文是歌名不是账号）→ 接受 → 双方卡片都显示 2 人 → 撤歌后两侧都消失」整条链
+    跑在真实库上，12 条断言全绿。这是 M4 第一次接触真实 Postgres。
+  - **权限体检 ✅（2026-11-17）**：anon / authenticated 双角色逐一调用 12 个 RPC。
+    密保两个函数确实只给 `service_role`（浏览器 401/403），重设密码走已部署的
+    `functions/v1/reset-password`；四个个人数据读函数（`my_mutual_follows`、`list_rooms`、
+    `list_my_drift_letters`、`my_listen_invites`）对游客返回空列表——**刻意保持**，
+    因为公开主页的游客态依赖这个安静的答案，探针 4f 用断言钉住该决定。
   - **同轮修正（探针）**：7b 段原来拿账号 uuid 去比 `direct_messages.sender_uid`，
     而这张表存的是公开 UID（`docs/supabase-direct-message.sql:44`）——
     这段以前一直 skip，跑起来才暴露，已改为按公开 UID 断言。

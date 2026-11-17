@@ -317,6 +317,41 @@ else:
           st in (400, 401, 403) and code_of(body) in ("42501", "401", "PGRST301"),
           (st, code_of(body), msg_of(body)))
 
+
+# ------------------------------- 4f) admin-only helpers (round 68 audit)
+# The whole password-reset path goes through the reset-password Edge Function,
+# never the browser. These three functions are granted to service_role only, so
+# that nobody can brute-force another account's security question from a console.
+print()
+print("4f) the password-reset helpers are out of reach for the browser role")
+for name, payload in (
+    ("security_answer_fingerprint", {"p_answer": "x", "p_salt": "y"}),
+    ("verify_security_answer", {"p_user_id": "00000000-0000-0000-0000-000000000000",
+                                "p_answer": "x"}),
+):
+    st, body = req("POST", "/rest/v1/rpc/" + name, payload)
+    check(name + " is refused for a signed-out visitor",
+          st in (400, 401, 403) and code_of(body) == "42501", (st, code_of(body)))
+
+st, body = req("POST", "/rest/v1/rpc/set_security_answer",
+               {"p_question_id": "home_city", "p_answer": "x"})
+check("set_security_answer refuses a signed-out visitor", st in (400, 401, 403),
+      (st, code_of(body)))
+
+# The music wall stays public on purpose: a visitor should be able to listen.
+st, body = req("POST", "/rest/v1/rpc/music_feed", {"p_limit": 3})
+check("music_feed still answers a signed-out visitor",
+      st == 200 and isinstance(body, list), (st, body))
+
+# Known-acceptable: these three answer a visitor with an empty list instead of
+# refusing. They never carry someone else's rows, and the pages rely on the quiet
+# answer (a visitor browsing a public profile must not read an error banner).
+# If they are ever tightened to 401, update this block on purpose.
+for name in ("my_mutual_follows", "list_rooms", "list_my_drift_letters"):
+    st, body = req("POST", "/rest/v1/rpc/" + name, {})
+    check(name + " gives a visitor an empty list, never someone else's rows",
+          st == 200 and body == [], (st, body))
+
 print("4d) drift bottles never hand out the author (run AFTER the drift migration)")
 DENIAL_DRIFT = [
     ("select everything", "/rest/v1/drift_notes?select=*&limit=1"),
@@ -518,6 +553,92 @@ if WRITE:
         fresh, _ = dm_notes(TOK_B)
         check("a DM after the read earns a fresh notice", len(fresh) == len(again) + 1,
               (len(again), len(fresh)))
+
+# ---------------------------------- M4 listen-together round trip (round 68)
+# The only milestone that had never touched the real database end to end.
+if WRITE:
+    print()
+    print("7d) M4 listen-together: publish -> invite -> accept -> two listeners")
+    _, pub_a4 = req("POST", "/rest/v1/rpc/my_public_uid", {}, token=TOK_A)
+    _, pub_b4 = req("POST", "/rest/v1/rpc/my_public_uid", {}, token=TOK_B)
+    st, mid = req("POST", "/rest/v1/rpc/publish_music",
+                  {"p_url": "https://music.163.com/song?id=1901371647",
+                   "p_note": MARKER + "-m4"}, token=TOK_A)
+    check("A can publish a track", st == 200 and bool(mid), (st, mid))
+    if st == 200 and mid:
+        st, inv = req("POST", "/rest/v1/rpc/invite_to_listen",
+                      {"p_music_id": mid, "p_invitee_uid": pub_b4}, token=TOK_A)
+        check("A can invite B to listen", st == 200 and bool(inv), (st, inv))
+        if st == 200 and inv:
+            _, notes_b4 = req("POST", "/rest/v1/rpc/my_notifications",
+                              {"p_limit": 20, "p_type": "listen"}, token=TOK_B)
+            hit = [n for n in (notes_b4 if isinstance(notes_b4, list) else [])
+                   if str(n.get("ref_id")) == str(inv)]
+            check("B is told about the invitation", len(hit) == 1
+                  and hit[0].get("type") == "listen_invite", (len(hit), hit[:1]))
+            check("the invitation names the track, not the account",
+                  bool(hit) and (hit[0].get("body") or "").startswith(MARKER),
+                  hit[0].get("body") if hit else None)
+
+            _, invites_b = req("POST", "/rest/v1/rpc/my_listen_invites", {}, token=TOK_B)
+            pend = [i for i in (invites_b if isinstance(invites_b, list) else [])
+                    if str(i.get("invite_id")) == str(inv)]
+            check("B sees it as an incoming pending invitation",
+                  len(pend) == 1 and pend[0].get("direction") == "in"
+                  and pend[0].get("status") == "pending", (len(pend), pend[:1]))
+            check("the invitation shows the inviter's public uid only",
+                  bool(pend) and pend[0].get("other_uid") == pub_a4,
+                  (pend[0].get("other_uid") if pend else None, pub_a4))
+
+            def feed_row(token):
+                stf, rows = req("POST", "/rest/v1/rpc/music_feed",
+                                {"p_limit": 60}, token=token)
+                for row in (rows if isinstance(rows, list) else []):
+                    if str(row.get("id")) == str(mid):
+                        return row
+                return None
+
+            before_row = feed_row(TOK_A)
+            check("before the answer the card shows one listener",
+                  bool(before_row) and before_row.get("listeners") == 1,
+                  before_row.get("listeners") if before_row else None)
+
+            st, res = req("POST", "/rest/v1/rpc/respond_listen_invite",
+                          {"p_invite_id": inv, "p_accept": True}, token=TOK_B)
+            check("B can accept the invitation", st == 200 and res == "accepted",
+                  (st, res))
+
+            _, notes_a4 = req("POST", "/rest/v1/rpc/my_notifications",
+                              {"p_limit": 20, "p_type": "listen"}, token=TOK_A)
+            acc = [n for n in (notes_a4 if isinstance(notes_a4, list) else [])
+                   if str(n.get("ref_id")) == str(inv) and n.get("type") == "listen_accept"]
+            check("A is told B accepted", len(acc) == 1, len(acc))
+
+            ra, rb = feed_row(TOK_A), feed_row(TOK_B)
+            check("the card now reads two listeners, on both sides",
+                  bool(ra) and bool(rb) and ra.get("listeners") == 2
+                  and rb.get("listeners") == 2,
+                  (ra.get("listeners") if ra else None,
+                   rb.get("listeners") if rb else None))
+            check("both sides see the shared state as accepted",
+                  bool(ra) and bool(rb) and ra.get("mine") == "accepted"
+                  and rb.get("mine") == "accepted",
+                  (ra.get("mine") if ra else None, rb.get("mine") if rb else None))
+
+            st, _ = req("POST", "/rest/v1/rpc/delete_music", {"p_music_id": mid},
+                        token=TOK_A)
+            check("A can take the track down, and it leaves both feeds",
+                  st == 200 and feed_row(TOK_A) is None and feed_row(TOK_B) is None,
+                  st)
+
+# ------------------------ 7e) the reset helper ignores signed-in accounts too
+if WRITE:
+    print()
+    print("7e) the security-question helper stays service_role only")
+    st, body = req("POST", "/rest/v1/rpc/verify_security_answer",
+                   {"p_user_id": UID_A, "p_answer": "definitely-not-it"}, token=TOK_A)
+    check("a signed-in account cannot call verify_security_answer directly",
+          st in (400, 401, 403) and code_of(body) == "42501", (st, code_of(body)))
 
 # --------------------------------------------------------------- likes side
 print()

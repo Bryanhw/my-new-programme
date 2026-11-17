@@ -398,14 +398,30 @@ window.CAMPUS_CONFIG = {
   正文里的 `@uid` 在评论中渲染成可点主页链接；匿名内容照旧不带任何公开 UID。
 - ✅ 站主已在 Supabase 执行 `docs/supabase-mentions.sql`，@ 与提醒已全链路生效。
 
-### 测试账号与隐私探针
+### 权限体检（第 68 轮）
+
+把所有 RPC 分别用 anon（未登录）和 authenticated（测试账号）各调一遍，结论：
+
+- ✅ **密码重设链路是干净的**：`security_answer_fingerprint`、`verify_security_answer`
+  只 `grant` 给 `service_role`，浏览器角色调不动（anon 401 / authenticated 403）。
+  重设密码只能走 `functions/v1/reset-password` 这个 Edge Function（已确认部署，
+  空 body 会回 `400 invalid_input`，属于正常业务校验）。
+- ✅ `music_feed` 对游客开放是设计（音乐墙公开），`drift_today` / `drift_circle_ok` 同理。
+- ⚠️ 四个个人数据读函数对游客**返回空列表而不是 401**：`my_mutual_follows`、`list_rooms`、
+  `list_my_drift_letters`、`my_listen_invites`。它们永远不含别人的行，而公开主页的游客态
+  依赖这个"安静的答案"（否则游客会看到一条红色报错）。因此**刻意保持现状**，并在探针
+  4f 里用断言钉住；哪天决定收紧成 401，必须同步改那几条断言，而不是悄悄让页面变红。
+- 提醒中心那三个函数已经收紧（`401 42501`），和这里的选择正好相反——因为它们从前端
+  只会被登录态调用。
+
+## 测试账号与隐私探针
 
 隐私探针分两档跑，第二档需要一对真实账号：
 
 | 命令 | 覆盖 | 当前 |
 | --- | --- | --- |
-| `python tools/privacy_probe.py` | 游客侧：1–4e、8–10 段 | 56 条 |
-| 注入三个 `E2E_*` 变量后加 `--write` | 追加 5–8 段：登录态隔离、匿名帖归属、私信隔离、私信提醒往返 | 113 条 |
+| `python tools/privacy_probe.py` | 游客侧：1–4f、8–10 段 | 63 条 |
+| 注入三个 `E2E_*` 变量后加 `--write` | 追加 5–8 段：登录态隔离、匿名帖归属、私信隔离、私信提醒往返、M4 一起听、密保助手 | 133 条 |
 
 测试账号是 `13900000011` / `13900000012`（邮箱是伪邮箱 `<手机号>@students.local`），
 密码保存在本机 `.deepworks/tmp/e2e.env`——该目录被 git 忽略，永远不进仓库。
