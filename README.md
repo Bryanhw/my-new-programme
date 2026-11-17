@@ -398,7 +398,24 @@ window.CAMPUS_CONFIG = {
   正文里的 `@uid` 在评论中渲染成可点主页链接；匿名内容照旧不带任何公开 UID。
 - ✅ 站主已在 Supabase 执行 `docs/supabase-mentions.sql`，@ 与提醒已全链路生效。
 
-### 提醒中心（第 68 轮）
+### 测试账号与隐私探针
+
+隐私探针分两档跑，第二档需要一对真实账号：
+
+| 命令 | 覆盖 | 当前 |
+| --- | --- | --- |
+| `python tools/privacy_probe.py` | 游客侧：1–4e、8–10 段 | 56 条 |
+| 注入三个 `E2E_*` 变量后加 `--write` | 追加 5–8 段：登录态隔离、匿名帖归属、私信隔离、私信提醒往返 | 113 条 |
+
+测试账号是 `13900000011` / `13900000012`（邮箱是伪邮箱 `<手机号>@students.local`），
+密码保存在本机 `.deepworks/tmp/e2e.env`——该目录被 git 忽略，永远不进仓库。
+用 `python .deepworks/tmp/run_e2e.py --write` 会自动读取它并注入到子进程环境。
+
+5–8 段以前一直没跑过，因为它们需要真实登录；跑起来之后立刻抓到一个探针自己的错误：
+7b 段拿账号 uuid 去比 `direct_messages.sender_uid`，而这张表存的是**公开 UID**
+（见 `docs/supabase-direct-message.sql`）。已改为按公开 UID 断言。
+
+## 提醒中心（第 68 轮）
 
 提醒从「我的」页的一小块，升级成独立一页 `notifications.html`：按类型看、按时间往前翻、
 可以只清某一类。数据层在 `docs/supabase-notify-center.sql`（幂等）：

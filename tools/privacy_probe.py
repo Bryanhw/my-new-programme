@@ -449,15 +449,75 @@ else:
             for r in rows)
         return ok, st, msg_of(body)
 
-    ok, sta, msa = _dm_party_rows(TOK_A, UID_A)
-    check("A sees only DMs where A is a party", ok, (sta, msa))
-    ok, stb, msb = _dm_party_rows(TOK_B, UID_B)
-    check("B sees only DMs where B is a party", ok, (stb, msb))
+    # direct_messages stores public uids, never the account uuid
+    _, pub_a7 = req("POST", "/rest/v1/rpc/my_public_uid", {}, token=TOK_A)
+    _, pub_b7 = req("POST", "/rest/v1/rpc/my_public_uid", {}, token=TOK_B)
+    ok, sta, msa = _dm_party_rows(TOK_A, pub_a7)
+    check("A sees only DMs where A is a party", ok, (sta, msa, pub_a7))
+    ok, stb, msb = _dm_party_rows(TOK_B, pub_b7)
+    check("B sees only DMs where B is a party", ok, (stb, msb, pub_b7))
     # Sending to a nonexistent public uid must be refused by the RPC.
     st, self_send = req("POST", "/rest/v1/rpc/send_message",
                         {"p_recipient_uid": STRANGER, "p_body": MARKER}, token=TOK_A)
     check("send_message refuses a recipient that is not an existing public uid",
           st in (400, 403), (st, msg_of(self_send)))
+
+# --------------------------------------- M2 keeps the notice quiet (round 68)
+# A DM must leave exactly one quiet notice: no body, sender shown by public uid
+# only, and a second message must not stack a second notice while the first is
+# still unread. This is the real-Postgres half of what run_tests proves in the stub.
+if WRITE:
+    print()
+    print("7c) M2 -> notification centre: a DM leaves one quiet notice")
+    st, pub_a = req("POST", "/rest/v1/rpc/my_public_uid", {}, token=TOK_A)
+    st2, pub_b = req("POST", "/rest/v1/rpc/my_public_uid", {}, token=TOK_B)
+    ok = (st == 200 and st2 == 200
+          and isinstance(pub_a, str) and pub_a
+          and isinstance(pub_b, str) and pub_b)
+    check("both test accounts have a public uid", ok, (st, st2, pub_a, pub_b))
+    if ok:
+
+        def dm_notes(token):
+            sta, rows = req("POST", "/rest/v1/rpc/my_notifications",
+                            {"p_limit": 20, "p_type": "dm"}, token=token)
+            return (rows if isinstance(rows, list) else []), sta
+
+        def dm_unread(token):
+            stb, rows = req("POST", "/rest/v1/rpc/my_unread_counts", {}, token=token)
+            for row in (rows if isinstance(rows, list) else []):
+                if row.get("type") == "dm":
+                    return int(row.get("n") or 0)
+            return 0
+
+        req("POST", "/rest/v1/rpc/mark_notifications_read", {"p_type": "dm"},
+            token=TOK_B)
+        before, _ = dm_notes(TOK_B)
+        st5, _ = req("POST", "/rest/v1/rpc/send_message",
+                     {"p_recipient_uid": pub_b, "p_body": MARKER + "-dm1"}, token=TOK_A)
+        after, _ = dm_notes(TOK_B)
+        newest = after[0] if after else {}
+        check("a DM leaves the recipient one dm notice",
+              st5 == 200 and len(after) == len(before) + 1,
+              (st5, len(before), len(after)))
+        check("the notice carries no message body", not (newest.get("body") or ""),
+              newest.get("body"))
+        check("the notice names the sender by public uid only",
+              newest.get("from_uid") == pub_a, (newest.get("from_uid"), pub_a))
+        check("the unread badge counts it as dm", dm_unread(TOK_B) >= 1, dm_unread(TOK_B))
+        req("POST", "/rest/v1/rpc/send_message",
+            {"p_recipient_uid": pub_b, "p_body": MARKER + "-dm2"}, token=TOK_A)
+        again, _ = dm_notes(TOK_B)
+        check("a second DM does not stack a second notice", len(again) == len(after),
+              (len(after), len(again)))
+        st6, cleared = req("POST", "/rest/v1/rpc/mark_notifications_read",
+                           {"p_type": "dm"}, token=TOK_B)
+        check("the recipient can clear the dm badge",
+              st6 == 200 and dm_unread(TOK_B) == 0, (st6, cleared, dm_unread(TOK_B)))
+        req("POST", "/rest/v1/rpc/send_message",
+            {"p_recipient_uid": pub_b, "p_body": MARKER + "-dm3"}, token=TOK_A)
+        fresh, _ = dm_notes(TOK_B)
+        check("a DM after the read earns a fresh notice", len(fresh) == len(again) + 1,
+              (len(again), len(fresh)))
 
 # --------------------------------------------------------------- likes side
 print()

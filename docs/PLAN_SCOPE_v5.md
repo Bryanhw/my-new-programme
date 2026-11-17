@@ -373,5 +373,9 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
     public schema 新函数的执行权，`revoke all from public` 之后 anon 仍能调用
     三个查询函数并拿到空列表。已在迁移里点名 `revoke execute ... from anon`，
     privacy_probe 4e 相应改为「未登录必须被拒绝」（重跑迁移后转绿）。
-  - **待办（站主）**：执行 `docs/supabase-notify-center.sql`；C1（跑满
-    privacy_probe 5-8 段）需要一对测试账号的密码。
+  - **C1 ✅（2026-11-17）**：`privacy_probe` 全量 **113/0** —— 游客侧 56 条
+    + 登录态 5–8 段（`--write` 下的匿名帖归属证明、M2 私信隔离、7c 私信提醒往返）。
+    测试账号 `13900000011` / `13900000012`，密码在本机 `.deepworks/tmp/e2e.env`。
+  - **同轮修正（探针）**：7b 段原来拿账号 uuid 去比 `direct_messages.sender_uid`，
+    而这张表存的是公开 UID（`docs/supabase-direct-message.sql:44`）——
+    这段以前一直 skip，跑起来才暴露，已改为按公开 UID 断言。
