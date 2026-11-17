@@ -287,7 +287,24 @@ grant execute on function public.mark_notifications_read(text) to authenticated;
 notify pgrst, 'reload schema';
 
 -- ---------------------------------------------------------------------------
--- 7) 自检（只读，不影响数据）
+-- 7) 点名撤销 anon 的执行权
+--
+--    Supabase 对 public schema 里的新函数有默认授权（anon / authenticated 都拿到
+--    execute）。所以 `revoke all ... from public` 之后，anon 仍然能调用这些函数，
+--    只是函数内部因为拿不到登录 uid 而返回空列表 / 0。
+--
+--    「返回空」不算泄露，但权限面应该收成「明说不行」：
+--    未登录调用时直接 401，而不是给一个容易被误读成「你没有提醒」的空数组。
+-- ---------------------------------------------------------------------------
+revoke execute on function public.my_notifications(int, timestamptz, text) from anon;
+revoke execute on function public.my_unread_counts() from anon;
+revoke execute on function public.mark_notifications_read(text) from anon;
+revoke execute on function public.send_message(text, text) from anon;
+
+notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- 8) 自检（只读，不影响数据）
 -- ---------------------------------------------------------------------------
 do $$
 declare

@@ -297,17 +297,25 @@ st, body = req("POST", "/rest/v1/rpc/my_notifications", {"p_limit": 20})
 if st == 404:
     print("        note: my_notifications not there yet - skipped")
 else:
-    rows = body if isinstance(body, list) else None
-    check("notifications: my_notifications hands a signed-out caller an empty list",
-          st == 200 and rows == [], (st, msg_of(body)))
+    check("notifications: my_notifications is refused for a signed-out visitor",
+          st in (400, 401, 403) and code_of(body) in ("42501", "401", "PGRST301"),
+          (st, code_of(body), msg_of(body)))
 
 st, body = req("POST", "/rest/v1/rpc/my_unread_counts", {})
 if st == 404:
     print("        note: my_unread_counts not there yet - skipped")
 else:
-    rows = body if isinstance(body, list) else None
-    check("notifications: my_unread_counts hands a signed-out caller an empty list",
-          st == 200 and rows == [], (st, msg_of(body)))
+    check("notifications: my_unread_counts is refused for a signed-out visitor",
+          st in (400, 401, 403) and code_of(body) in ("42501", "401", "PGRST301"),
+          (st, code_of(body), msg_of(body)))
+
+st, body = req("POST", "/rest/v1/rpc/mark_notifications_read", {"p_type": "dm"})
+if st == 404:
+    print("        note: mark_notifications_read not there yet - skipped")
+else:
+    check("notifications: mark_notifications_read is refused for a signed-out visitor",
+          st in (400, 401, 403) and code_of(body) in ("42501", "401", "PGRST301"),
+          (st, code_of(body), msg_of(body)))
 
 print("4d) drift bottles never hand out the author (run AFTER the drift migration)")
 DENIAL_DRIFT = [

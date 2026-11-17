@@ -369,5 +369,9 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
     与新 JS；privacy_probe 新增 4e（提醒基表 anon 不可读、两个 RPC 给游客空列表）。
   - **工程基线**：static_checks **1296/0**、run_tests **1140/0**、
     privacy_probe **54/0**（4d 已在线上转绿）。
+  - **同轮修正（权限面）**：线上验证发现 Supabase 会给 `anon` 默认授予
+    public schema 新函数的执行权，`revoke all from public` 之后 anon 仍能调用
+    三个查询函数并拿到空列表。已在迁移里点名 `revoke execute ... from anon`，
+    privacy_probe 4e 相应改为「未登录必须被拒绝」（重跑迁移后转绿）。
   - **待办（站主）**：执行 `docs/supabase-notify-center.sql`；C1（跑满
     privacy_probe 5-8 段）需要一对测试账号的密码。

@@ -410,6 +410,9 @@ window.CAMPUS_CONFIG = {
 - `my_notifications(p_limit, p_before, p_type)` 支持分类与翻页，
   `my_unread_counts()` 给角标，`mark_notifications_read(p_type)` 可只清一类；
 - 匿名评论的 @ 提醒 `from_uid` 永远为空 —— 匿名红线不动；
+- 三个查询类 RPC 显式撤销了 `anon` 执行权：未登录调用直接 401，
+  而不是回一个容易被误读成「你没有提醒」的空数组（Supabase 默认会给
+  `anon` 授予新函数的执行权，光撤 `public` 不够）；
 - 「我的」页只放最近 3 条 + 「全部提醒」入口，未读详情都在提醒中心；
 - ⏳ 待站主执行 `docs/supabase-notify-center.sql`；执行前提醒中心显示
   「提醒还没开启」，@ / 一起听 / 私信本身不受影响。
