@@ -5127,6 +5127,42 @@ js(_nc_anon, "__drain(); __drain();")
 check("NC: 匿名身份看不到提醒（提醒只属于公开账号）",
       str(js(_nc_anon, "document.getElementById('nc-anon').hidden")) == "False")
 
+print("- 第 69 轮：菜单里的「全部提醒」角标")
+
+_badge = load("notifications.html", "mock-logged", pre=NC_SEED, modules=True)
+js(_badge, "__drain(); __drain();")
+js(_badge, "__fn = {}; Campus.refreshNotifBadge().then(function (n) { __fn.n = n; }); __drain();")
+_badge_text = str(js(_badge, "document.getElementById('menu-badge').textContent"))
+check("badge: three unread notices read as 3", _badge_text == "3", _badge_text)
+check("badge: is visible when there is something to read",
+      str(js(_badge, "document.getElementById('menu-badge').hidden")) == "False")
+check("badge: tells a screen reader the count too",
+      "3" in str(js(_badge, "document.getElementById('menu-badge').getAttribute('aria-label')")),
+      js(_badge, "document.getElementById('menu-badge').getAttribute('aria-label')"))
+
+js(_badge, "(function () { var s = __mockOpts.store.notifications;"
+           " s.length = 0;"
+           " for (var i = 0; i < 120; i++) s.push({ id: 'bx' + i, user_uid: 'abc123',"
+           " type: 'mention', ref_id: 'c-1', body: 'x', read_at: null,"
+           " created_at: '2026-11-16T10:00:00.000Z' });"
+           " __fn = {}; Campus.refreshNotifBadge().then(function (n) { __fn.n = n; }); })();"
+           " __drain();")
+_badge_big = str(js(_badge, "document.getElementById('menu-badge').textContent"))
+check("badge: 120 unread collapse into 99+", _badge_big == "99+", _badge_big)
+
+js(_badge, "Campus.client().rpc('mark_notifications_read', { p_type: null })"
+           " .then(function () { __fn = {}; return Campus.refreshNotifBadge(); })"
+           " .then(function (n) { __fn.n = n; }); __drain();")
+check("badge: goes out once everything is read",
+      str(js(_badge, "document.getElementById('menu-badge').hidden")) == "True",
+      js(_badge, "document.getElementById('menu-badge').hidden"))
+
+js(_nc_guest, "__fn = {}; Campus.refreshNotifBadge().then(function (n) { __fn.n = n; }); __drain();")
+check("badge: stays dark for a signed-out visitor",
+      str(js(_nc_guest, "document.getElementById('menu-badge').hidden")) == "True"
+      and str(js(_nc_guest, "document.getElementById('menu-badge').textContent")) == "",
+      js(_nc_guest, "document.getElementById('menu-badge').textContent"))
+
 print()
 print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

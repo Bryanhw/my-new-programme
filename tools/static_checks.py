@@ -173,8 +173,17 @@ for page in MENU_PAGES:
           'class="nav-btn"' in head and "M4 7h16M4 12h16M4 17h16" in head)
     check("sheet markup inside the header on " + page,
           'class="menu-sheet"' in head and "menu-text" in head)
-    check("8 secondary items on " + page, html.count('class="menu-item"') == 8,
+    check("9 secondary items on " + page, html.count('class="menu-item"') == 9,
           html.count('class="menu-item"'))
+    # 第 69 轮：「全部提醒」在登录前面（登录页自己没有登录项，对齐「回到首页」）
+    t_notif = head.find('href="notifications.html"')
+    t_after = head.find('data-tab="login"')
+    if t_after < 0:
+        t_after = head.find('data-tab="home"')
+    check("notifications entry sits before login/back-home on " + page,
+          0 <= t_notif < t_after, (t_notif, t_after))
+    check("notifications entry carries a hidden unread badge on " + page,
+          'class="menu-badge" id="menu-badge" hidden' in head)
     check("drift entry is in the menu on " + page,
           "\u6f02\u6d41\u795d\u798f" in head and 'href="drift.html"' in head)
     check("faq is in the menu on " + page, "常见问题" in head and 'href="faq.html"' in head)

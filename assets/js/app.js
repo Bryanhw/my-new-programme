@@ -3011,11 +3011,57 @@ window.Campus = (function () {
     }
   }
 
+  /* ------------------------------------------------------------------
+   * 第 69 轮：「全部提醒」菜单角标
+   * ------------------------------------------------------------------
+   * 角标只回答一个问题：有几件事在等你。具体是什么、谁做的，全在提醒中心里，
+   * 这里不出现任何名字或内容 —— 锁屏时瞟一眼手机也不会泄露半句。
+   *
+   * 未登录不发请求：my_unread_counts 对 anon 是 401，发出去只会多一条失败日志。
+   * 99 以上显示 99+，不让角标把菜单项撑变形。
+   */
+  function paintNotifBadge(total) {
+    var el = document.getElementById("menu-badge");
+    if (!el) return;
+    var n = Number(total) || 0;
+    if (n > 0) {
+      el.textContent = n > 99 ? "99+" : String(n);
+      el.hidden = false;
+      el.setAttribute("aria-label", n + " 条未读提醒");
+    } else {
+      el.textContent = "";
+      el.hidden = true;
+      el.removeAttribute("aria-label");
+    }
+  }
+
+  function refreshNotifBadge() {
+    var el = document.getElementById("menu-badge");
+    if (!el) return Promise.resolve(0);
+    if (!client) { paintNotifBadge(0); return Promise.resolve(0); }
+    return getIdentity().then(function (identity) {
+      if (!identity.user) { paintNotifBadge(0); return 0; }
+      return client.rpc("my_unread_counts").then(function (res) {
+        var rows = (res && !res.error && res.data) || [];
+        var total = 0;
+        for (var i = 0; i < rows.length; i++) total += Number(rows[i].n || 0);
+        paintNotifBadge(total);
+        return total;
+      });
+    }).catch(function () { paintNotifBadge(0); return 0; });
+  }
+
   /* 二级菜单：点面板外面、或按 Esc 就收起来（details 本身做不到） */
   function bindMoreMenu() {
     function close() {
       var more = document.getElementById("tab-more");
       if (more && more.open) more.open = false;
+    }
+    var panel = document.getElementById("tab-more");
+    if (panel) {
+      panel.addEventListener("toggle", function () {
+        if (panel.open) refreshNotifBadge();
+      });
     }
     document.addEventListener("click", function (e) {
       var more = document.getElementById("tab-more");
@@ -3905,6 +3951,7 @@ window.Campus = (function () {
     showNotice: showNotice,
     hideNotice: hideNotice,
     markTabbar: markTabbar,
+    refreshNotifBadge: refreshNotifBadge,
     blockIfNotReady: blockIfNotReady,
     setupCard: setupCard,
     setupHint: setupHint,

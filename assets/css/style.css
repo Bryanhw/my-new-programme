@@ -1537,6 +1537,7 @@ input[type="file"] { display: none; }
 }
 
 .menu-item {
+  position: relative;              /* 第 69 轮：右上角未读角标的定位基准 */
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1545,6 +1546,27 @@ input[type="file"] { display: none; }
   color: var(--text);
   text-decoration: none;
 }
+
+/* 第 69 轮：菜单里的未读角标。
+   只放一个数字 —— 谁发的、说了什么，都留在提醒中心里。
+   红底白字按 WCAG 用 #B3261E（白字 6.4:1），不用品牌橙以免和「新内容」混淆。 */
+.menu-badge {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #B3261E;
+  color: #FFFFFF;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.menu-badge[hidden] { display: none; }
 .menu-item:hover { text-decoration: none; background: var(--brand-ghost); }
 .menu-item.active { background: var(--brand-ghost); color: #A8451A; }
 

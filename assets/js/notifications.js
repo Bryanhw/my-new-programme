@@ -8,6 +8,7 @@
 
   var C = window.Campus || {};
   document.title = "站内提醒 · " + (C.SITE_NAME || "校园拾光");
+  if (C.markTabbar) C.markTabbar("notifications");
   if (!C.client) return;
 
   var listEl = document.getElementById("nc-list");
@@ -230,6 +231,7 @@
         if (listEl) listEl.innerHTML = state.rows.map(renderItem).join("");
         paintReadAll();
         paintSummary();
+        if (C.refreshNotifBadge) C.refreshNotifBadge();
         toast("已标为已读");
       }).catch(function () {
         readAllEl.disabled = false;
