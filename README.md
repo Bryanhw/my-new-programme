@@ -466,6 +466,15 @@ window.CAMPUS_CONFIG = {
 - `music.html` / `messages.html` 没有 ☰ 菜单，铃铛跟在登录入口右边；
 - `reset.html` 是重设密码流程页，刻意不加，免得把正在找密码的人引走。
 
+### 修掉一个页头重叠（同轮）
+
+`drift.html` 与 `notifications.html` 的页头多包了一层 `<nav class="nav-actions">`，
+而 `style.css` 里从来没有它的布局规则 —— nav 是块级元素，里面的「退出登录」和 ☰
+就各占一行，在固定 64px 高的页头里上下顶出去、互相压住（登录后特别明显）。
+
+现在补成一行横排：`display: flex`，间距 14px，「退出登录」右侧再留 4px。
+窄屏（≤520px）间距收到 8px。`static_checks` 加了断言，防止这条规则再被删掉。
+
 守卫：`static_checks` 断言每页 9 项、提醒项在登录之前、角标默认 `hidden`；
 `static_checks` 另断言 11 页的铃铛位置（登录之后、菜单之前）；
 `run_tests` 9 条覆盖 3 条未读显示 3、120 条显示 `99+`、全部读完后熄灭、

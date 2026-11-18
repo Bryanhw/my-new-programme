@@ -206,6 +206,11 @@ for page in ("music.html", "messages.html"):
     check("header bell follows login on " + page,
           0 <= head.find('class="header-login"') < head.find('id="header-bell"'))
 
+# 第 70 轮修复：drift / notifications 的 <nav class="nav-actions"> 曾没有布局规则，
+# 里面的退出登录与 ☰ 会各占一行、在 64px 页头里上下顶出去。
+check("header button group stays on one row",
+      re.search(r"\.nav-actions\s*\{[^}]*display:\s*flex", css) is not None)
+
 # 页头「登录 / 注册」入口：除登录页外每页一个高对比入口，已登录时由 app.js 收起
 LOGIN_ENTRY_PAGES = ["index.html", "feed.html", "post.html", "profile.html", "faq.html",
                      "feedback.html"]

@@ -275,6 +275,17 @@ main:focus { outline: none; }
   gap: 12px;
   height: 64px;
 }
+/* 页头右侧的按钮组（drift / notifications 两页用 <nav> 包了一层）。
+   这里以前完全没有布局规则：nav 是块级元素，里面的「退出登录」和 ☰ 就各占一行，
+   在固定 64px 高的页头里上下顶出去、互相压住。补成一行横排。
+   间距比 .wrap 默认略宽一点，让「退出登录」和图标按钮不至于糊成一团。 */
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+.nav-actions > .header-signout { margin-right: 4px; }
 
 .brand {
   display: flex;
@@ -430,6 +441,8 @@ main:focus { outline: none; }
 @media (max-width: 520px) {
   /* 窄屏：铃铛和 ☰ 都保持 42×42 的按压区，只把页头间距收紧一点 */
   .site-header .wrap { gap: 8px; }
+  .nav-actions { gap: 8px; }
+  .nav-actions > .header-signout { margin-right: 0; }
 }
 
 /* 页头右上角的「更多」入口：一级按钮 + 向下展开的二级菜单 */

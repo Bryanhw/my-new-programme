@@ -425,6 +425,11 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
 - 撞上 R44 的文本级黑名单（`el.textContent = text` 被禁止）→ 把局部变量改名为 `label`，
   守卫本身一字未动。
 - 基线：static_checks **1335/0**、run_tests **1149/0**、privacy_probe **63/0**。
+- **修页头重叠**（站主截图反馈）：`drift.html` / `notifications.html` 的
+  `<nav class="nav-actions">` 缺布局规则，nav 是块级元素 → 「退出登录」与 ☰
+  各占一行，在固定 64px 页头里上下顶出、互相压住。补 `display:flex; gap:14px`
+  （退出登录右侧 +4px，窄屏 8px），并加一条 static_checks 守卫。
+  基线随之上到 **1336/0**。
 
 ### 待办
 
