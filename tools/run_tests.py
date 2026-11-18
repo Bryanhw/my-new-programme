@@ -5150,12 +5150,22 @@ js(_badge, "(function () { var s = __mockOpts.store.notifications;"
 _badge_big = str(js(_badge, "document.getElementById('menu-badge').textContent"))
 check("badge: 120 unread collapse into 99+", _badge_big == "99+", _badge_big)
 
+_bell_text = str(js(_badge, "document.getElementById('header-badge').textContent"))
+check("badge: the header bell shows the same number", _bell_text == "99+", _bell_text)
+check("badge: the bell turns solid while something is unread",
+      "has-unread" in str(js(_badge, "document.getElementById('header-bell').className")),
+      js(_badge, "document.getElementById('header-bell').className"))
+
 js(_badge, "Campus.client().rpc('mark_notifications_read', { p_type: null })"
            " .then(function () { __fn = {}; return Campus.refreshNotifBadge(); })"
            " .then(function (n) { __fn.n = n; }); __drain();")
 check("badge: goes out once everything is read",
-      str(js(_badge, "document.getElementById('menu-badge').hidden")) == "True",
-      js(_badge, "document.getElementById('menu-badge').hidden"))
+      str(js(_badge, "document.getElementById('menu-badge').hidden")) == "True"
+      and str(js(_badge, "document.getElementById('header-badge').hidden")) == "True",
+      js(_badge, "document.getElementById('header-badge').hidden"))
+check("badge: the bell goes back to its quiet state",
+      "has-unread" not in str(js(_badge, "document.getElementById('header-bell').className")),
+      js(_badge, "document.getElementById('header-bell').className"))
 
 js(_nc_guest, "__fn = {}; Campus.refreshNotifBadge().then(function (n) { __fn.n = n; }); __drain();")
 check("badge: stays dark for a signed-out visitor",

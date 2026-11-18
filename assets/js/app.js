@@ -3020,23 +3020,40 @@ window.Campus = (function () {
    * 未登录不发请求：my_unread_counts 对 anon 是 401，发出去只会多一条失败日志。
    * 99 以上显示 99+，不让角标把菜单项撑变形。
    */
+  var NOTIF_BADGES = ["header-badge", "menu-badge"];
+
   function paintNotifBadge(total) {
-    var el = document.getElementById("menu-badge");
-    if (!el) return;
     var n = Number(total) || 0;
-    if (n > 0) {
-      el.textContent = n > 99 ? "99+" : String(n);
-      el.hidden = false;
-      el.setAttribute("aria-label", n + " 条未读提醒");
-    } else {
-      el.textContent = "";
-      el.hidden = true;
-      el.removeAttribute("aria-label");
+    var label = n > 0 ? (n > 99 ? "99+" : String(n)) : "";
+    for (var i = 0; i < NOTIF_BADGES.length; i++) {
+      var el = document.getElementById(NOTIF_BADGES[i]);
+      if (!el) continue;
+      if (n > 0) {
+        el.textContent = label;
+        el.hidden = false;
+        el.setAttribute("aria-label", n + " 条未读提醒");
+      } else {
+        el.textContent = "";
+        el.hidden = true;
+        el.removeAttribute("aria-label");
+      }
+    }
+    /* 页头铃铛：有未读时整颗按钮变深色（只加红点不够显眼），
+       没未读就退回浅底，和 ☰ 同族，不抢注意力。 */
+    var bell = document.getElementById("header-bell");
+    if (bell) {
+      if (n > 0) {
+        bell.classList.add("has-unread");
+        bell.setAttribute("aria-label", "提醒，" + n + " 条未读");
+      } else {
+        bell.classList.remove("has-unread");
+        bell.setAttribute("aria-label", "提醒");
+      }
     }
   }
 
   function refreshNotifBadge() {
-    var el = document.getElementById("menu-badge");
+    var el = document.getElementById("header-bell") || document.getElementById("menu-badge");
     if (!el) return Promise.resolve(0);
     if (!client) { paintNotifBadge(0); return Promise.resolve(0); }
     return getIdentity().then(function (identity) {

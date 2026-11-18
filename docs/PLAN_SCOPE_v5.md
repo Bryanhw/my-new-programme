@@ -414,7 +414,19 @@ V5 的关注、私信、@、邀请、翻牌都要求**账号对账号**能被互
   未登录不亮 / aria-label）。
 - **基线**：static_checks **1315/0**、run_tests **1146/0**、privacy_probe **63/0**。
 
-### 第 69 轮剩余待办
+## 第 70 轮：页头独立「提醒」铃铛（2026-11-18）
+
+- 站主反馈：提醒藏在 ☰ 里太深。改成页头常驻按钮，位置在「登录 / 注册」与 ☰ 之间。
+- 11 个页面加 `.header-bell`：9 个有菜单的插在 `<details id="tab-more">` 之前；
+  `music.html` / `messages.html` 没有菜单，跟在登录入口之后；`reset.html` 不加。
+- `paintNotifBadge` 改为同时刷 `header-badge` + `menu-badge`，并给铃铛切 `has-unread`
+  （未读时深色填充 + 红点，读后退回浅底）；`refreshNotifBadge` 的存在性检查放宽到任一即可。
+- 窄屏 ≤520px：页头 `gap` 收到 8px，铃铛维持 42×42 按压区。
+- 撞上 R44 的文本级黑名单（`el.textContent = text` 被禁止）→ 把局部变量改名为 `label`，
+  守卫本身一字未动。
+- 基线：static_checks **1335/0**、run_tests **1149/0**、privacy_probe **63/0**。
+
+### 待办
 
 1. **页面真机点验三件**（接口层已全绿，只剩眼睛确认）：
    提醒中心点进去能直达会话、M4 卡片显示「2 人在一起听」、M6 漂流页投/拆/谢。

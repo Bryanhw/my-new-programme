@@ -375,6 +375,63 @@ main:focus { outline: none; }
   .header-signout { padding: 0 10px; }
 }
 
+/* 第 70 轮：页头独立「提醒」铃铛，夹在「登录 / 注册」和 ☰ 之间。
+   为什么要单独一个按钮：提醒藏在 ☰ 里时，要两步才看得到有多少事在等你；
+   放到页头后，打开任何一页都能一眼看到。有未读时整颗按钮转深色
+   （和「登录」同色系），没有未读则退回浅底，安静地和 ☰ 站在一起。 */
+.header-bell {
+  position: relative;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(74, 52, 35, 0.18);
+  background: rgba(255, 253, 251, 0.30);
+  color: var(--ink);
+  text-decoration: none;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.header-bell:hover {
+  text-decoration: none;
+  background: rgba(255, 253, 251, 0.55);
+  transform: translateY(-1px);
+}
+.header-bell:active { transform: translateY(0); }
+.header-bell:focus-visible { outline: 2px solid var(--ink-solid); outline-offset: 2px; }
+.header-bell.has-unread {
+  color: #FFF6EC;
+  background: linear-gradient(135deg, #4A3423, #2A1B10);
+  border-color: transparent;
+}
+.header-bell.has-unread:hover { background: linear-gradient(135deg, #3E2C1D, #221509); }
+
+/* 红点压在铃铛右上角，一圈同色描边让它从金色页头上「浮」出来 */
+.header-bell-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 2px solid rgba(214, 168, 96, 0.95);
+  background: #B3261E;
+  color: #FFFFFF;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.header-bell-badge[hidden] { display: none; }
+
+@media (max-width: 520px) {
+  /* 窄屏：铃铛和 ☰ 都保持 42×42 的按压区，只把页头间距收紧一点 */
+  .site-header .wrap { gap: 8px; }
+}
+
 /* 页头右上角的「更多」入口：一级按钮 + 向下展开的二级菜单 */
 .nav-more {
   position: relative;

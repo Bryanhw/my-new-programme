@@ -184,6 +184,13 @@ for page in MENU_PAGES:
           0 <= t_notif < t_after, (t_notif, t_after))
     check("notifications entry carries a hidden unread badge on " + page,
           'class="menu-badge" id="menu-badge" hidden' in head)
+    # 第 70 轮：页头独立铃铛，夹在「登录」和 ☰ 之间
+    t_bell = head.find('id="header-bell"')
+    t_more = head.find('id="tab-more"')
+    check("header bell sits between login and the menu on " + page,
+          0 <= t_bell < t_more, (t_bell, t_more))
+    check("header bell has a hidden count badge on " + page,
+          'class="header-bell-badge" id="header-badge" hidden' in head)
     check("drift entry is in the menu on " + page,
           "\u6f02\u6d41\u795d\u798f" in head and 'href="drift.html"' in head)
     check("faq is in the menu on " + page, "常见问题" in head and 'href="faq.html"' in head)
@@ -192,6 +199,12 @@ for page in MENU_PAGES:
     check("no stray more tab entry on " + page,
           'class="tab-more"' not in html and 'data-tab="more"' not in html)
     menu_targets |= set(re.findall(r'class="menu-item"[^>]*href="([^"#]+)', html))
+
+# 第 70 轮：music / messages 没有 ☰ 菜单，铃铛跟在「登录 / 注册」右边
+for page in ("music.html", "messages.html"):
+    head = read(os.path.join(ROOT, page)).split("</header>")[0]
+    check("header bell follows login on " + page,
+          0 <= head.find('class="header-login"') < head.find('id="header-bell"'))
 
 # 页头「登录 / 注册」入口：除登录页外每页一个高对比入口，已登录时由 app.js 收起
 LOGIN_ENTRY_PAGES = ["index.html", "feed.html", "post.html", "profile.html", "faq.html",
