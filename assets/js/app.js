@@ -3052,20 +3052,44 @@ window.Campus = (function () {
     }
   }
 
+  /* 底栏「消息」上的私信未读角标。和页头铃铛不同，这里只数私信（type = dm），
+     因为点进去是会话列表；@ 和一起听仍然归铃铛。 */
+  function paintTabbarBadge(count) {
+    var el = document.getElementById("tabbar-badge");
+    if (!el) return;
+    var n = Number(count) || 0;
+    if (n > 0) {
+      el.textContent = n > 99 ? "99+" : String(n);
+      el.hidden = false;
+      el.setAttribute("aria-label", n + " 条未读私信");
+    } else {
+      el.textContent = "";
+      el.hidden = true;
+      el.removeAttribute("aria-label");
+    }
+  }
+
   function refreshNotifBadge() {
-    var el = document.getElementById("header-bell") || document.getElementById("menu-badge");
+    var el = document.getElementById("header-bell") || document.getElementById("menu-badge")
+      || document.getElementById("tabbar-badge");
     if (!el) return Promise.resolve(0);
-    if (!client) { paintNotifBadge(0); return Promise.resolve(0); }
+    if (!client) { paintNotifBadge(0); paintTabbarBadge(0); return Promise.resolve(0); }
     return getIdentity().then(function (identity) {
-      if (!identity.user) { paintNotifBadge(0); return 0; }
+      if (!identity.user) { paintNotifBadge(0); paintTabbarBadge(0); return 0; }
       return client.rpc("my_unread_counts").then(function (res) {
         var rows = (res && !res.error && res.data) || [];
         var total = 0;
-        for (var i = 0; i < rows.length; i++) total += Number(rows[i].n || 0);
+        var dm = 0;
+        for (var i = 0; i < rows.length; i++) {
+          var n = Number(rows[i].n || 0);
+          total += n;
+          if (rows[i].type === "dm") dm += n;
+        }
         paintNotifBadge(total);
+        paintTabbarBadge(dm);
         return total;
       });
-    }).catch(function () { paintNotifBadge(0); return 0; });
+    }).catch(function () { paintNotifBadge(0); paintTabbarBadge(0); return 0; });
   }
 
   /* 二级菜单：点面板外面、或按 Esc 就收起来（details 本身做不到） */

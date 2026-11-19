@@ -34,6 +34,7 @@
   var refreshBtn = document.getElementById("refresh");
 
   document.title = "私信 · " + C.SITE_NAME;
+  if (C.markTabbar) C.markTabbar("messages");
   C.blockIfNotReady(noticeEl);
 
   /* 地址栏直达参数 */

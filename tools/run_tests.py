@@ -5159,6 +5159,27 @@ check("badge: the bell turns solid while something is unread",
 js(_badge, "Campus.client().rpc('mark_notifications_read', { p_type: null })"
            " .then(function () { __fn = {}; return Campus.refreshNotifBadge(); })"
            " .then(function (n) { __fn.n = n; }); __drain();")
+# 第 71 轮：底栏「消息」只数私信
+check("tabbar badge: 120 mentions do not light the messages tab",
+      str(js(_badge, "document.getElementById('tabbar-badge').hidden")) == "True",
+      js(_badge, "document.getElementById('tabbar-badge').textContent"))
+
+_tab = load("notifications.html", "mock-logged", pre=NC_SEED, modules=True)
+js(_tab, "__drain(); __drain();")
+js(_tab, "__fn = {}; Campus.refreshNotifBadge().then(function (n) { __fn.n = n; }); __drain();")
+check("tabbar badge: one private message reads as 1",
+      str(js(_tab, "document.getElementById('tabbar-badge').textContent")) == "1",
+      js(_tab, "document.getElementById('tabbar-badge').textContent"))
+check("tabbar badge: the bell still shows the whole total",
+      str(js(_tab, "document.getElementById('header-badge').textContent")) == "3",
+      js(_tab, "document.getElementById('header-badge').textContent"))
+
+js(_tab, "Campus.client().rpc('mark_notifications_read', { p_type: null })"
+         " .then(function () { return Campus.refreshNotifBadge(); }); __drain();")
+check("tabbar badge: goes out once the private message is read",
+      str(js(_tab, "document.getElementById('tabbar-badge').hidden")) == "True",
+      js(_tab, "document.getElementById('tabbar-badge').hidden"))
+
 check("badge: goes out once everything is read",
       str(js(_badge, "document.getElementById('menu-badge').hidden")) == "True"
       and str(js(_badge, "document.getElementById('header-badge').hidden")) == "True",

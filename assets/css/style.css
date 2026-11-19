@@ -1532,6 +1532,7 @@ input[type="file"] { display: none; }
 }
 
 .tabbar-item {
+  position: relative;              /* 第 71 轮：角标定位基准 */
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1572,6 +1573,29 @@ input[type="file"] { display: none; }
   box-shadow: var(--shadow-float);
 }
 .tabbar-center .tabbar-label { margin-top: 3px; }
+
+/* 第 71 轮：底栏「消息」上的私信未读角标。
+   底栏是深色渐变，红点要一圈同色描边才浮得出来；位置贴在图标右上角，
+   不压住下面的「消息」二字。数字只数私信 —— @ 和一起听归页头铃铛。 */
+.tabbar-badge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(8px);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 2px solid rgba(34, 23, 13, 0.96);
+  background: #B3261E;
+  color: #FFFFFF;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.tabbar-badge[hidden] { display: none; }
 
 /* ============ 二级菜单：页头右上角「☰」+ 向下滑出的面板 ============ */
 /* 面板本体（挂在 .nav-more 这个 details 上，从页头往下展开） */

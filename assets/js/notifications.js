@@ -26,6 +26,7 @@
     { type: "listen",  id: "nc-tab-listen" },
     { type: "dm",      id: "nc-tab-dm" }
   ];
+  var dmJumpEl = document.getElementById("nc-dm-jump");
   var tabs = [];
   for (var ti = 0; ti < TAB_DEFS.length; ti++) {
     var tabEl = document.getElementById(TAB_DEFS[ti].id);
@@ -195,6 +196,7 @@
   function switchType(type) {
     if (state.type === type) return;
     state.type = type;
+    if (dmJumpEl) dmJumpEl.hidden = type !== "dm";
     state.before = null;
     state.done = false;
     state.loading = false;

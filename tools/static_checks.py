@@ -235,9 +235,11 @@ check("home status line is text only",
 
 for page in TABBED:
     html = read(os.path.join(ROOT, page))
-    check("tabbar only has home + fab on " + page,
-          html.count('class="tabbar-item"') == 1
-          and html.count('class="tabbar-item tabbar-center"') == 1,
+    # 第 71 轮：底栏变成「首页 / 发布 / 消息」三格
+    check("tabbar has home + post + messages on " + page,
+          html.count('class="tabbar-item"') == 2
+          and html.count('class="tabbar-item tabbar-center"') == 1
+          and 'class="tabbar-item" data-tab="messages" href="messages.html"' in html,
           html.count('class="tabbar-item"'))
     check("publish is the centered fab on " + page,
           'class="tabbar-item tabbar-center" data-tab="post"' in html)
@@ -255,7 +257,9 @@ check("header sits above the tabbar", "z-index: 45;" in css)
 check("old tabbar sheet styles gone", ".tab-more" not in css)
 # R39: tabbar 从一块纯色改成渐变，这里跟到渐变里更深的那一端（仍然是深色底）
 check("styles for dark tabbar", "rgba(34, 23, 13, 0.96)" in css)
-check("two-entry tabbar is even", ".tabbar-center" in css and "flex: 1 1 0;" in css)
+check("three-entry tabbar stays even", ".tabbar-center" in css and "flex: 1 1 0;" in css)
+check("tabbar badge is positioned, not loose in the flow",
+      re.search(r"\.tabbar-badge\s*\{[^}]*position:\s*absolute", css) is not None)
 check("app.js wires the sheet", 'getElementById("tab-more")' in sources["app.js"])
 
 idx = read(os.path.join(ROOT, "index.html"))
