@@ -233,7 +233,8 @@ _homejs = read(os.path.join(JS_DIR, "home.js"))
 check("home status line is text only",
       "还没登录" in _homejs and "登录 / 匿名进入" not in _homejs)
 
-for page in TABBED:
+# 第 72 轮：底栏铺到 drift / music，加上 messages 共 9 页
+for page in TABBED + ["drift.html", "music.html", "messages.html"]:
     html = read(os.path.join(ROOT, page))
     # 第 71 轮：底栏变成「首页 / 发布 / 消息」三格
     check("tabbar has home + post + messages on " + page,
