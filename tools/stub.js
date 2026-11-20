@@ -1280,6 +1280,53 @@ function __makeClient(opts) {
         }
         return P.resolve({ data: null, error: null });
       }
+      if (name === 'am_i_staff') {
+        /* P1-7：管理员标记。测试里用 __mockOpts.staff 控制。 */
+        return P.resolve({ data: !!(opts && opts.staff), error: null });
+      }
+      if (name === 'staff_queue') {
+        var qargs = arguments[1] || {};
+        var qscope = String(qargs.p_scope || 'pending');
+        var qlim = parseInt(qargs.p_limit, 10);
+        if (isNaN(qlim)) qlim = 20;
+        var qout = [];
+        for (var qi = 0; qi < (store.posts || []).length; qi++) {
+          var qp = store.posts[qi];
+          if (!qp) continue;
+          if (qscope === 'pending' && qp.status !== 'pending') continue;
+          var repOpen = 0, repAll = 0;
+          for (var ri = 0; ri < (store.reports || []).length; ri++) {
+            if (store.reports[ri] && store.reports[ri].post_id === qp.id) {
+              repAll++;
+              if (store.reports[ri].status === 'open' || store.reports[ri].status == null) repOpen++;
+            }
+          }
+          if (qscope === 'reported' && repOpen === 0) continue;
+          var qrow = __clone(qp);
+          qrow.report_open = repOpen;
+          qrow.report_total = repAll;
+          qout.push(qrow);
+        }
+        qout.sort(function (a, b) {
+          var x = String(a.created_at || ''), y = String(b.created_at || '');
+          return x < y ? -1 : (x > y ? 1 : 0);
+        });
+        return P.resolve({ data: qout.slice(0, qlim), error: null });
+      }
+      if (name === 'staff_review') {
+        var rargs = arguments[1] || {};
+        for (var rj = 0; rj < (store.posts || []).length; rj++) {
+          if (store.posts[rj].id === rargs.p_post_id) {
+            store.posts[rj].status = rargs.p_status;
+            store.posts[rj].reject_reason =
+              rargs.p_status === 'rejected' ? String(rargs.p_reason || '') : null;
+          }
+        }
+        return P.resolve({ data: { ok: true }, error: null });
+      }
+      if (name === 'staff_appeals') return P.resolve({ data: [], error: null });
+      if (name === 'staff_audit') return P.resolve({ data: [], error: null });
+      if (name === 'staff_resolve_appeal') return P.resolve({ data: { ok: true }, error: null });
       if (name === 'search_posts') {
         /* 对齐 docs/supabase-search.sql：trim、大小写不敏感、只返回 approved、
            时间倒序、最多 100 条。列裁剪与 posts 已授权的列一致（不含 author_id）。 */

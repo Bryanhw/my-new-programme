@@ -20,6 +20,7 @@ PAGES = {
     "index.html": ["assets/js/home.js"],
     "feed.html": ["assets/js/feed.js"],
     "detail.html": ["assets/js/detail.js"],
+    "moderation.html": ["assets/js/moderation.js"],
     "post.html": ["assets/js/post.js"],
     "login.html": ["assets/js/campus-picker.js", "assets/js/auth.js"],
     "reset.html": ["assets/js/reset.js"],
@@ -5345,6 +5346,28 @@ js(_d3, "__drain(); __drain();")
 check("P1-6b: \u67e5\u4e0d\u5230\u65f6\u5982\u5b9e\u8bf4\u53ef\u80fd\u5220\u4e86\u6216\u6ca1\u8fc7\u5ba1",
       "\u5df2\u7ecf\u88ab\u5220\u9664" in str(js(_d3, "document.getElementById('detail-state').textContent")),
       js(_d3, "document.getElementById('detail-state').textContent"))
+
+print()
+print("P7) 审核台（P1-7）")
+it = load("moderation.html", "mock-logged", pre="__mockOpts.staff = false;")
+check("P7: 非管理员被拦在门外",
+      js(it, "document.getElementById('mod-gate').hidden") is False,
+      js(it, "document.getElementById('mod-gate').hidden"))
+check("P7: ...且看不到任何待审",
+      js(it, "document.getElementById('mod-list').innerHTML") == "")
+
+it = load("moderation.html", "mock-logged",
+          pre=("__mockOpts.staff = true; __mockOpts.store.posts.push({ id: 'p-9', author_id: 'u-1', "
+               "is_anonymous: false, display_name: 'TestNick', school: 'Test Univ', "
+               "content: 'patience queue', image_path: null, status: 'pending', "
+               "created_at: '2026-09-23T10:00:00.000Z' });"))
+_p7html = js(it, "document.getElementById('mod-list').innerHTML")
+check("P7: 管理员看到待审的那一条", "patience queue" in _p7html, _p7html[:160])
+check("P7: ...带着通过 / 驳回两个动作",
+      'data-act="approve"' in _p7html and 'data-act="reject"' in _p7html)
+check("P7: 管理员不会看到「只给管理员」那句话",
+      js(it, "document.getElementById('mod-gate').hidden") is True)
+
 
 print()
 print("=" * 70)

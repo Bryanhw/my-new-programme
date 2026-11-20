@@ -16,7 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root 
 JS_DIR = os.path.join(ROOT, "assets", "js")
 PAGES = ["index.html", "feed.html", "detail.html", "post.html", "login.html", "reset.html",
          "profile.html", "faq.html", "feedback.html", "messages.html", "music.html",
-         "drift.html", "notifications.html"]
+         "drift.html", "notifications.html", "moderation.html"]
 PAGE_SCRIPTS = {
     "index.html": "home.js",
     "feed.html": "feed.js",
@@ -31,6 +31,7 @@ PAGE_SCRIPTS = {
     "music.html": "music.js",
     "drift.html": "drift.js",
     "notifications.html": "notifications.js",
+    "moderation.html": "moderation.js",
 }
 
 failures = []
@@ -66,7 +67,7 @@ for name in js_files:
 # (it must be loaded by a page and covered by a test), not an accident.
 EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "campus-picker.js", "campuses.js", "circles.js",
                "config.js", "detail.js", "drift.js", "faq.js", "feed.js", "feedback.js", "home.js",
-               "hotwords.js", "messages.js", "music.js", "notifications.js", "post.js",
+               "hotwords.js", "messages.js", "moderation.js", "music.js", "notifications.js", "post.js",
                "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
       js_files)
@@ -164,7 +165,7 @@ for page in PAGES:
 print("8) header nav + tabbar contract")
 TABBED = ["index.html", "feed.html", "detail.html", "post.html", "profile.html", "faq.html",
           "feedback.html"]
-MENU_PAGES = TABBED + ["login.html", "drift.html", "notifications.html"]
+MENU_PAGES = TABBED + ["login.html", "drift.html", "notifications.html", "moderation.html"]
 menu_targets = set()
 for page in MENU_PAGES:
     html = read(os.path.join(ROOT, page))
@@ -175,7 +176,7 @@ for page in MENU_PAGES:
           'class="nav-btn"' in head and "M4 7h16M4 12h16M4 17h16" in head)
     check("sheet markup inside the header on " + page,
           'class="menu-sheet"' in head and "menu-text" in head)
-    check("9 secondary items on " + page, html.count('class="menu-item"') == 9,
+    check("10 secondary items on " + page, html.count('class="menu-item"') == 10,
           html.count('class="menu-item"'))
     # 第 69 轮：「全部提醒」在登录前面（登录页自己没有登录项，对齐「回到首页」）
     t_notif = head.find('href="notifications.html"')
@@ -216,7 +217,7 @@ check("header button group stays on one row",
 
 # 页头「登录 / 注册」入口：除登录页外每页一个高对比入口，已登录时由 app.js 收起
 LOGIN_ENTRY_PAGES = ["index.html", "feed.html", "detail.html", "post.html", "profile.html",
-                     "faq.html", "feedback.html"]
+                     "faq.html", "feedback.html", "moderation.html"]
 for page in LOGIN_ENTRY_PAGES:
     head = read(os.path.join(ROOT, page)).split("</header>")[0]
     # 第 74 批（P0-2）：发布页的登录入口会把回来要去的页面带上（?next=post.html）
@@ -4133,6 +4134,59 @@ check("R78/链接: 分享直链与提醒都指向详情页",
 check("R78/兼容: 老的 feed.html?post= 自动升级到详情页",
       "params.post" in _r78_feed
       and '"detail.html?id=" + encodeURIComponent(String(targetId))' in _r78_feed)
+
+# ---------------------------------------------------------------
+# R79（评审 P1-7）：线上审核台
+# ---------------------------------------------------------------
+print()
+print("R79) P1-7: the moderation console")
+
+_r79_html = read(os.path.join(ROOT, "moderation.html"))
+_r79_js = read(os.path.join(JS_DIR, "moderation.js"))
+_r79_sql = read(os.path.join(ROOT, "docs", "supabase-staff.sql"))
+
+check("R79/页面: moderation.html 在清单里，脚本是 moderation.js",
+      "moderation.html" in PAGES and PAGE_SCRIPTS.get("moderation.html") == "moderation.js"
+      and "moderation.js" in EXPECTED_JS
+      and 'src="assets/js/moderation.js' in _r79_html)
+
+check("R79/权限: 先问 am_i_staff，不是管理员就不给看",
+      '"am_i_staff"' in _r79_js and 'id="mod-gate"' in _r79_html
+      and "staff = v === true" in _r79_js)
+
+check("R79/队列: 待审 / 被举报 / 申诉 / 日志四个视图",
+      all(k in _r79_html for k in ['data-view="pending"', 'data-view="reported"',
+                                   'data-view="appeals"', 'data-view="audit"'])
+      and all(k in _r79_js for k in ['"staff_queue"', '"staff_appeals"', '"staff_audit"']))
+
+check("R79/动作: 通过 / 驳回都走 RPC，驳回必须带理由",
+      '"staff_review"' in _r79_js
+      and "p_status: status" in _r79_js
+      and "选一条理由" in _r79_js
+      and "驳回要写一句理由" in _r79_sql)
+
+check("R79/申诉: 受理 / 维持原判都走 RPC，受理会放行",
+      '"staff_resolve_appeal"' in _r79_js
+      and "p_accept: accept" in _r79_js
+      and "perform public.staff_review(v_post, 'approved', null);" in _r79_sql)
+
+check("R79/审计: 每次动作留一行，只有管理员能读",
+      "create table if not exists public.moderation_audit" in _r79_sql
+      and "moderation_audit_read_staff" in _r79_sql
+      and "revoke all on public.moderation_audit from public, anon, authenticated;" in _r79_sql)
+
+check("R79/角色: is_admin 不能被前端改",
+      "add column if not exists is_admin boolean not null default false" in _r79_sql
+      and "revoke update on public.profiles from anon, authenticated;" in _r79_sql)
+
+check("R79/入口: 菜单里那一项只有管理员看得到",
+      _r79_html.count('id="menu-admin"') == 1
+      and 'client.rpc("am_i_staff")' in sources["app.js"])
+
+check("R79/驳回理由: 作者看得到，通知也带上",
+      "reject_reason" in _r79_sql
+      and "p.reject_reason" in _r79_sql
+      and "未通过审核：" in _r79_sql)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

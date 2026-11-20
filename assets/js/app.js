@@ -3584,6 +3584,20 @@ window.Campus = (function () {
    * 页头「登录 / 注册」入口：未登录 / 匿名时保持醒目，已登录时收起。
    * 各页面头部自带 <a class="header-login">，这里只按身份切换显示与文案。
    * ------------------------------------------------------------------ */
+  /** 菜单里的「审核台」入口：只有 profiles.is_admin 才显示。
+   *  每个页面都预置了一个 hidden 的 #menu-admin，这里按 RPC 结果决定露不露。 */
+  function refreshAdminEntry(id) {
+    var link = document.getElementById("menu-admin");
+    if (!link) return;
+    if (!client || !id || !id.user || id.isAnonymous) {
+      link.hidden = true;
+      return;
+    }
+    client.rpc("am_i_staff").then(function (res) {
+      link.hidden = !(res && !res.error && res.data === true);
+    }).catch(function () { link.hidden = true; });
+  }
+
   (function initHeaderLogin() {
     if (typeof document.querySelectorAll !== "function") return;
     var outs = document.querySelectorAll(".header-signout");
@@ -3613,6 +3627,7 @@ window.Campus = (function () {
         for (var j = 0; j < outs.length; j++) {
           outs[j].hidden = !signedIn;              /* 有会话（登录或匿名）才显示退出 */
         }
+        refreshAdminEntry(id);                     /* 管理员才露「审核台」 */
       });
     }
     sync();

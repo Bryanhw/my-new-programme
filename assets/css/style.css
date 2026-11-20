@@ -3822,3 +3822,35 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 520px) {
   .notice-center { padding: 14px 14px 4px; }
 }
+
+/* =====================================================================
+ * 审核台（P1-7）
+ * ===================================================================== */
+.btn-danger { background: var(--brand-strong); border-color: var(--brand-strong); color: #fff; }
+.btn-danger:hover { filter: brightness(0.96); }
+
+.mod-card { padding: 14px 16px; }
+.mod-head { display: flex; justify-content: space-between; gap: 10px; font-size: var(--fs-xs); color: var(--ink-faint); }
+.mod-who { font-weight: 600; color: var(--ink); }
+.mod-anon { margin-left: 6px; font-size: var(--fs-xs); padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor; opacity: 0.7; }
+.mod-body { margin: 8px 0 10px; white-space: pre-wrap; word-break: break-word; }
+.mod-img { display: block; width: 100%; max-height: 260px; object-fit: cover; border-radius: 10px; margin-bottom: 10px; }
+.mod-meta { font-size: var(--fs-xs); color: var(--ink-soft); margin-bottom: 10px; }
+.mod-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; background: rgba(203, 146, 67, 0.14); font-size: var(--fs-xs); }
+.mod-badge.ok { background: rgba(77, 140, 92, 0.16); }
+.mod-badge.bad { background: rgba(178, 72, 72, 0.14); }
+.mod-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mod-reasons { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--ink-line); display: flex; flex-wrap: wrap; gap: 8px; }
+.mod-chip { border: 1px solid var(--ink-line); background: transparent; border-radius: 999px; padding: 6px 12px; font-size: var(--fs-xs); cursor: pointer; color: var(--ink-soft); }
+.mod-chip.is-on { border-color: var(--brand); background: var(--brand-ghost); color: var(--brand-text); font-weight: 600; }
+.mod-why { display: block; width: 100%; }
+.mod-why .input { width: 100%; margin-top: 6px; }
+.mod-log { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--ink-line); font-size: var(--fs-xs); }
+.mod-log-time { color: var(--ink-faint); }
+.mod-log-what { font-weight: 600; }
+.mod-log-by { color: var(--ink-soft); }
+.mod-log-why { flex-basis: 100%; color: var(--ink-faint); }
+
+@media (max-width: 430px) {
+  .mod-acts .btn { flex: 1 1 auto; }
+}
