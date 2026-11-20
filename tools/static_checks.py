@@ -14,12 +14,13 @@ import esprima
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (tools/ -> repo)
 JS_DIR = os.path.join(ROOT, "assets", "js")
-PAGES = ["index.html", "feed.html", "post.html", "login.html", "reset.html", "profile.html",
-         "faq.html", "feedback.html", "messages.html", "music.html", "drift.html",
-         "notifications.html"]
+PAGES = ["index.html", "feed.html", "detail.html", "post.html", "login.html", "reset.html",
+         "profile.html", "faq.html", "feedback.html", "messages.html", "music.html",
+         "drift.html", "notifications.html"]
 PAGE_SCRIPTS = {
     "index.html": "home.js",
     "feed.html": "feed.js",
+    "detail.html": "detail.js",
     "post.html": "post.js",
     "login.html": "auth.js",
     "reset.html": "reset.js",
@@ -64,7 +65,7 @@ for name in js_files:
 # The shipped script set is pinned on purpose: adding a file is a decision
 # (it must be loaded by a page and covered by a test), not an accident.
 EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "campus-picker.js", "campuses.js", "circles.js",
-               "config.js", "drift.js", "faq.js", "feed.js", "feedback.js", "home.js",
+               "config.js", "detail.js", "drift.js", "faq.js", "feed.js", "feedback.js", "home.js",
                "hotwords.js", "messages.js", "music.js", "notifications.js", "post.js",
                "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
@@ -161,7 +162,8 @@ for page in PAGES:
     check("theme-color gold on " + page, 'name="theme-color" content="#CB9243"' in html)
 
 print("8) header nav + tabbar contract")
-TABBED = ["index.html", "feed.html", "post.html", "profile.html", "faq.html", "feedback.html"]
+TABBED = ["index.html", "feed.html", "detail.html", "post.html", "profile.html", "faq.html",
+          "feedback.html"]
 MENU_PAGES = TABBED + ["login.html", "drift.html", "notifications.html"]
 menu_targets = set()
 for page in MENU_PAGES:
@@ -198,7 +200,8 @@ for page in MENU_PAGES:
           "意见反馈" in head and 'href="feedback.html"' in head)
     check("no stray more tab entry on " + page,
           'class="tab-more"' not in html and 'data-tab="more"' not in html)
-    menu_targets |= set(re.findall(r'class="menu-item"[^>]*href="([^"#]+)', html))
+    # 第 74 批（P0-2）：发布页的登录菜单项带着 ?next=，查文件时只看路径部分
+    menu_targets |= set(re.findall(r'class="menu-item"[^>]*href="([^"?#]+)', html))
 
 # 第 70 轮：music / messages 没有 ☰ 菜单，铃铛跟在「登录 / 注册」右边
 for page in ("music.html", "messages.html"):
@@ -212,12 +215,14 @@ check("header button group stays on one row",
       re.search(r"\.nav-actions\s*\{[^}]*display:\s*flex", css) is not None)
 
 # 页头「登录 / 注册」入口：除登录页外每页一个高对比入口，已登录时由 app.js 收起
-LOGIN_ENTRY_PAGES = ["index.html", "feed.html", "post.html", "profile.html", "faq.html",
-                     "feedback.html"]
+LOGIN_ENTRY_PAGES = ["index.html", "feed.html", "detail.html", "post.html", "profile.html",
+                     "faq.html", "feedback.html"]
 for page in LOGIN_ENTRY_PAGES:
     head = read(os.path.join(ROOT, page)).split("</header>")[0]
+    # 第 74 批（P0-2）：发布页的登录入口会把回来要去的页面带上（?next=post.html）
     check("visible login entry in the header on " + page,
-          'class="header-login"' in head and 'href="login.html"' in head)
+          'class="header-login"' in head
+          and 'href="login.html"' in head.replace("?next=post.html", ""))
     check("login entry keeps icon + label on " + page,
           "header-login-text" in head and "M5.2 19.4a6.9 6.9 0 0 1 13.6 0" in head)
 check("no duplicate login entry on the login page",
@@ -236,18 +241,20 @@ check("home status line is text only",
 # 第 72 轮：底栏铺到 drift / music，加上 messages 共 9 页
 for page in TABBED + ["drift.html", "music.html", "messages.html"]:
     html = read(os.path.join(ROOT, page))
-    # 第 71 轮：底栏变成「首页 / 发布 / 消息」三格
-    check("tabbar has home + post + messages on " + page,
-          html.count('class="tabbar-item"') == 2
+    # 第 74 批（评审 P0-4）：底栏从三格变四格「首页 / 广场 / 发布 / 消息」——
+    # 广场才是主页面，它需要一个常驻入口和当前页高亮。
+    check("tabbar has home + plaza + post + messages on " + page,
+          html.count('class="tabbar-item"') == 3
           and html.count('class="tabbar-item tabbar-center"') == 1
+          and 'class="tabbar-item" data-tab="feed" href="feed.html"' in html
           and 'class="tabbar-item" data-tab="messages" href="messages.html"' in html,
           html.count('class="tabbar-item"'))
     check("publish is the centered fab on " + page,
           'class="tabbar-item tabbar-center" data-tab="post"' in html)
     check("first tab is home on " + page, 'class="tabbar-item" data-tab="home"' in html)
-    check("no secondary page tab left on " + page,
-          '<a class="tabbar-item" data-tab="feed"' not in html
-          and '<a class="tabbar-item" data-tab="profile"' not in html)
+    # 「我的」从第 71 轮起就不做一级入口，这里继续守住
+    check("profile stays out of the primary tabs on " + page,
+          '<a class="tabbar-item" data-tab="profile"' not in html)
 for t in sorted(menu_targets):
     check("menu target exists " + t, os.path.exists(os.path.join(ROOT, t)))
 check("styles for the header menu",
@@ -265,7 +272,7 @@ check("app.js wires the sheet", 'getElementById("tab-more")' in sources["app.js"
 
 idx = read(os.path.join(ROOT, "index.html"))
 check("hero has a single publish cta",
-      idx.count('<a class="btn btn-primary btn-lg btn-block" href="post.html">✏️ 发布作品</a>') == 1)
+      idx.count('<a class="btn btn-primary btn-lg btn-block" href="post.html">✏️ 写点什么</a>') == 1)
 check("hero no longer has the second cta", "先去看看同学们" not in idx)
 check("home photo referenced", 'src="assets/img/campus-space.jpg"' in idx)
 check("home photo filed under about anchor", 'id="about"' in idx and "index.html#about" in idx)
@@ -1576,27 +1583,22 @@ check("R18/F1: a click outside the card, or Escape, closes it",
 # ---- F1/B4：分享直链 ------------------------------------------------------
 check("R18/F1: the share link is built from the site root, not from the current page",
       "function postShareUrl(postId)" in r18_app and "function siteBase()" in r18_app
-      and '"feed.html?post=" + encodeURIComponent(' in r18_app)
-check("R18/F1: it points at the feed, because there is no post detail page",
-      "post.html?post=" not in r18_app and "post.html?post=" not in r18_feed)
+      and '"detail.html?id=" + encodeURIComponent(' in r18_app)
+# 第 77 轮（P1-6 后半）：详情页补上了，分享直链从广场定位地址改成详情页
+check("R18/F1: it points at the detail page now (the feed address is only for scrolling)",
+      "post.html?post=" not in r18_app and "post.html?post=" not in r18_feed
+      and "post.html?id=" not in r18_app and "post.html?id=" not in r18_feed)
 check("R18/F1: copying falls back when the clipboard API is missing",
       "navigator.clipboard" in r18_app and 'document.execCommand("copy")' in r18_app)
 check("R18/F1: the copy gives feedback, and a manual fallback when it fails",
       "function copyPostLink(postId)" in r18_app
       and "\u94fe\u63a5\u5df2\u590d\u5236" in r18_app
       and "\u6ca1\u590d\u5236\u4e0a" in r18_app)
-check("R18/F1+B4: feed.js reads the ?post= id from the address bar",
+check("R18/B4: an old feed.html?post= link upgrades to the detail page",
       'var out = { circle: "", q: "", post: "", topic: "" };' in r18_feed
-      and 'var targetId = params.post || "";' in r18_feed)
-check("R18/F1+B4: it only rings the card whose id matches, exactly once",
-      "function markTarget(html)" in r18_feed
-      and "'<article class=\"card post post-target\"'" in r18_feed
-      and "if (targetId) noteTarget(hit);" in r18_feed)
-check("R18/F1+B4: a shared id that is not in the batch is reported, not faked",
-      "\u5df2\u7ecf\u9ad8\u4eae" in r18_feed and "\u770b\u4e0d\u5230\u4e86" in r18_feed)
-check("R18/F1+B4: it scrolls to that card once, and only once",
-      "if (targetScrolled) return;" in r18_feed
-      and 'scrollIntoView({ block: "center" })' in r18_feed)
+      and 'var targetId = params.post || "";' in r18_feed
+      and '"detail.html?id=" + encodeURIComponent(String(targetId))' in r18_feed
+      and "pageLocation.replace(detailUrl)" in r18_feed)
 check("C3: picking a topic keeps the address bar in step, without stacking history",
        # 锚点带换行与缩进：把整行注释掉时这些条件必须失效（裸词匹配会被注释骗过去）
        "\n  function topicUrl(next)" in r18_feed
@@ -1685,16 +1687,14 @@ check("R20: ...one row, by id, and nothing clever",
       and ".in(" not in _r20_get and ".or(" not in _r20_get)
 check("R20: an id that is not even shaped like one is answered without a request",
       ".test(want)" in _r20_get and "Promise.resolve(null)" in _r20_get)
-check("R20: the feed asks for it before the first paint, and only when needed",
-      "ensureTargetLoaded()" in r20_feed
-      and r20_feed.find("ensureTargetLoaded()") < r20_feed.find("renderBar()"))
-check("R20: ...and that helper is what calls getPostById",
-      "C.getPostById(targetId)" in r20_feed)
-check("R20: a post that comes back joins the batch instead of being drawn apart",
-      "loaded = [post].concat(loaded)" in r20_feed)
-check("R20: the miss message is definite now, not a two-way guess",
+check("R20: the single-post fallback lives on, now on the detail page",
+      "C.getPostById(id)" in sources.get("detail.js", "")
+      and "ensureTargetLoaded" not in r20_feed)
+check("R20: an old ?post= link is upgraded instead of being pinned in the feed",
+      '"detail.html?id="' in r20_feed and "post-target" not in r20_feed)
+check("R20: the miss message is still definite, not a two-way guess",
       "\u6bd4\u6700\u8fd1\u52a0\u8f7d\u7684 50 \u6761\u66f4\u65e9" not in r20_feed
-      and "\u770b\u4e0d\u5230\u4e86" in r20_feed)
+      and "\u8fd9\u6761\u5206\u4eab\u53ef\u80fd\u5df2\u7ecf\u88ab\u5220\u9664" in sources.get("detail.js", ""))
 check("R20: the share link still points at feed.html?post=, never the publish page",
       "feed.html?post=" in r20_app and "post.html?post=" not in r20_app)
 print()
@@ -2039,7 +2039,7 @@ def _media_block(src, cond):
 r31_css = read(os.path.join(ROOT, "assets", "css", "style.css"))
 
 # 1.1 卡片底栏：窄屏那一行要真的收紧，而不是只靠换行躲开
-r31_foot = [b for b in _media_block(r31_css, "max-width: 420px") if ".post-foot" in b]
+r31_foot = [b for b in _media_block(r31_css, "max-width: 520px") if ".post-foot" in b]
 check("R31: the card footer has a narrow-screen rule",
       len(r31_foot) == 1, len(r31_foot))
 _r31_foot = r31_foot[0] if r31_foot else ""
@@ -2114,6 +2114,9 @@ def _r32_is_rem(v):
 
 r32_px = [(n, _r32_px(r32_val.get(n))) for n in R32_LADDER]
 r32_px = [(n, v) for n, v in r32_px if v is not None]
+# 第 73 轮（评审 2.2.5 / 5.3）：页脚品牌字 43 -> 32px，页脚不再是海报，
+# 也不再属于内容阶梯（xs -> icon-xl）。相邻差值只看内容阶梯。
+_r32_content_px = [(n, v) for n, v in r32_px if n != "brand-sm"]
 
 check("R32: :root \u91cc\u6070\u597d\u5b9a\u4e49\u4e86 11 \u6863\u5b57\u53f7", len(r32_tokens) == 11, r32_names)
 check("R32: \u58f0\u660e\u987a\u5e8f\u5c31\u662f\u9636\u68af\u987a\u5e8f",
@@ -2122,7 +2125,8 @@ check("R32: 除 clamp 那一档外都是纯 rem，一档不缺",
       len(r32_px) == 10 and all(_r32_is_rem(r32_val.get(n)) for n in R32_LADDER if n != "brand"),
       dict((n, r32_val.get(n)) for n in R32_LADDER if n != "brand"))
 check("R32: \u76f8\u90bb\u4e24\u6863\u81f3\u5c11\u5dee 1px\uff08\u5dee\u534a\u50cf\u7d20\u7684\u5e76\u5217\u5c31\u662f\u8ba9\u4eba\u51ed\u624b\u611f\u6311\uff09",
-      all(b[1] - a[1] >= 1.0 for a, b in zip(r32_px, r32_px[1:])), r32_px)
+      all(b[1] - a[1] >= 1.0 for a, b in zip(_r32_content_px, _r32_content_px[1:])),
+      _r32_content_px)
 
 # 第 34 轮：阶梯整体上移一档（正文 15.5 -> 17，大标题 27 -> 38）。
 # 这是**有意变更**，不是手滑：下面三条值断言跟着改，
@@ -2133,8 +2137,8 @@ check("R32/R34: 小字正文 0.9375rem / 15px——FAQ 正文与评论没被留�
       r32_val.get("sm") == "0.9375rem" and _r32_px(r32_val.get("sm")) == 15.0, r32_val.get("sm"))
 check("R32/R34: 正文 1.0625rem / 17px——没有为了「凑整」把它缩小",
       r32_val.get("base") == "1.0625rem" and _r32_px(r32_val.get("base")) == 17.0, r32_val.get("base"))
-check("R32: 页脚品牌字仍是同一个 clamp（下限 40px、上限 74px，中间跟屏幕走）",
-      " ".join((r32_val.get("brand") or "").split()) == "clamp(2.5rem, 12vw, 4.625rem)",
+check("R32/R73: 页脚品牌字 clamp(2rem, 8vw, 2.25rem) —— 32–36px，不再压过正文标题",
+      " ".join((r32_val.get("brand") or "").split()) == "clamp(2rem, 8vw, 2.25rem)",
       r32_val.get("brand"))
 
 r32_decls = re.findall(r"font-size:\s*([^;}]+)", r32_css)
@@ -3094,8 +3098,9 @@ check("R47: html 的字号是 100%——rem 跟浏览器设置走，不是钉死
       _r47_html_fs_val == "100%", _r47_html_fs_val or "html has no font-size")
 
 # 默认 16px 下，换单位之后每一档必须还是原来那个像素值（外观零变化）
+# 第 73 轮：brand-sm 43 -> 32（页脚品牌字降档，评审 2.2.5）。其余九档零变化。
 R47_EXPECT = {"xs": 13.0, "sm": 15.0, "base": 17.0, "md": 19.0, "lg": 22.0,
-              "xl": 26.0, "2xl": 29.0, "display": 38.0, "icon-xl": 42.0, "brand-sm": 43.0}
+              "xl": 26.0, "2xl": 29.0, "display": 38.0, "icon-xl": 42.0, "brand-sm": 32.0}
 _r47_off = dict((n, (_r32_px(r32_val.get(n)), v)) for n, v in R47_EXPECT.items()
                 if _r32_px(r32_val.get(n)) != v)
 check("R47: 十档字号在默认字号下像素值一个没变（换单位不是换设计）", not _r47_off, _r47_off)
@@ -3104,7 +3109,7 @@ check("R47: 十档全部是 rem，没有一档偷偷留成 px",
       dict((n, r32_val.get(n)) for n in R47_EXPECT if not _r32_is_rem(r32_val.get(n))))
 _r47_brand = " ".join((r32_val.get("brand") or "").split())
 check("R47: clamp 那档的两头也是 rem（中间留给 vw，宽度跟着屏幕）",
-      _r47_brand.startswith("clamp(2.5rem, 12vw, 4.625rem)") and "px" not in _r47_brand,
+      _r47_brand.startswith("clamp(2rem, 8vw, 2.25rem)") and "px" not in _r47_brand,
       _r47_brand)
 
 _r47_ti_flat = " ".join(_a1_block(css, ".tabbar-inner").split())
@@ -3177,9 +3182,12 @@ check("R49/个数: U2 的占位符语义没被紧凑分支吃掉",
 
 _prom = _r49_idx[_r49_idx.find('<ul class="about-promises'):]
 _prom = _prom[:_prom.find("</ul>") + 5]
+# 第 73 轮（评审 3.3）：「每条分享会先经过一次人工审核……」原来在上面的 ul 里
+# 已经说过一次，正文长段末尾又重复一遍；重复的那句已删。这里改用长段起点定位。
 check("R49/承诺: #about 在正文长段之前并列三条短句",
       '<ul class="about-promises text-sm text-muted">' in _r49_idx
-      and _r49_idx.index('<ul class="about-promises') < _r49_idx.index("每条分享会先经过一次人工审核"),
+      and _r49_idx.index('<ul class="about-promises')
+          < _r49_idx.index('<p class="text-sm text-muted" style="line-height:1.9">'),
       _r49_idx[_r49_idx.find("about-promises"):][:40])
 check("R49/承诺: 三条短句的字样就在那里 —— 审核 / 举报 / 只存在这台设备",
       all(k in _prom for k in ("人工审核", "举报", "这台设备")),
@@ -3269,8 +3277,11 @@ check("R51/完成态: 表单卡带了 id，showDone 先把整张卡收掉再换�
       and "formCard.classList.add(\"hidden\")" in _r51_authjs
       and "doneCard.hidden = false" in _r51_authjs,
       "see auth.js showDone")
-check("R51/完成态: 登录 / 注册 / 匿名成功都走同一个 showDone，3 秒是时序不是动画",
-      _r51_authjs.count("showDone(") >= 4
+# 第 74 批（评审 P0-2）：三条成功路径还要各自挑目的地（?next= 或默认页），
+# 于是多了一层 finish() —— 它仍然是唯一调用 showDone 的地方，3 秒依旧只在一个 setTimeout 里。
+check("R51/完成态: 登录 / 注册 / 匿名成功都走同一个出口（finish → showDone），3 秒是时序不是动画",
+      _r51_authjs.count("finish(") == 4            # 1 处定义 + 3 条成功路径
+      and _r51_authjs.count("showDone(") == 2      # 定义处 + finish 里的唯一调用
       and "DONE_SECONDS = 3" in _r51_authjs
       and "window.location.href = target" in _r51_authjs
       and "setInterval(" not in _r51_authjs,  # 允许注释里提到词，绝不调用它
@@ -3326,11 +3337,11 @@ check("R56: 窗棂花纹是纯 CSS（拱形顶 + 中央竖棂 + 拱下横梁 + �
       and "linear-gradient(115deg," in _r56_css
       and "url(" not in _a1_block(_r56_css, ".page-window"),
       "arch + mullion drawn in CSS, no bitmap")
-check("R56: 开场序：窗 260ms 起推开，文字 900ms 起才依次淡入 —— 先景后字",
+check("R56/R73: 开场序：窗 260ms 起推开，文字 120ms 起依次淡入 —— 先景后字（第 73 轮按评审压到 <=300ms）",
       "@keyframes page-open-l" in _r56_css
       and "@keyframes hero-rise" in _r56_css
       and "animation: page-open-l 1500ms" in _r56_css
-      and "animation-delay: 900ms;" in _r56_css
+      and "animation-delay: 120ms;" in _r56_css
       and "translateY(12px)" in _r56_css,
       "opening: scene first, text second")
 check("R56: 三层云全屏平铺漂移，HTML 里三个节点都在（防单边定义不渲染）",
@@ -3845,7 +3856,8 @@ check("R62: 只替换占位符，已显示的数字不动（不把刚点的赞�
       "likeNum.textContent === COUNT_PLACEHOLDER" in _app63
       and "commentNum.textContent === COUNT_PLACEHOLDER" in _app63)
 check("R62: 广场/首页/我的 都在整卡重画之前先就地补数",
-      _feed63.count("C.fillCountsInDom(") == 1
+      # 第 75 轮：广场多了一条搜索路径 —— 结果回来时同样先补数、再重画
+      _feed63.count("C.fillCountsInDom(") == 2
       and _home63.count("C.fillCountsInDom(") == 1
       and _pro63.count("C.fillCountsInDom(") == 3,
       "%s/%s/%s" % (_feed63.count("C.fillCountsInDom("),
@@ -3893,6 +3905,234 @@ check("R62b: 撞 content_check 时前端退回真删除",
       "comments_content_check" in _app63 and 'from("comments").delete()' in _app63)
 check("R62b: 已软删的评论不计入「💬 N」",
       "comments.filter(function (c) { return !c.is_deleted; }).length" in _app63)
+
+# ---------------------------------------------------------------
+# R74（评审 P0-2）：登录 / 注册后回到刚才那一页 + 发布页草稿
+# ---------------------------------------------------------------
+print()
+print("R74) P0-2: ?next= 回跳与发布页草稿")
+
+_r74_auth = read(os.path.join(JS_DIR, "auth.js"))
+_r74_post = read(os.path.join(JS_DIR, "post.js"))
+
+check("R74/回跳: 登录页只用白名单认本站 html，挡掉 / 开头、协议、.. 穿越",
+      "SAFE_NEXT" in _r74_auth
+      and 'raw.charAt(0) === "/"' in _r74_auth
+      and 'raw.indexOf("..")' in _r74_auth
+      and "SAFE_NEXT.test(raw) ? raw" in _r74_auth,
+      "see auth.js readNext")
+
+check("R74/回跳: 有 next 就回去，没有就按原来的默认页",
+      "function finish(" in _r74_auth
+      and 'next ? (withNextSub ||' in _r74_auth
+      and 'next || "feed.html"' in _r74_auth)
+
+check("R74/草稿: 未登录去登录时带 next 回发布页，跳走前先落盘",
+      'login.html?next=' in _r74_post
+      and 'encodeURIComponent("post.html")' in _r74_post
+      and "saveDraftNow();" in _r74_post)
+
+check("R74/草稿: 只存文字 / 话题 / 匿名开关，图片只留一个 hadImage 标记",
+      '"campus.postDraft"' in _r74_post
+      and "topics: pickedTopics.slice()" in _r74_post
+      and "hadImage: !!selectedFile" in _r74_post)
+
+check("R74/草稿: 解析失败、写空、发布成功都会删掉草稿",
+      _r74_post.count("dropDraft();") >= 3,
+      _r74_post.count("dropDraft();"))
+
+check("R74/草稿: 进页面就把草稿填回去",
+      "restoreDraft();" in _r74_post
+      and "window.localStorage.getItem(DRAFT_KEY)" in _r74_post)
+
+# ---------------------------------------------------------------
+# R75（评审 P0-5）：运营加固脚本（清测试账号 / 桶限制 / 服务端限频）
+# ---------------------------------------------------------------
+print()
+print("R75) P0-5: ops hardening SQL")
+
+_r75 = read(os.path.join(ROOT, "docs/supabase-ops-hardening.sql"))
+
+check("R75/清理: 测试账号段默认 begin…rollback，改 commit 才真删",
+      "begin;" in _r75
+      and "rollback;" in _r75
+      and _r75.count("139000000") >= 3
+      and "-- commit;" in _r75,
+      "see docs/supabase-ops-hardening.sql")
+
+check("R75/清理: 先删 set-null 的内容（评论/举报），再删帖子和账号",
+      _r75.index("delete from public.comments") < _r75.index("delete from auth.users")
+      and _r75.index("delete from public.reports") < _r75.index("delete from auth.users")
+      and _r75.index("delete from public.posts") < _r75.index("delete from auth.users"))
+
+check("R75/桶: post-images 与 avatars 都锁到 5MB + 图片 MIME 白名单",
+      _r75.count("file_size_limit = 5242880") == 2
+      and "array['image/jpeg', 'image/png', 'image/webp', 'image/gif']" in _r75
+      and "where id = 'post-images'" in _r75
+      and "where id = 'avatars'" in _r75)
+
+check("R75/限频: 发帖与评论各一个 before insert 触发器",
+      "function public.enforce_post_rate()" in _r75
+      and "function public.enforce_comment_rate()" in _r75
+      and "before insert on public.posts" in _r75
+      and "before insert on public.comments" in _r75)
+
+check("R75/限频: 计数走复合索引，service_role 不被限",
+      "posts_author_created_idx" in _r75
+      and "comments_author_created_idx" in _r75
+      and _r75.count("= 'service_role'") == 2)
+
+check("R75/限频: definer 函数都带 search_path（既有安全惯例）",
+      _r75.count("set search_path = public, pg_temp") == 2
+      and _r75.count("security definer") == 2)
+
+# ---------------------------------------------------------------
+# R76（评审 P1-6 前半）：广场全站搜索
+# ---------------------------------------------------------------
+print()
+print("R76) P1-6: site-wide search")
+
+_r76_app = read(os.path.join(JS_DIR, "app.js"))
+_r76_feed = read(os.path.join(JS_DIR, "feed.js"))
+_r76_sql = read(os.path.join(ROOT, "docs", "supabase-search.sql"))
+_r76_stub = read(os.path.join(ROOT, "tools", "stub.js"))
+
+check("R76/RPC: searchPosts 调 search_posts，函数没部署时返回 null 让页面降级",
+      "function searchPosts(term, limit)" in _r76_app
+      and 'client.rpc("search_posts", { q: q, lim: limit || 50 })' in _r76_app
+      and '"PGRST202"' in _r76_app
+      and "searchPosts: searchPosts," in _r76_app)
+
+check("R76/广场: 有关键词就先全站搜，没有才画普通 feed",
+      "function runSearch(term)" in _r76_feed
+      and "searchMode ? loaded : C.filterPostsByTerm(loaded, keyword)" in _r76_feed
+      and "C.searchPosts(keyword, 100)" in _r76_feed
+      and "} else if (keyword && C.searchPosts) {" in _r76_feed)
+
+check("R76/广场: 搜索模式下不说「看更早的」，顶部与计数都写全站",
+      "reachedEnd && shownCount > 0 && !searchMode" in _r76_feed
+      and "全站提到「" in _r76_feed
+      and "全站搜到 " in _r76_feed)
+
+check("R76/降级: RPC 不在时明说不是全站，并退回已加载",
+      "全站搜索还没开通" in _r76_feed
+      and "在已加载的 " in _r76_feed)
+
+check("R76/SQL: 只给 approved，pg_trgm 索引 + 通配符转义 + 授权",
+      "status = 'approved'" in _r76_sql
+      and "using gin (content gin_trgm_ops)" in _r76_sql
+      and "replace(replace(replace(trim(q)" in _r76_sql
+      and "grant execute on function public.search_posts(text, int)" in _r76_sql)
+
+check("R76/SQL: topics 列可选，没跑 topics 迁移的库也能建函数",
+      "column_name = 'topics'" in _r76_sql
+      and _r76_sql.count("create or replace function public.search_posts") == 2)
+
+check("R76/测试桩: search_posts 与 SQL 同口径（approved、trim、最多 100 条）",
+      "name === 'search_posts'" in _r76_stub
+      and "sp.status !== 'approved'" in _r76_stub
+      and "Math.min(slim, 100)" in _r76_stub)
+
+# ---------------------------------------------------------------
+# R77（评审 P0-3）：通知闭环 —— 评论 / 回复 / 赞 / 抱抱 / 审核
+# ---------------------------------------------------------------
+print()
+print("R77) P0-3: notification loop")
+
+_r77_sql = read(os.path.join(ROOT, "docs", "supabase-notify-social.sql"))
+_r77_njs = read(os.path.join(JS_DIR, "notifications.js"))
+_r77_nhtml = read(os.path.join(ROOT, "notifications.html"))
+_r77_stub = read(os.path.join(ROOT, "tools", "stub.js"))
+
+check("R77/SQL: 类型白名单补上五类，四个触发器都在",
+      "'comment', 'reply', 'like', 'hug', 'review'" in _r77_sql
+      and _r77_sql.count("create trigger ") == 4
+      and "after insert on public.comments" in _r77_sql
+      and "after insert on public.likes" in _r77_sql
+      and "after insert on public.hugs" in _r77_sql
+      and "after update of status on public.posts" in _r77_sql)
+
+check("R77/SQL: 赞与抱抱按帖子聚合，同一个人只留一行",
+      "notifications_like_hug_uniq" in _r77_sql
+      and "on conflict (user_uid, type, ref_id) where type in ('like', 'hug')" in _r77_sql
+      and "人赞了你的分享" in _r77_sql
+      and "人抱了抱你的分享" in _r77_sql)
+
+check("R77/SQL: 触发器函数不对外暴露成 RPC",
+      _r77_sql.count("revoke all on function public.notify_on_") == 4)
+
+check("R77/SQL: 自己夸自己不提醒",
+      "v_owner_id = new.user_id" in _r77_sql
+      and "v_post_owner_id <> new.author_id" in _r77_sql)
+
+check("R77/SQL: my_notifications 认 social 组，点赞类用 ref_id 当 post_id",
+      "p_type = 'social' and n.type in ('comment', 'reply', 'like', 'hug')" in _r77_sql
+      and "when n.type in ('like', 'hug', 'review') then n.ref_id" in _r77_sql)
+
+check("R77/前端: 提醒落到这条分享的详情页，不再跳发布页",
+      '"detail.html?id="' in _r77_njs and "post.html?id=" not in _r77_njs)
+
+check("R77/前端: 新增「互动」「审核」两栏，聚合文案不再拼「一位同学」",
+      'data-type="social"' in _r77_nhtml
+      and 'data-type="review"' in _r77_nhtml
+      and 'id="nc-tab-social"' in _r77_nhtml
+      and 'id="nc-tab-review"' in _r77_nhtml
+      and "function bodyOnly(n)" in _r77_njs
+      and 'n.type === "comment"' in _r77_njs
+      and 'n.type === "reply"' in _r77_njs)
+
+check("R77/测试桩: social 组与聚合 post_id 和 SQL 同口径",
+      "mnType === 'social'" in _r77_stub
+      and "mnn.type === 'like' || mnn.type === 'hug'" in _r77_stub
+      and "mrType === 'social'" in _r77_stub)
+
+# ---------------------------------------------------------------
+# R78（评审 P1-6 后半）：分享详情页
+# ---------------------------------------------------------------
+print()
+print("R78) P1-6b: the post detail page")
+
+_r78_html = read(os.path.join(ROOT, "detail.html"))
+_r78_js = read(os.path.join(JS_DIR, "detail.js"))
+_r78_app = read(os.path.join(JS_DIR, "app.js"))
+_r78_pro = read(os.path.join(JS_DIR, "profile.js"))
+_r78_feed = read(os.path.join(JS_DIR, "feed.js"))
+
+check("R78/页面: detail.html 在页面清单里，脚本是 detail.js",
+      "detail.html" in PAGES and PAGE_SCRIPTS.get("detail.html") == "detail.js"
+      and "detail.js" in EXPECTED_JS
+      and 'src="assets/js/detail.js' in _r78_html)
+
+check("R78/详情: 地址里的 id -> getPostById -> 同一张广场卡片",
+      'param("id")' in _r78_js
+      and "C.getPostById(id)" in _r78_js
+      and "C.renderPostCard(post)" in _r78_js
+      and "C.attachEngagement([post])" in _r78_js)
+
+check("R78/详情: 画完就展开评论区，不靠点击冒泡",
+      "openComments(post.id)" in _r78_js
+      and "C.toggleCommentZone(postId)" in _r78_js
+      and "toggleCommentZone: toggleCommentZone," in _r78_app)
+
+check("R78/详情: 打不开时如实说，不白屏",
+      "没有分享编号" in _r78_js
+      and "已经被删除" in _r78_js
+      and "打不开这条分享" in _r78_js
+      and 'id="detail-state"' in _r78_html)
+
+check("R78/详情: 标题与分享卡片跟着这一条走",
+      "document.title = title" in _r78_js
+      and 'meta[property="og:title"]' in _r78_js
+      and 'meta[property="og:image"]' in _r78_js)
+
+check("R78/链接: 分享直链与提醒都指向详情页",
+      '"detail.html?id=" + encodeURIComponent(' in _r78_app
+      and '"detail.html?id="' in _r77_njs
+      and '"detail.html?id="' in _r78_pro)
+
+check("R78/兼容: 老的 feed.html?post= 自动升级到详情页",
+      "params.post" in _r78_feed
+      and '"detail.html?id=" + encodeURIComponent(String(targetId))' in _r78_feed)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

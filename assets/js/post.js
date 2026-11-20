@@ -161,6 +161,7 @@
     }
     renderTopicPicker();
     renderTopicHint();
+    queueDraftSave();
   }
 
   if (topicPickerEl) {
@@ -181,14 +182,15 @@
     }
     C.getIdentity().then(function (id) {
       if (!id.user) {
-        identityEl.innerHTML = '你还未登录 · <a href="login.html">去登录或匿名进入</a>';
+        /* 第 74 批（P0-2）：从这里去登录也要能回来 —— 写了一半的内容在本机存着 */
+        identityEl.innerHTML = '你还未登录 · <a href="login.html?next=post.html">去登录或匿名进入</a>';
         return;
       }
       if (id.isAnonymous) {
         // 匿名访客也可能设过昵称，看一下现在会以什么名字出现
         C.getProfile().then(function (p) {
           var nickname = (p && p.nickname) ? p.nickname : "";
-          var tail = ' · <a href="login.html">注册一个账号</a>';
+          var tail = ' · <a href="login.html?next=post.html">注册一个账号</a>';
           if (nickname) {
             identityEl.innerHTML = "当前身份：<strong>匿名访客</strong>，会以「" +
               C.escapeHtml(nickname) + "」署名" + tail;
@@ -285,6 +287,7 @@
   anonSwitch.addEventListener("click", function () {
     anon = !anon;
     anonSwitch.setAttribute("aria-checked", anon ? "true" : "false");
+    queueDraftSave();
   });
 
   /* ---------------------------------------------------------------
@@ -299,6 +302,51 @@
   var nickKeepBtn = document.getElementById("nick-keep-anon");
   var nickCancelBtn = document.getElementById("nick-cancel");
   var nickResolve = null;
+  var nickReturnFocus = null;
+
+  /* 第 73 轮（评审 8.5）：昵称弹窗也补上焦点闭环 ——
+     打开时记住触发者、Tab 在弹窗里循环、关闭后把焦点还回发布按钮。 */
+  function focusablesIn(container) {
+    if (!container || typeof container.querySelectorAll !== "function") return [];
+    var nodes;
+    try {
+      nodes = container.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), a[href]');
+    } catch (err) { return []; }
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i] && !nodes[i].hidden) out.push(nodes[i]);
+    }
+    return out;
+  }
+
+  function trapNickTab(e) {
+    if (!e || e.key !== "Tab") return;
+    var list = focusablesIn(nickModal);
+    if (!list.length) return;
+    var first = list[0];
+    var last = list[list.length - 1];
+    var active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || active === nickInput) {
+        e.preventDefault();
+        if (last.focus) { try { last.focus(); } catch (err) { /* 忽略 */ } }
+      }
+      return;
+    }
+    if (active === last) {
+      e.preventDefault();
+      if (first.focus) { try { first.focus(); } catch (err) { /* 忽略 */ } }
+    }
+  }
+
+  function restoreNickFocus() {
+    var back = nickReturnFocus;
+    nickReturnFocus = null;
+    if (back && back.focus) {
+      try { back.focus(); } catch (err) { /* 按钮已经不在了 */ }
+    }
+  }
 
   function lockScroll(on) {
     if (document.body && document.body.classList) {
@@ -310,6 +358,7 @@
     if (!nickModal || nickModal.hidden) return;
     nickModal.hidden = true;
     lockScroll(false);
+    restoreNickFocus();
     var resolve = nickResolve;
     nickResolve = null;
     if (resolve) resolve(result);
@@ -320,6 +369,7 @@
     if (!nickModal) return Promise.resolve({ keepAnon: true });
 
     setLoading(false);
+    nickReturnFocus = document.activeElement || null;
     nickModal.hidden = false;
     lockScroll(true);
     nickInput.value = "";
@@ -342,9 +392,84 @@
       if (e.key === "Enter") { e.preventDefault(); nickSaveBtn.click(); }
     });
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !nickModal.hidden) { e.preventDefault(); closeNickModal(null); }
+      if (nickModal.hidden) return;
+      trapNickTab(e);
+      if (e.key === "Escape" || e.key === "Esc") { e.preventDefault(); closeNickModal(null); }
     });
   }
+
+  /* ---------------------------------------------------------------
+   * 第 74 批（评审 P0-2）：没发出去的内容留在这台设备上
+   *   - 只存文字 / 话题 / 匿名开关；图片是 File 对象，存不了，
+   *     恢复后提示重新选（草稿里记一个 hadImage 用来决定要不要提醒）
+   *   - 去登录、误关标签页都能捡回来；发布成功或写空后立刻删掉
+   *   - 隐私模式 / 配额不足时安静跳过，不打扰正在写字的人
+   * --------------------------------------------------------------- */
+  var DRAFT_KEY = "campus.postDraft";
+  var DRAFT_SAVE_MS = 200;
+  var draftTimer = null;
+
+  function saveDraftNow() {
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    try {
+      var text = contentEl.value;
+      if (!text.trim() && !pickedTopics.length) {
+        window.localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        content: text,
+        topics: pickedTopics.slice(),
+        anon: anon,
+        hadImage: !!selectedFile,
+        savedAt: Date.now()
+      }));
+    } catch (e) { /* 隐私模式：不存也不报 */ }
+  }
+
+  function queueDraftSave() {
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveDraftNow, DRAFT_SAVE_MS);
+  }
+
+  function dropDraft() {
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    try { window.localStorage.removeItem(DRAFT_KEY); } catch (e) { /* 忽略 */ }
+  }
+
+  function restoreDraft() {
+    var raw = "";
+    try { raw = window.localStorage.getItem(DRAFT_KEY) || ""; } catch (e) { return; }
+    if (!raw) return;
+
+    var d = null;
+    try { d = JSON.parse(raw); } catch (e) { dropDraft(); return; }
+    if (!d || typeof d !== "object") { dropDraft(); return; }
+
+    var text = typeof d.content === "string" ? d.content.slice(0, MAX_LEN) : "";
+    var tags = [];
+    if (d.topics && d.topics.length) {
+      for (var i = 0; i < d.topics.length; i++) {
+        var t = d.topics[i];
+        if ((C.TOPICS || []).indexOf(t) >= 0 && tags.indexOf(t) < 0) tags.push(t);
+      }
+      if (C.TOPIC_LIMIT) tags = tags.slice(0, C.TOPIC_LIMIT);
+    }
+    if (!text.trim() && !tags.length) { dropDraft(); return; }
+
+    contentEl.value = text;
+    pickedTopics = tags;
+    anon = !!d.anon;
+    anonSwitch.setAttribute("aria-checked", anon ? "true" : "false");
+    updateCounter();
+    renderTopicPicker();
+    renderTopicHint();
+    C.showNotice(noticeEl, "info",
+      "帮你把上次没发出去的内容找回来了" +
+      (d.hadImage ? "，图片要重新选一下" : "") + "。");
+  }
+
+  contentEl.addEventListener("input", queueDraftSave);
 
   /* ---------------------------------------------------------------
    * 提交
@@ -378,8 +503,13 @@
     C.getIdentity().then(function (id) {
       if (!id.user) {
         C.showNotice(noticeEl, "warn", "请先登录或匿名进入，再发布内容");
-        var go = confirm("还没有登录。现在去登录页吗？");
-        if (go) window.location.href = "login.html";
+        /* 第 74 批（P0-2）：把 ?next= 带上，登录完直接回这一页；
+           跳走前先落盘，别等 200ms 的延迟存盘。 */
+        var go = confirm("还没有登录。去登录页吗？你在这台设备上写的内容会留着，登录后回到这一页。");
+        if (go) {
+          saveDraftNow();
+          window.location.href = "login.html?next=" + encodeURIComponent("post.html");
+        }
         throw new Error("__aborted__");
       }
 
@@ -439,6 +569,8 @@
     uploadBox.classList.remove("hidden");
     anon = false;
     anonSwitch.setAttribute("aria-checked", "false");
+    /* 发出去 / 清空表单后，本机不该再留着这份草稿 */
+    dropDraft();
     setLoading(false);
   }
 
@@ -452,5 +584,7 @@
   renderDailyQuestion();
   renderTopicPicker();
   renderTopicHint();
+  /* 第 74 批（P0-2）：从登录页回来 / 误关标签页后再进来，把上次的草稿填回去 */
+  restoreDraft();
   renderIdentity();
 })();

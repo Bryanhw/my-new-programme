@@ -123,8 +123,10 @@
   --fs-2xl:      1.8125rem;   /* 29px：底部导航中间那颗 */
   --fs-display:  2.375rem;    /* 38px：首页大标题（宽窄屏都用它）、上传图标 */
   --fs-icon-xl:  2.625rem;    /* 42px：头像、空状态的大图标 */
-  --fs-brand:    clamp(2.5rem, 12vw, 4.625rem);  /* 40-74px：页脚品牌字（宽屏） */
-  --fs-brand-sm: 2.6875rem;   /* 43px：页脚品牌字（窄屏） */
+  /* 第 73 轮（评审 2.2.5 / 5.3）：页脚品牌字原来 40–74px，比正文标题还响。
+     页脚该承担「信息」而不是「海报」，降到 32–36px，桌面左对齐（见 .site-footer）。 */
+  --fs-brand:    clamp(2rem, 8vw, 2.25rem);      /* 32-36px：页脚品牌字（宽屏） */
+  --fs-brand-sm: 2rem;            /* 32px：页脚品牌字（窄屏） */
 }
 
 /* ------------------------------ 基础重置 ------------------------------ */
@@ -468,11 +470,18 @@ main:focus { outline: none; }
 .nav-btn::-webkit-details-marker { display: none; }
 .nav-btn::marker { content: ""; }
 .nav-btn:hover { background: rgba(255, 253, 251, 0.58); }
-.nav-more[open] > .nav-btn,
-.nav-more.tabbar-active > .nav-btn {
+.nav-more[open] > .nav-btn {
   background: var(--ink-solid);
   color: var(--ink-sun);
   border-color: rgba(43, 29, 17, 0.62);
+}
+/* 第 73 轮（评审 3.1）：当前页藏在二级菜单里时，「☰」原来和展开态同一副深色实心皮肤，
+   看上去像「菜单没关」。改成浅一档的「当前分区」底色 —— 和 [open] 的深色区分开，
+   既保留「你在这块」的提示，又不会误读成展开状态。 */
+.nav-more.tabbar-active:not([open]) > .nav-btn {
+  background: rgba(255, 253, 251, 0.72);
+  color: var(--brand-text);
+  border-color: rgba(203, 146, 67, 0.45);
 }
 .nav-more > .nav-btn:focus-visible {
   outline: 2px solid var(--ink-solid);
@@ -623,21 +632,28 @@ main:focus { outline: none; }
 }
 
 /* 第 59 轮开场：窗推开露出风景之后，文字序列才依次淡入上浮（先景后字）。
-   动画在页面加载时播一次（both，刷新重播）；减弱动态时被文件末尾的统一规则停掉，
-   元素回到 opacity:1 直接可见。 */
+   第 73 轮（评审 P1-10 / 8.3）：默认状态改成**可见** —— 首屏文字不再被
+   0.9s 的延迟拖住（LCP 不再等动画）。只有在「不排斥动效」的环境里才播动画，
+   且延迟压到 120–300ms；减弱动态时由文件末尾的统一规则停掉，元素照样可见。 */
 .hero-greeting,
 .hero-title,
 .hero-sub,
 .hero-pills,
 .cta-row {
-  opacity: 0;
-  animation: hero-rise 740ms cubic-bezier(0.22, 0.7, 0.3, 1) forwards;
-  will-change: opacity, transform;
+  opacity: 1;
 }
-.hero-greeting { animation-delay: 900ms; }
-.hero-sub      { animation-delay: 1200ms; }
-.hero-pills    { animation-delay: 1340ms; }
-.cta-row       { animation-delay: 1480ms; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-greeting,
+  .hero-title,
+  .hero-sub,
+  .hero-pills,
+  .cta-row {
+    opacity: 0;
+    animation: hero-rise 520ms cubic-bezier(0.22, 0.7, 0.3, 1) forwards;
+    will-change: opacity, transform;
+  }
+}
 @keyframes hero-rise {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -650,6 +666,7 @@ main:focus { outline: none; }
   color: var(--ink-faint);
   letter-spacing: 3px;
   margin-bottom: 10px;
+  animation-delay: 120ms;   /* 第 73 轮：开场序压到 120–300ms（只在允许动效时生效） */
 }
 
 .hero-title {
@@ -660,7 +677,7 @@ main:focus { outline: none; }
   font-weight: 900;
   color: var(--ink);
   margin-bottom: 16px;
-  animation-delay: 1060ms;   /* 第 59 轮开场序，与 .hero-greeting 等的动画共用 hero-rise */
+  animation-delay: 180ms;   /* 第 73 轮：开场序 */
 }
 .hero-title .hl {
   background: linear-gradient(180deg, transparent 54%, var(--sky-warm) 54%);
@@ -675,6 +692,7 @@ main:focus { outline: none; }
   color: var(--ink-soft);
   max-width: 540px;
   margin: 0 auto 22px;
+  animation-delay: 240ms;   /* 第 73 轮：开场序 */
 }
 
 /* 「想匿名 / 想署名」两颗小标签：把最大的顾虑直接摆在首屏 */
@@ -686,6 +704,7 @@ main:focus { outline: none; }
   gap: 10px;
   justify-content: center;
   margin: 0 auto 24px;
+  animation-delay: 300ms;   /* 第 73 轮：开场序 */
 }
 
 .pill {
@@ -750,6 +769,11 @@ main:focus { outline: none; }
 /* 第 56 轮：原本在 hero 卡片里的两扇小窗已撤掉 —— 窗改由 .page-scene 贴在
    视口左右边缘（见文件前面的 page-scene::before/::after）。这里只剩远山与操场。 */
 
+/* 第 73 轮（评审 P1-10）：校门图改用 <picture> —— WebP 优先（272KB → 30KB），
+   PNG 兜底。picture 是普通块级容器（不用 display:contents，避开旧 Safari 的已知问题），
+   居中和尺寸仍由里面的 .hero-gate 自己负责。 */
+.hero-gate-pic { display: block; }
+
 /* 学校正门（AI 生成 → 抠掉绿底 → 透明 PNG），替代原来的太阳装饰 */
 .hero-gate {
   display: block;
@@ -773,6 +797,7 @@ main:focus { outline: none; }
   align-items: center;
   max-width: 460px;
   margin: 0 auto 8px;
+  animation-delay: 300ms;   /* 第 73 轮：开场序 */
 }
 
 .btn {
@@ -1075,9 +1100,21 @@ main:focus { outline: none; }
   display: flex;
   align-items: center;
   gap: 14px;
+  /* 第 73 轮（评审 P0-1）：1280 双列时卡片只有 ~310px 宽，四个胶囊 + 时间
+     要 ~410px。以前只在 ≤420px 才允许换行，421–520 与桌面双列就成了空档：
+     中文标签按字竖排、margin-left:auto 的时间被挤出卡片。
+     现在默认就允许折行（真挤不下时优雅换行），并禁止胶囊内部断字。 */
+  flex-wrap: wrap;
+  row-gap: 8px;
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px dashed var(--line);
+}
+
+/* 胶囊里的「赞 / 评论 / 抱抱 / 收藏」不再逐字换行 —— 它们是一个整体 */
+.post-foot .like-btn,
+.post-foot .save-btn {
+  white-space: nowrap;
 }
 
 .like-btn {
@@ -1149,8 +1186,10 @@ main:focus { outline: none; }
    把胶囊的横向内边距、元素间距与时间字号各收一点，一行就放得下了
    —— 换行仍然留着当兜底：真挤不下时优雅退化，而不是把时间挤出卡片。
    第 32 轮：胶囊和时间戳统一用 --fs-xs（12px），比只收时间戳更省地方，
-   底栏的文字因此比正文小一档 —— 这是为这一行让位的取舍，不是漏改。 */
-@media (max-width: 420px) {
+   底栏的文字因此比正文小一档 —— 这是为这一行让位的取舍，不是漏改。
+   第 73 轮（评审 3.3）：断点从 420px 提到 520px —— 421–480 的单列卡片
+   （430px 的 iPhone Pro Max 正好落在这个空档）也会走这套收紧规则。 */
+@media (max-width: 520px) {
   .post-foot { gap: 8px; flex-wrap: wrap; row-gap: 8px; }
   .post-foot .like-btn, .post-foot .save-btn { padding: 6px 10px; font-size: var(--fs-xs); gap: 4px; }
   .post-foot .post-time { font-size: var(--fs-xs); }
@@ -1377,7 +1416,13 @@ main:focus { outline: none; }
 }
 
 /* 图片上传 */
+/* 第 73 轮（评审 8.4）：上传区已是 <button>，把浏览器默认的按钮外观清干净，
+   让它看起来仍是那块虚线上传框；按钮内的三行改成 block 的 span。 */
 .upload {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
   border: 2px dashed var(--brand-soft);
   border-radius: var(--radius-md);
   background: var(--surface-soft);
@@ -1390,8 +1435,13 @@ main:focus { outline: none; }
   border-color: var(--brand);
   background: var(--brand-ghost);
 }
-.upload-icon { font-size: var(--fs-display); margin-bottom: 6px; }
-.upload-text { font-size: var(--fs-sm); color: var(--text-muted); }
+.upload:focus-visible {
+  outline: 2px solid var(--brand-strong);
+  outline-offset: 3px;
+}
+.upload-icon { display: block; font-size: var(--fs-display); margin-bottom: 6px; line-height: 1.2; }
+.upload-text { display: block; font-size: var(--fs-sm); color: var(--text-muted); }
+.upload .hint { display: block; text-align: center; }
 
 .preview {
   position: relative;
@@ -1610,19 +1660,28 @@ input[type="file"] { display: none; }
   border: 1px solid rgba(203, 146, 67, 0.30);
   box-shadow: var(--shadow-lg);
   animation: sheetDown 0.22s var(--ease) both;
+  /* 第 73 轮（评审 P0-4）：9 项菜单在 iPhone SE（568px 高）或横屏（390px 高）
+     下底部几项会被截掉且无法滚动。给面板一个可视高度上限并允许内部滚动；
+     overscroll-behavior 防止滚到底后把整页一起带着滚。 */
+  max-height: calc(100dvh - 86px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-/* 指向「☰」的小尖角（在面板顶部，尖朝上） */
+/* 第 73 轮：面板一旦成为滚动容器，盒子外的东西（原来那个 bottom:100% 的小尖角）
+   会被 overflow 裁掉。尖角换成面板内沿的一个小方块，随面板一起滚动 ——
+   初始位置仍在 ☰ 正下方，视觉指向不变。 */
 .menu-sheet::after {
   content: "";
   position: absolute;
+  top: 2px;
   right: 15px;
-  bottom: 100%;
   width: 12px;
   height: 12px;
   background: rgba(255, 253, 251, 0.98);
   border-right: 1px solid rgba(203, 146, 67, 0.30);
   border-bottom: 1px solid rgba(203, 146, 67, 0.30);
-  transform: translateY(6px) rotate(225deg);
+  transform: rotate(225deg);
+  pointer-events: none;
 }
 
 @keyframes sheetDown {
@@ -1939,6 +1998,11 @@ input[type="file"] { display: none; }
 .keys-hint {
   margin: 14px auto 0;
   text-align: center;
+}
+
+/* 第 73 轮（评审 3.4）：触屏设备没有物理键盘，「按 ? 看快捷键」这句话是干扰项 */
+@media (hover: none) and (pointer: coarse) {
+  .keys-hint { display: none; }
 }
 
 .keys-hint-btn {

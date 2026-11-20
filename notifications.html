@@ -6,12 +6,12 @@
 <meta name="theme-color" content="#CB9243">
 <link rel="preconnect" href="https://gvmqmzgzwnvseubpvqdx.supabase.co" crossorigin>
 <link rel="dns-prefetch" href="https://gvmqmzgzwnvseubpvqdx.supabase.co">
-<meta name="description" content="站内提醒：谁 @ 了你、谁邀你一起听、谁给你发了私信。">
+<meta name="description" content="站内提醒：谁评论了你、谁赞了你、谁 @ 了你，以及你的分享审核结果。">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="校园拾光">
 <meta property="og:url" content="https://bryanhw.github.io/my-new-programme/notifications.html">
 <meta property="og:title" content="站内提醒 · 校园拾光">
-<meta property="og:description" content="谁 @ 了你、谁邀你一起听、谁给你发了私信。">
+<meta property="og:description" content="谁评论了你、谁赞了你、谁 @ 了你，以及你的分享审核结果。">
 <meta property="og:image" content="https://bryanhw.github.io/my-new-programme/assets/img/og-cover.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -20,7 +20,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>站内提醒 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=517ab875">
+<link rel="stylesheet" href="assets/css/style.css?v=4454a8db">
 </head>
 <body>
 
@@ -114,9 +114,11 @@
 
     <div class="nc-tabs" role="tablist" aria-label="按类型查看提醒">
       <button class="nc-tab is-on" type="button" role="tab" aria-selected="true" data-type="" id="nc-tab-all">全部</button>
+      <button class="nc-tab" type="button" role="tab" aria-selected="false" data-type="social" id="nc-tab-social">互动</button>
       <button class="nc-tab" type="button" role="tab" aria-selected="false" data-type="mention" id="nc-tab-mention">@ 提到</button>
       <button class="nc-tab" type="button" role="tab" aria-selected="false" data-type="listen" id="nc-tab-listen">一起听</button>
       <button class="nc-tab" type="button" role="tab" aria-selected="false" data-type="dm" id="nc-tab-dm">私信</button>
+      <button class="nc-tab" type="button" role="tab" aria-selected="false" data-type="review" id="nc-tab-review">审核</button>
     </div>
 
     <p class="hint" id="nc-dm-jump" hidden>
@@ -127,7 +129,7 @@
 
     <div id="nc-list"></div>
 
-    <p class="hint" id="nc-empty" hidden>这里还很安静。有人 @ 你、邀你一起听、或给你发私信时，会出现在这里。</p>
+    <p class="hint" id="nc-empty" hidden>这里还很安静。有人评论你、赞了你、@ 了你、给你发私信，或你的分享有了审核结果时，会出现在这里。</p>
 
     <p class="hint" id="nc-login" hidden>
       登录之后才能看到自己的提醒。<a href="login.html">登录 / 注册</a>
@@ -150,8 +152,9 @@
   <p class="footer-line">把今天的心事和光，留在这里</p>
   <p class="footer-note">提醒只给你自己看，别人看不到你的提醒列表</p>
   <p class="footer-legal">
-    本网页含有 AI 生成的产物，未侵犯版权；用户发言不代表网站所有者的观点；
-    网站所有者将对不合规的帖子进行下架处理；烦请用户谨慎发言。
+    © 校园拾光 · 内容版权归原作者所有；如认为内容侵权或不当，
+    请通过「意见反馈」联系我们，我们会尽快核实处理。<br>
+    用户发言不代表网站所有者观点；不合规内容将下架。
   </p>
 </footer>
 
@@ -161,7 +164,7 @@
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
 <script src="assets/js/campuses.js?v=e0ed4bde"></script>
 <script src="assets/js/circles.js?v=f6e3aaf5"></script>
-<script src="assets/js/app.js?v=16a1a2ec"></script>
-<script src="assets/js/notifications.js?v=9fb5355e"></script>
+<script src="assets/js/app.js?v=66aca8bf"></script>
+<script src="assets/js/notifications.js?v=b6f6b591"></script>
 </body>
 </html>

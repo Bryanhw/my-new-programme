@@ -626,6 +626,22 @@ window.Campus = (function () {
       });
   }
 
+  /** P1-6 全站搜索：走 search_posts RPC（只返回 approved，RLS 照旧）。
+   *  函数还没部署时（PGRST202）返回 null —— 调用方据此退回「只筛已加载」，
+   *  并把范围如实说清楚，而不是假装搜完了全站。 */
+  function searchPosts(term, limit) {
+    if (!client) return Promise.reject(new Error(configError));
+    var q = String(term == null ? "" : term).trim();
+    if (!q) return Promise.resolve([]);
+    return client.rpc("search_posts", { q: q, lim: limit || 50 }).then(function (res) {
+      if (res.error) {
+        if (String(res.error.code || "") === "PGRST202") return null;
+        throw new Error("搜索失败：" + res.error.message);
+      }
+      return res.data || [];
+    });
+  }
+
   /** F2：按一批 id 取帖子 ——「我的收藏」用。
    *  本地只存 id，内容仍然走「广场那张表 + 同一套 RLS」读回来，
    *  所以「读得到 = 还能看，读不到 = 删掉了 / 没通过审核」，
@@ -1238,11 +1254,88 @@ window.Campus = (function () {
     });
   }
 
+  /* ---------------- 弹窗焦点管理（第 73 轮，评审 8.5） ----------------
+   * 举报 / 看原图 / 键盘说明 / 昵称四个弹窗都声明了 aria-modal="true"，
+   * 但以前只有「键盘说明」会把焦点还回去，其余三个既不把焦点移进弹窗，
+   * 也不在 Tab 时把焦点关在弹窗里 —— 读屏和键盘用户会跑到背后的页面上。
+   * 这里给三个动态弹窗共用一套：进入记下触发者 → 聚焦第一个可聚焦项 →
+   * Tab / Shift+Tab 在弹窗内循环 → 关闭时把焦点还给触发者。
+   * 全部做防御式判断：测试环境的假 DOM 没有 querySelectorAll / contains，
+   * 缺能力时安静退化，不报错、不影响原有行为。
+   * ------------------------------------------------------------------ */
+
+  var FOCUSABLE_SELECTOR = "a[href], button:not([disabled]), input:not([disabled])," +
+    " textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+  function focusableIn(container) {
+    if (!container || typeof container.querySelectorAll !== "function") return [];
+    var nodes;
+    try { nodes = container.querySelectorAll(FOCUSABLE_SELECTOR); }
+    catch (err) { return []; }
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i] && !nodes[i].hidden) out.push(nodes[i]);
+    }
+    return out;
+  }
+
+  function focusFirstIn(container) {
+    var list = focusableIn(container);
+    if (!list.length) return false;
+    if (list[0].focus) {
+      try { list[0].focus(); return true; } catch (err) { /* 元素不可聚焦 */ }
+    }
+    return false;
+  }
+
+  function restoreFocus(el) {
+    if (el && el.focus) {
+      try { el.focus(); } catch (err) { /* 那个元素已经不在了 */ }
+    }
+  }
+
+  /** 把 Tab / Shift+Tab 关在 container 里；返回是否接管了这次按键 */
+  function trapTabKey(e, container) {
+    if (!e || (e.key !== "Tab" && e.key !== "tab")) return false;
+    var list = focusableIn(container);
+    if (!list.length) return false;
+
+    var first = list[0];
+    var last = list[list.length - 1];
+    var active = document.activeElement;
+    var inside = false;
+    if (container && typeof container.contains === "function") {
+      try { inside = !!container.contains(active); } catch (err) { inside = false; }
+    }
+    // 假 DOM 的 contains 是选择器匹配，不是节点包含 —— 用数组兜底判断
+    if (!inside) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] === active) { inside = true; break; }
+      }
+    }
+
+    if (e.shiftKey) {
+      if (!inside || active === first) {
+        if (e.preventDefault) e.preventDefault();
+        restoreFocus(last);
+        return true;
+      }
+      return false;
+    }
+    if (!inside || active === last) {
+      if (e.preventDefault) e.preventDefault();
+      restoreFocus(first);
+      return true;
+    }
+    return false;
+  }
+
   /* ---------------- 举报弹窗（由 app.js 动态生成，六个页面通用） ---------------- */
 
   var reportPostId = null;
   var reportCommentId = null;
   var reportWrap = null;
+  var reportReturnFocus = null;
 
   function reportModalHtml() {
     var options = "";
@@ -1299,6 +1392,9 @@ window.Campus = (function () {
     reportPostId = null;
     reportCommentId = null;
     if (document.body) document.body.classList.remove("modal-open");
+    // 第 73 轮：把焦点还给点开弹窗的那颗按钮，键盘用户不会被丢回页面开头
+    restoreFocus(reportReturnFocus);
+    reportReturnFocus = null;
   }
 
   /** 第一次用到举报时才把弹窗建出来（六个页面共用，所以放在 app.js 里） */
@@ -1322,9 +1418,10 @@ window.Campus = (function () {
     });
 
     document.addEventListener("keydown", function (e) {
-      if ((e.key === "Escape" || e.key === "Esc") && reportWrap && !reportWrap.hidden) {
-        closeReportDialog();
-      }
+      if (!reportWrap || reportWrap.hidden) return;
+      // 第 73 轮：Tab / Shift+Tab 在弹窗内循环（backdrop 里只有这一块面板）
+      if (trapTabKey(e, reportWrap)) return;
+      if (e.key === "Escape" || e.key === "Esc") closeReportDialog();
     });
 
     var els = reportEls(wrap);
@@ -1395,6 +1492,9 @@ window.Campus = (function () {
 
     wrap.hidden = false;
     if (document.body) document.body.classList.add("modal-open");
+    // 第 73 轮：记住是谁打开的，关闭时把焦点还回去；并把焦点移进弹窗
+    reportReturnFocus = document.activeElement || null;
+    focusFirstIn(wrap);
     return true;
   }
 
@@ -1406,10 +1506,14 @@ window.Campus = (function () {
    * ------------------------------------------------------------------ */
 
   var imageWrap = null;
+  var imageReturnFocus = null;
 
   function closeImageViewer() {
     if (imageWrap) imageWrap.hidden = true;
     if (document.body) document.body.classList.remove("modal-open");
+    // 第 73 轮：焦点还给点开这张图的按钮
+    restoreFocus(imageReturnFocus);
+    imageReturnFocus = null;
   }
 
   /** 第一次点图时才把浮层建出来（六个页面共用，所以放在 app.js 里） */
@@ -1439,9 +1543,10 @@ window.Campus = (function () {
     });
 
     document.addEventListener("keydown", function (e) {
-      if ((e.key === "Escape" || e.key === "Esc") && imageWrap && !imageWrap.hidden) {
-        closeImageViewer();
-      }
+      if (!imageWrap || imageWrap.hidden) return;
+      // 第 73 轮：Tab / Shift+Tab 留在浮层里（关闭按钮 + 图片）
+      if (trapTabKey(e, imageWrap)) return;
+      if (e.key === "Escape" || e.key === "Esc") closeImageViewer();
     });
 
     return wrap;
@@ -1459,6 +1564,12 @@ window.Campus = (function () {
 
     wrap.hidden = false;
     if (document.body) document.body.classList.add("modal-open");
+    // 第 73 轮：记住触发按钮，并把焦点放到「关闭」上（图片本身不可聚焦）
+    imageReturnFocus = document.activeElement || null;
+    var closeBtn = document.getElementById("image-close");
+    if (closeBtn && closeBtn.focus) {
+      try { closeBtn.focus(); } catch (err) { /* 元素不在 */ }
+    }
     return true;
   }
 
@@ -2524,10 +2635,10 @@ window.Campus = (function () {
   /* ================= F1：卡片「⋯」菜单 + 分享直链（B4） =================
    *  三件事共用一套机制，所以放在一起做（只跑一轮回归）：
    *    · 举报 / 复制链接 / 不感兴趣 收进卡片右上角的「⋯」；
-   *    · 分享直链 feed.html?post=<id> 打开后滚到那条并高亮；
+   *    · 分享直链是详情页 detail.html?id=<id>（第 77 轮补上的）；
+   *      广场的 feed.html?post=<id> 仍然负责「滚到那条并高亮」。
    *    · 「不感兴趣」是本机隐藏（F6），能撤销。
-   *  站点没有帖子详情页（post.html 是发布页），所以直链的验收标准就是
-   *  「至少高亮」—— 这里刻意不造详情页。
+   *  注意 post.html 是发布页，任何时候都不要往里塞帖子 id。
    * ===================================================================== */
 
   /* 渲染过的帖子按 id 记一份：撤销「不感兴趣」时要就地把它画回来，
@@ -2661,7 +2772,9 @@ window.Campus = (function () {
 
   /** B4：一条帖子的分享直链 —— 落在广场上，由 feed.js 高亮那一条 */
   function postShareUrl(postId) {
-    return siteBase() + "feed.html?post=" + encodeURIComponent(String(postId == null ? "" : postId));
+    /* 第 77 轮（P1-6 后半）：永久链接指向详情页，而不是广场的定位地址。
+       广场 ?post= 只负责「滚到这条并高亮」，关掉就散了；详情页才是可以发给别人的地址。 */
+    return siteBase() + "detail.html?id=" + encodeURIComponent(String(postId == null ? "" : postId));
   }
 
   /** 复制到剪贴板：优先异步 API，老浏览器退回 textarea + execCommand */
@@ -2992,8 +3105,16 @@ window.Campus = (function () {
     var matched = false;
     for (var i = 0; i < items.length; i++) {
       var key = items[i].getAttribute("data-tab");
-      if (key === active) { items[i].classList.add("active"); matched = true; }
-      else items[i].classList.remove("active");
+      // 第 73 轮（评审 9.4）：除了 .active，再给读屏一个 aria-current="page" ——
+      // 以前当前页只靠颜色，读屏不知道自己在哪一页。
+      if (key === active) {
+        items[i].classList.add("active");
+        if (items[i].setAttribute) items[i].setAttribute("aria-current", "page");
+        matched = true;
+      } else {
+        items[i].classList.remove("active");
+        if (items[i].removeAttribute) items[i].removeAttribute("aria-current");
+      }
     }
 
     var more = document.getElementById("tab-more");
@@ -3004,9 +3125,11 @@ window.Campus = (function () {
       var innerKey = inner[j].getAttribute("data-tab");
       if (!matched && innerKey === active) {
         inner[j].classList.add("active");
+        if (inner[j].setAttribute) inner[j].setAttribute("aria-current", "page");
         more.classList.add("tabbar-active");
       } else {
         inner[j].classList.remove("active");
+        if (inner[j].removeAttribute) inner[j].removeAttribute("aria-current");
       }
     }
   }
@@ -3806,6 +3929,9 @@ window.Campus = (function () {
     // 带修饰键的一律不抢：Ctrl+F、Cmd+P 这些是浏览器和系统自己的
     if (e.ctrlKey || e.altKey || e.metaKey) return;
 
+    // 第 73 轮：快捷键说明弹窗开着时，Tab / Shift+Tab 关在弹窗里
+    if (keysWrap && !keysWrap.hidden && trapTabKey(e, keysWrap)) return;
+
     if (key === "Escape" || key === "Esc") {
       if (keysWrap && !keysWrap.hidden) closeKeysHelp();
       return;                               // 别的 Esc 由各自的弹窗自己处理
@@ -3901,6 +4027,7 @@ window.Campus = (function () {
     mergeFeedPosts: mergeFeedPosts,
     listCircleHotwords: listCircleHotwords,
     filterPostsByTerm: filterPostsByTerm,
+    searchPosts: searchPosts,
     listMyPosts: listMyPosts,
     // F2：「我的评论」与「我的收藏」——前者走公开视图的 is_mine，后者按本机存的 id 回读
     listMyComments: listMyComments,
@@ -3929,6 +4056,8 @@ window.Campus = (function () {
     listComments: listComments,
     addComment: addComment,
     deleteComment: deleteComment,
+    // 详情页要在卡片画好后直接把评论区展开（不靠事件委托）
+    toggleCommentZone: toggleCommentZone,
     renderCommentText: renderCommentText,
     COMMENT_MAX: COMMENT_MAX,
     buildDisplayName: buildDisplayName,

@@ -22,9 +22,11 @@
   var noticeEl = document.getElementById("notice");
   var TAB_DEFS = [
     { type: "",        id: "nc-tab-all" },
+    { type: "social",  id: "nc-tab-social" },   /* comment + reply + like + hug */
     { type: "mention", id: "nc-tab-mention" },
     { type: "listen",  id: "nc-tab-listen" },
-    { type: "dm",      id: "nc-tab-dm" }
+    { type: "dm",      id: "nc-tab-dm" },
+    { type: "review",  id: "nc-tab-review" }
   ];
   var dmJumpEl = document.getElementById("nc-dm-jump");
   var tabs = [];
@@ -50,19 +52,30 @@
     else if (noticeEl) { noticeEl.textContent = msg; noticeEl.hidden = false; }
   }
 
+  /* 这三类的 body 本身就是一句完整的话（「3 人赞了你的分享」「你的分享已通过审核」），
+     不再拼「谁 + 做了什么」，否则会出现「一位同学 赞了你的分享 / 3 人赞了你的分享」。 */
+  function bodyOnly(n) {
+    return n.type === "like" || n.type === "hug" || n.type === "review";
+  }
+
   function lineOf(n) {
     if (n.type === "listen_invite") return "邀你一起听";
     if (n.type === "listen_accept") return "接受了一起听";
     if (n.type === "dm") return "给你发了一条私信";
+    if (n.type === "comment") return "评论了你的分享";
+    if (n.type === "reply") return "回复了你的评论";
     return "在评论里 @ 了你";
   }
 
   function fallbackOf(n) {
     if (n.type === "dm") return "点开去回一句";
     if (n.type === "listen_invite" || n.type === "listen_accept") return "点开去一起听";
+    if (n.type === "like" || n.type === "hug" || n.type === "review") return "点开看看这条分享";
     return "点开看看这条评论";
   }
 
+  /* 评论 / 回复 / 赞 / 抱抱 / 审核都落在同一条分享上，直接去它的详情页。
+     详情页会打开评论区，比广场的「滚过去并高亮」更贴近提醒的意图。 */
   function hrefOf(n) {
     if (n.type === "listen_invite" || n.type === "listen_accept") {
       return "music.html?r=" + Date.now();
@@ -72,21 +85,27 @@
         ? "?with=" + encodeURIComponent(String(n.from_uid))
         : "?r=" + Date.now());
     }
-    return n.post_id
-      ? "post.html?id=" + encodeURIComponent(String(n.post_id))
+    var pid = n.post_id
+      || ((n.type === "like" || n.type === "hug" || n.type === "review") ? n.ref_id : "");
+    return pid
+      ? "detail.html?id=" + encodeURIComponent(String(pid))
       : "feed.html";
   }
 
   function renderItem(n) {
     var who = n.from_nick || "一位同学";
     var body = String(n.body || "");
+    var only = bodyOnly(n);
+    var head = only
+      ? "<strong>" + esc(body || fallbackOf(n)) + "</strong>"
+      : "<strong>" + esc(who) + "</strong> " + lineOf(n);
     return '<div class="notice-item' + (n.read_at ? "" : " is-unread") + '">' +
       '<div class="notice-item-top">' +
-        "<strong>" + esc(who) + "</strong> " + lineOf(n) +
+        head +
         "<span>" + esc(ago(n.created_at)) + "</span>" +
       "</div>" +
       '<a class="notice-item-body" href="' + esc(hrefOf(n)) + '">' +
-        (body ? esc(body) : fallbackOf(n)) +
+        esc(only ? fallbackOf(n) : (body || fallbackOf(n))) +
       "</a>" +
       "</div>";
   }

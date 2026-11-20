@@ -1280,6 +1280,30 @@ function __makeClient(opts) {
         }
         return P.resolve({ data: null, error: null });
       }
+      if (name === 'search_posts') {
+        /* 对齐 docs/supabase-search.sql：trim、大小写不敏感、只返回 approved、
+           时间倒序、最多 100 条。列裁剪与 posts 已授权的列一致（不含 author_id）。 */
+        var sargs = arguments[1] || {};
+        var sterm = String(sargs.q == null ? '' : sargs.q).replace(/^\s+|\s+$/g, '');
+        var slim = parseInt(sargs.lim, 10);
+        if (isNaN(slim)) slim = 50;
+        slim = Math.max(1, Math.min(slim, 100));
+        var sneedle = sterm.toLowerCase();
+        var shit = [];
+        for (var si = 0; si < (store.posts || []).length; si++) {
+          var sp = store.posts[si];
+          if (!sp || sp.status !== 'approved') continue;
+          var stext = String(sp.content == null ? '' : sp.content).toLowerCase();
+          if (!sneedle || stext.indexOf(sneedle) < 0) continue;
+          shit.push(__clone(sp));
+        }
+        shit.sort(function (a, b) {
+          var x = String(a.created_at || ''), y = String(b.created_at || '');
+          if (x === y) return 0;
+          return x < y ? 1 : -1;
+        });
+        return P.resolve({ data: shit.slice(0, slim), error: null });
+      }
       if (name === 'my_public_uid') {
         /* V5-4：当前登录公开账号的 public_uid；匿名 / 未登录没有公开 UID，返回 null。 */
         var muid = sessionUid();
@@ -1489,6 +1513,9 @@ function __makeClient(opts) {
             if (mnn.user_uid !== mnMe) continue;
             if (mnType === 'listen') {
               if (mnn.type !== 'listen_invite' && mnn.type !== 'listen_accept') continue;
+            } else if (mnType === 'social') {
+              if (mnn.type !== 'comment' && mnn.type !== 'reply'
+                  && mnn.type !== 'like' && mnn.type !== 'hug') continue;
             } else if (mnType && mnn.type !== mnType) {
               continue;
             }
@@ -1500,7 +1527,8 @@ function __makeClient(opts) {
             }
 
             var mnFrom = null, mnFromUid = null;
-            if (mnn.type === 'mention' && mnComment) {
+            if ((mnn.type === 'mention' || mnn.type === 'comment' || mnn.type === 'reply')
+                && mnComment) {
               mnFrom = mnComment.display_name || null;
               /* 匿名评论永远不给 UID：红线 */
               if (!mnComment.is_anonymous && mnComment.author_id) {
@@ -1538,7 +1566,9 @@ function __makeClient(opts) {
 
             mnAll.push({
               id: mnn.id, type: mnn.type, ref_id: mnn.ref_id, body: mnn.body,
-              post_id: mnComment ? mnComment.post_id : null,
+              post_id: (mnn.type === 'like' || mnn.type === 'hug' || mnn.type === 'review')
+                ? mnn.ref_id
+                : (mnComment ? mnComment.post_id : null),
               from_nick: mnFrom || '\u4e00\u4f4d\u540c\u5b66',
               from_uid: mnFromUid || null,
               read_at: mnn.read_at || null, created_at: mnn.created_at
@@ -1577,6 +1607,9 @@ function __makeClient(opts) {
             if (mrn.user_uid !== mrMe || mrn.read_at) continue;
             if (mrType === 'listen') {
               if (mrn.type !== 'listen_invite' && mrn.type !== 'listen_accept') continue;
+            } else if (mrType === 'social') {
+              if (mrn.type !== 'comment' && mrn.type !== 'reply'
+                  && mrn.type !== 'like' && mrn.type !== 'hug') continue;
             } else if (mrType && mrn.type !== mrType) {
               continue;
             }

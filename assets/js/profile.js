@@ -605,7 +605,7 @@
     return '<div class="my-comment">' +
       '<div class="my-comment-top">' +
         parts.map(function (t) { return "<span>" + t + "</span>"; }).join("<span>·</span>") +
-        '<a class="my-comment-go" href="feed.html?post=' + encodeURIComponent(String(c.post_id)) +
+        '<a class="my-comment-go" href="detail.html?id=' + encodeURIComponent(String(c.post_id)) +
           '">去看这条 →</a>' +
       "</div>" +
       '<div class="my-comment-text">' + C.escapeHtml(c.content) + "</div>" +
@@ -785,11 +785,18 @@
       noticeCard.classList.add("hidden");
     });
   }
+  /* 评论 / 回复 / 赞 / 抱抱 / 审核都落在同一条分享上，直接去它的详情页。 */
+  function noticePostHref(n) {
+    var pid = n.post_id
+      || ((n.type === "like" || n.type === "hug" || n.type === "review") ? n.ref_id : "");
+    return pid ? ("detail.html?id=" + encodeURIComponent(String(pid))) : "feed.html";
+  }
 
   function renderNotification(n) {
     var who = n.from_nick || "一位同学";
     var body = String(n.body || "");
     var type = String(n.type || "mention");
+    var only = (type === "like" || type === "hug" || type === "review");
     var line, href, empty;
     if (type === "listen_invite") {
       line = "邀你一起听";
@@ -805,20 +812,34 @@
         ? "?with=" + encodeURIComponent(String(n.from_uid))
         : "?r=" + Date.now());
       empty = "点开去回一句";
+    } else if (type === "comment") {
+      line = "评论了你的分享";
+      href = noticePostHref(n);
+      empty = "点开看看这条评论";
+    } else if (type === "reply") {
+      line = "回复了你的评论";
+      href = noticePostHref(n);
+      empty = "点开看看这条评论";
+    } else if (only) {
+      line = body || "有新的互动";
+      href = noticePostHref(n);
+      empty = "点开看看这条分享";
     } else {
       line = "在评论里 @ 了你";
-      href = n.post_id
-        ? ("post.html?id=" + encodeURIComponent(String(n.post_id)) + "&r=" + Date.now())
-        : "feed.html";
+      href = noticePostHref(n);
       empty = "点开看看这条评论";
     }
+    var head = only
+      ? "<strong>" + C.escapeHtml(line) + "</strong>"
+      : "<strong>" + C.escapeHtml(who) + "</strong> " + line;
     return '<div class="notice-item' + (n.read_at ? "" : " is-unread") + '">' +
       '<div class="notice-item-top">' +
-        "<strong>" + C.escapeHtml(who) + "</strong> " + line +
+        head +
         "<span>" + C.escapeHtml(C.timeAgo(n.created_at || "")) + "</span>" +
       "</div>" +
       '<a class="notice-item-body" href="' + C.escapeHtml(href) + '">' +
-        (body ? C.escapeHtml(body) : empty) + "</a>" +
+        C.escapeHtml(only ? empty : (body || empty)) +
+      "</a>" +
       "</div>";
   }
 

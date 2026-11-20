@@ -19,6 +19,7 @@ STUB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stub.js")
 PAGES = {
     "index.html": ["assets/js/home.js"],
     "feed.html": ["assets/js/feed.js"],
+    "detail.html": ["assets/js/detail.js"],
     "post.html": ["assets/js/post.js"],
     "login.html": ["assets/js/campus-picker.js", "assets/js/auth.js"],
     "reset.html": ["assets/js/reset.js"],
@@ -3085,69 +3086,28 @@ check("clicking anywhere else closes it", js(it, "__menu.hidden") is True)
 check("...and the button is told as well",
       js(it, "__btn._a['aria-expanded']") == "false")
 
-print("- F1/B4: the share link is an absolute feed link with just the post id")
+print("- F1/B4: the share link is an absolute detail link with just the post id")
 it = load("feed.html", "mock-logged")
 js(it, "window.location.href = 'https://example.test/sub/feed.html?circle=c1&q=x';")
 check("the query of the current page is dropped",
-      js(it, "Campus.postShareUrl('p-1')") == "https://example.test/sub/feed.html?post=p-1",
+      js(it, "Campus.postShareUrl('p-1')") == "https://example.test/sub/detail.html?id=p-1",
       js(it, "Campus.postShareUrl('p-1')"))
 check("an id that needs encoding is encoded",
-      js(it, "Campus.postShareUrl('a b/c')") == "https://example.test/sub/feed.html?post=a%20b%2Fc",
+      js(it, "Campus.postShareUrl('a b/c')") == "https://example.test/sub/detail.html?id=a%20b%2Fc",
       js(it, "Campus.postShareUrl('a b/c')"))
 
-print("- F1/B4: feed.html?post=<id> rings the shared card and says why")
-it = load("feed.html", "mock-logged", pre="window.location.search = '?post=p-2';")
-html = js(it, "document.getElementById('feed').innerHTML")
-check("the shared card is the ringed one",
-      'class="card post post-target" data-post-id="p-2"' in html, html[:200])
-check("exactly one card is ringed", html.count("post-target") == 1)
-check("the reader is told why this one is ringed",
-      ZH_SHARED_HIT in js(it, "document.getElementById('notice').textContent"),
-      js(it, "document.getElementById('notice').textContent"))
-
-print("- F1/B4: a shared id that is not in the batch is not faked")
-it = load("feed.html", "mock-logged", pre="window.location.search = '?post=p-nope';")
-html = js(it, "document.getElementById('feed').innerHTML")
-check("nothing is ringed when the post is not there", "post-target" not in html)
-check("the reader is told why instead of being left guessing",
-      ZH_SHARED_MISS in js(it, "document.getElementById('notice').textContent"),
-      js(it, "document.getElementById('notice').textContent"))
-
-print("- B4 fallback: an id that is not in the batch is asked for on its own")
-# 一个形状就是 uuid 的 id（真实库里 posts.id 是 uuid）——批次里没有它，
-# 页面应该按 id 单独问一次服务端，而不是只在那批里翻。
 SHARED_UUID = "33333333-3333-3333-3333-333333333333"
-it = load("feed.html", "mock-logged",
-          pre="window.location.search = '?post=" + SHARED_UUID + "';")
-js(it, "__posts_selects = 0; __calls.forEach(function (c) {"
-       " if (c[0] === 'select' && c[1] === 'posts') __posts_selects++; });")
-# 批次那一次是**三跳**：先带 anon_code（列还没迁移，撞 42703）→ 降级重试又撞
-# topics 那一列 → 再降级；第四跳才是「按 id 问那一条」。
-# 删了按 id 那一跳就变 3，这条会报警。
-check("the shared id is asked for on its own, after the batch and its retries",
-      js(it, "__posts_selects") == 4,
-      "%s posts select(s)" % js(it, "__posts_selects"))
-check("a shared id nobody has is reported as gone, not as 'maybe older'",
-      ZH_SHARED_MISS in js(it, "document.getElementById('notice').textContent"),
-      js(it, "document.getElementById('notice').textContent"))
-check("nothing is ringed for an id that does not exist",
-      "post-target" not in js(it, "document.getElementById('feed').innerHTML"))
+print("- B4: an old feed.html?post= link upgrades to the detail page")
+it = load("feed.html", "mock-logged", pre="window.location.search = '?post=p-2';")
+check("the old share link lands on detail.html with the same id",
+      js(it, "window.location.href") == "detail.html?id=p-2", js(it, "window.location.href"))
+check("...and the square does not render behind the jump",
+      js(it, "document.getElementById('feed').innerHTML") == "",
+      js(it, "document.getElementById('feed').innerHTML")[:120])
 
-# 同一条链接，但这次服务端答得出来：应该补在最前面并高亮（走的是同一条渲染路）
-js(it, "Campus.getPostById = function (id) {"
-       " return P.resolve({ id: id, is_anonymous: false, display_name: 'N',"
-       " content: 'shared by id', image_path: null,"
-       " created_at: '2026-09-23T10:00:00.000Z' }); };")
-js(it, "document.getElementById('refresh').click();")
-html = js(it, "document.getElementById('feed').innerHTML")
-check("the fetched one is drawn like any other card, and ringed",
-      ('class="card post post-target" data-post-id="' + SHARED_UUID + '"') in html,
-      html[:200])
-check("exactly one card is ringed", html.count("post-target") == 1)
-check("the rest of the batch is still there", html.count('class="card post') == 4,
-      "%s card(s)" % html.count('class="card post'))
-check("and the reader is told it is the shared one",
-      ZH_SHARED_HIT in js(it, "document.getElementById('notice').textContent"))
+it = load("feed.html", "mock-logged", pre="window.location.search = '?post=a%20b';")
+check("an id that needs encoding is encoded on the way",
+      js(it, "window.location.href") == "detail.html?id=a%20b", js(it, "window.location.href"))
 
 print("- B4 fallback: getPostById only ever asks for that one row")
 it = load("feed.html", "mock-logged")
@@ -3304,6 +3264,83 @@ it = load("feed.html", "mock-logged", pre=TAGGED + topic_url(TOPIC_C))
 html = js(it, "document.getElementById('feed').innerHTML")
 check("a topic nobody has used says so, and offers the way back",
       ZH_NONE_YET in html and "data-clear-topic" in html, html)
+
+print("- P0-2: an unfinished draft is still here after the login detour")
+_DRAFT_PRE = ("__ls['campus.postDraft'] = JSON.stringify({"
+              "content: '\u5199\u5230\u4e00\u534a\u5c31\u53bb\u767b\u5f55',"
+              "topics: ['" + TOPIC_A + "', '\u4e0d\u5b58\u5728\u7684\u8bdd\u9898'],"
+              "anon: true, hadImage: true, savedAt: 1});")
+it = load("post.html", "mock-logged", pre=_DRAFT_PRE)
+check("the text comes back",
+      js(it, "document.getElementById('content').value")
+      == "\u5199\u5230\u4e00\u534a\u5c31\u53bb\u767b\u5f55",
+      js(it, "document.getElementById('content').value"))
+_hint = js(it, "document.getElementById('topic-hint').textContent")
+check("only topics that still exist come back",
+      _hint.startswith("\u5df2\u9009\uff1a") and "\u4e0d\u5b58\u5728\u7684\u8bdd\u9898" not in _hint,
+      _hint)
+check("the anon switch is restored too",
+      js(it, "document.getElementById('anon-switch').getAttribute('aria-checked')") == "true")
+_notice = js(it, "document.getElementById('notice').textContent")
+check("and the page says it was recovered",
+      "\u627e\u56de\u6765" in _notice, _notice)
+check("the missing image is called out",
+      "\u56fe\u7247\u8981\u91cd\u65b0\u9009" in _notice, _notice)
+
+it = load("post.html", "mock-logged",
+          pre="__ls['campus.postDraft']=JSON.stringify({content:'   ',topics:[],anon:false});")
+check("an empty draft is thrown away instead of restored",
+      js(it, "Object.prototype.hasOwnProperty.call(__ls,'campus.postDraft')") is False)
+check("and the box stays empty", js(it, "document.getElementById('content').value") == "")
+
+print("- P1-6: search reaches the whole site, and only approved posts come back")
+_SEARCH_SEED = ("__mockOpts.store.posts.unshift({"
+                " id: '11111111-1111-4111-8111-111111111111', author_id: 'u1',"
+                " is_anonymous: false, display_name: 'a', status: 'approved',"
+                " content: '\u56fe\u4e66\u9986\u95e8\u53e3\u6392\u961f',"
+                " created_at: '2026-09-30T12:00:00.000Z' });"
+                "__mockOpts.store.posts.unshift({"
+                " id: '22222222-2222-4222-8222-222222222222', author_id: 'u2',"
+                " is_anonymous: true, display_name: '\u4e00\u4f4d\u540c\u5b66',"
+                " status: 'approved', content: '\u56fe\u4e66\u9986\u7684\u7a97\u53e3',"
+                " created_at: '2026-09-30T11:00:00.000Z' });"
+                "__mockOpts.store.posts.unshift({"
+                " id: '33333333-3333-4333-8333-333333333333', author_id: 'u3',"
+                " is_anonymous: false, display_name: 'p', status: 'pending',"
+                " content: '\u56fe\u4e66\u9986\u8fd8\u6ca1\u5ba1',"
+                " created_at: '2026-09-30T13:00:00.000Z' });")
+_SEARCH_URL = ("window.location.search = '?q=' + "
+               "encodeURIComponent('\u56fe\u4e66\u9986');")
+
+it = load("feed.html", "mock-logged", pre=_SEARCH_SEED + _SEARCH_URL)
+_html = js(it, "document.getElementById('feed').innerHTML")
+check("P1-6: results come from the whole site, not just the loaded page",
+      _html.count('<article class="card post"') == 2, _html.count('<article class="card post"'))
+check("P1-6: a pending post never shows up in search results",
+      "\u8fd8\u6ca1\u5ba1" not in _html)
+check("P1-6: the bar says it searched the whole site",
+      "\u5168\u7ad9\u63d0\u5230" in js(it, "document.getElementById('feed-filter').textContent"),
+      js(it, "document.getElementById('feed-filter').textContent"))
+check("P1-6: the count line says the same thing",
+      "\u5168\u7ad9\u641c\u5230 2 \u6761" in js(it, "document.getElementById('feed-count').textContent"),
+      js(it, "document.getElementById('feed-count').textContent"))
+check("P1-6: no fake 'no more posts' note under a search result",
+      js(it, "document.getElementById('load-more-note').hidden") is True)
+
+ev(it, "document.getElementById('clear-term').click();")
+check("P1-6: clearing the word goes back to the normal feed",
+      js(it, "document.getElementById('feed-filter').hidden") is True)
+check("P1-6: and the feed is drawn again",
+      js(it, "document.getElementById('feed').innerHTML").count('<article class="card post"') > 0)
+
+it = load("feed.html", "mock-logged",
+          pre=_SEARCH_SEED + _SEARCH_URL + "__mockOpts.rpcMissing = true;")
+check("P1-6: before the RPC is deployed the page falls back to the loaded page",
+      "\u5728\u5df2\u52a0\u8f7d\u7684" in js(it, "document.getElementById('feed-filter').textContent"),
+      js(it, "document.getElementById('feed-filter').textContent"))
+check("P1-6: and it tells the user this is not a site-wide search",
+      "\u8fd8\u6ca1\u5f00\u901a" in js(it, "document.getElementById('notice').textContent"),
+      js(it, "document.getElementById('notice').textContent"))
 
 print("- C3: the address bar follows the picked topic (shareable, survives a reload)")
 # 站主 2026-10-14 验收时按清单 A4 找「地址栏变成 feed.html?topic=…」没找到：
@@ -3574,7 +3611,7 @@ check("...not somebody else's comment",
 check("...and not a comment the site already took down",
       "taken down" not in mine_comments and "on another post" not in mine_comments)
 check("...each one points back at the post it belongs to",
-      "feed.html?post=p-1" in mine_comments)
+      "detail.html?id=p-1" in mine_comments)
 
 js(it, "document.getElementById('mine-tabs').dispatch('click', { target: { closest: function (s) {"
        "  return s === '[data-mine-tab]' ? { getAttribute: function () { return 'saves'; } } : null;"
@@ -5193,6 +5230,121 @@ check("badge: stays dark for a signed-out visitor",
       str(js(_nc_guest, "document.getElementById('menu-badge').hidden")) == "True"
       and str(js(_nc_guest, "document.getElementById('menu-badge').textContent")) == "",
       js(_nc_guest, "document.getElementById('menu-badge').textContent"))
+
+print()
+print("P03) \u901a\u77e5\u95ed\u73af\uff1a\u8bc4\u8bba / \u56de\u590d / \u8d5e / \u62b1\u62b1 / \u5ba1\u6838\u7ed3\u679c")
+
+NC3_SEED = r"""
+(function () {
+  var st = __mockOpts.store;
+  st.profiles[0].public_uid = 'abc123';
+  st.profiles[0].nickname = 'TestNick';
+  st.profiles.push({ id: 'u-2', public_uid: 'zzz999', nickname: 'Zed', school: 'Test Univ' });
+  st.posts = [{ id: 'p-1', author_id: 'u-1', is_anonymous: false,
+                display_name: 'TestNick', content: '\u6211\u7684\u5206\u4eab', status: 'approved',
+                created_at: '2026-11-16T08:00:00.000Z' }];
+  st.comments = [{
+    id: 'c-1', post_id: 'p-1', author_id: 'u-2', is_anonymous: false,
+    display_name: 'Zed', content: '\u5199\u5f97\u771f\u597d', status: 'approved',
+    created_at: '2026-11-16T10:00:00.000Z'
+  }];
+  st.notifications = [
+    { id: 'n-1', user_uid: 'abc123', type: 'comment', ref_id: 'c-1',
+      body: '\u8bc4\u8bba\u4e86\u4f60\u7684\u5206\u4eab', read_at: null,
+      created_at: '2026-11-16T10:00:00.000Z' },
+    { id: 'n-2', user_uid: 'abc123', type: 'like', ref_id: 'p-1',
+      body: '3 \u4eba\u8d5e\u4e86\u4f60\u7684\u5206\u4eab', read_at: null,
+      created_at: '2026-11-16T12:00:00.000Z' },
+    { id: 'n-3', user_uid: 'abc123', type: 'hug', ref_id: 'p-1',
+      body: '2 \u4eba\u62b1\u4e86\u62b1\u4f60\u7684\u5206\u4eab', read_at: null,
+      created_at: '2026-11-16T13:00:00.000Z' },
+    { id: 'n-4', user_uid: 'abc123', type: 'reply', ref_id: 'c-1',
+      body: '\u56de\u590d\u4e86\u4f60\u7684\u8bc4\u8bba', read_at: null,
+      created_at: '2026-11-16T14:00:00.000Z' },
+    { id: 'n-5', user_uid: 'abc123', type: 'review', ref_id: 'p-1',
+      body: '\u4f60\u7684\u5206\u4eab\u5df2\u901a\u8fc7\u5ba1\u6838\uff0c\u5927\u5bb6\u90fd\u80fd\u770b\u5230\u4e86',
+      read_at: null, created_at: '2026-11-16T15:00:00.000Z' }
+  ];
+})();
+"""
+
+_nc3 = load("notifications.html", "mock-logged", pre=NC3_SEED, modules=True)
+js(_nc3, "__drain(); __drain();")
+_nc3_html = str(js(_nc3, "document.getElementById('nc-list').innerHTML"))
+check("P03: \u8bc4\u8bba\u63d0\u9192\u5199\u660e\u662f\u8c01\u8bc4\u8bba\u4e86\u4f60\u7684\u5206\u4eab",
+      "Zed" in _nc3_html and "\u8bc4\u8bba\u4e86\u4f60\u7684\u5206\u4eab" in _nc3_html, _nc3_html[:200])
+check("P03: \u56de\u590d\u63d0\u9192\u4e0e\u8bc4\u8bba\u63d0\u9192\u533a\u5206\u5f00",
+      "\u56de\u590d\u4e86\u4f60\u7684\u8bc4\u8bba" in _nc3_html)
+check("P03: \u8d5e\u4e0e\u62b1\u62b1\u7528\u805a\u5408\u540e\u7684\u6574\u53e5\uff0c\u4e0d\u5047\u88c5\u662f\u67d0\u4e00\u4e2a\u4eba",
+      "3 \u4eba\u8d5e\u4e86\u4f60\u7684\u5206\u4eab" in _nc3_html
+      and "2 \u4eba\u62b1\u4e86\u62b1\u4f60\u7684\u5206\u4eab" in _nc3_html
+      and "\u4e00\u4f4d\u540c\u5b66 \u8d5e\u4e86\u4f60\u7684\u5206\u4eab" not in _nc3_html)
+check("P03: \u5ba1\u6838\u7ed3\u679c\u76f4\u63a5\u8bf4\u7ed3\u8bba",
+      "\u4f60\u7684\u5206\u4eab\u5df2\u901a\u8fc7\u5ba1\u6838" in _nc3_html)
+check("P03: \u63d0\u9192\u843d\u5230\u5e7f\u573a\u7684\u540c\u4e00\u6761\u5e16\u5b50\u4e0a\uff0c\u518d\u4e0d\u8df3\u5230\u53d1\u5e03\u9875",
+      "detail.html?id=p-1" in _nc3_html and "post.html?id=" not in _nc3_html, _nc3_html[:200])
+
+js(_nc3, "document.getElementById('nc-tab-social').click(); __drain();")
+_nc3_social = str(js(_nc3, "document.getElementById('nc-list').innerHTML"))
+check("P03: \u300c\u4e92\u52a8\u300d\u628a\u8bc4\u8bba/\u56de\u590d/\u8d5e/\u62b1\u62b1\u6536\u5728\u4e00\u680f",
+      "\u8bc4\u8bba\u4e86\u4f60\u7684\u5206\u4eab" in _nc3_social
+      and "\u62b1\u4e86\u62b1" in _nc3_social
+      and "\u901a\u8fc7\u5ba1\u6838" not in _nc3_social, _nc3_social[:200])
+check("P03: \u5207\u5230\u300c\u4e92\u52a8\u300d\u65f6\u9009\u4e2d\u6001\u8ddf\u7740\u8d70",
+      str(js(_nc3, "document.getElementById('nc-tab-social').getAttribute('aria-selected')")) == "true")
+
+js(_nc3, "document.getElementById('nc-tab-review').click(); __drain();")
+_nc3_review = str(js(_nc3, "document.getElementById('nc-list').innerHTML"))
+check("P03: \u300c\u5ba1\u6838\u300d\u680f\u53ea\u663e\u793a\u5ba1\u6838\u901a\u77e5",
+      "\u901a\u8fc7\u5ba1\u6838" in _nc3_review
+      and "\u8bc4\u8bba\u4e86\u4f60\u7684\u5206\u4eab" not in _nc3_review, _nc3_review[:200])
+
+js(_nc3, "document.getElementById('nc-tab-social').click(); __drain();")
+js(_nc3, "document.getElementById('nc-read-all').click(); __drain();")
+_nc3_left = js(_nc3, "String(__mockOpts.store.notifications.filter(function (n) {"
+                     " return n.type === 'review' && !n.read_at; }).length)")
+check("P03: \u53ea\u6e05\u300c\u4e92\u52a8\u300d\u65f6\u5ba1\u6838\u90a3\u6761\u4ecd\u7559\u7740\u672a\u8bfb",
+      str(_nc3_left) == "1", _nc3_left)
+
+print()
+print("P1-6b) \u5206\u4eab\u8be6\u60c5\u9875\uff1a\u4e00\u6761\u5206\u4eab\u7684\u6c38\u4e45\u5730\u5740")
+
+DETAIL_SEED = r"""
+(function () {
+  var st = __mockOpts.store;
+  st.profiles[0].public_uid = 'abc123';
+  st.profiles[0].nickname = 'TestNick';
+  st.posts = [{ id: '11111111-1111-4111-8111-111111111111', author_id: 'u-1', is_anonymous: false, display_name: 'TestNick',
+                school: 'Test Univ', content: '\u8fd9\u6761\u662f\u8be6\u60c5\u9875\u770b\u7684',
+                status: 'approved', created_at: '2026-11-16T08:00:00.000Z' }];
+  st.comments = [{ id: 'c-1', post_id: '11111111-1111-4111-8111-111111111111', author_id: 'u-2', is_anonymous: false,
+                   display_name: 'Zed', content: '\u7b2c\u4e00\u6761\u8bc4\u8bba',
+                   status: 'approved', created_at: '2026-11-16T10:00:00.000Z' }];
+})();
+"""
+
+_d = load("detail.html", "mock-logged",
+          pre=DETAIL_SEED + "window.location.search = '?id=11111111-1111-4111-8111-111111111111';")
+js(_d, "__drain(); __drain(); __drain();")
+_d_html = str(js(_d, "document.getElementById('detail').innerHTML"))
+check("P1-6b: \u8be6\u60c5\u9875\u628a\u90a3\u4e00\u6761\u753b\u51fa\u6765\u4e86",
+      "\u8fd9\u6761\u662f\u8be6\u60c5\u9875\u770b\u7684" in _d_html, _d_html[:160])
+check("P1-6b: \u6807\u9898\u6362\u6210\u8fd9\u4e00\u6761\u7684\u5185\u5bb9\uff08\u5206\u4eab\u5361\u7247 / \u6807\u7b7e\u9875\u540c\u6b65\uff09",
+      "\u8fd9\u6761\u662f\u8be6\u60c5\u9875\u770b\u7684" in str(js(_d, "document.title")),
+      js(_d, "document.title"))
+
+_d2 = load("detail.html", "mock-logged", pre="window.location.search = '';")
+js(_d2, "__drain();")
+check("P1-6b: \u5730\u5740\u91cc\u6ca1\u6709\u7f16\u53f7\u65f6\u8bf4\u6e05\u695a\uff0c\u4e0d\u767d\u5c4f",
+      "\u6ca1\u6709\u5206\u4eab\u7f16\u53f7" in str(js(_d2, "document.getElementById('detail-state').textContent")),
+      js(_d2, "document.getElementById('detail-state').textContent"))
+
+_d3 = load("detail.html", "mock-logged",
+           pre="window.location.search = '?id=00000000-0000-4000-8000-000000000000';")
+js(_d3, "__drain(); __drain();")
+check("P1-6b: \u67e5\u4e0d\u5230\u65f6\u5982\u5b9e\u8bf4\u53ef\u80fd\u5220\u4e86\u6216\u6ca1\u8fc7\u5ba1",
+      "\u5df2\u7ecf\u88ab\u5220\u9664" in str(js(_d3, "document.getElementById('detail-state').textContent")),
+      js(_d3, "document.getElementById('detail-state').textContent"))
 
 print()
 print("=" * 70)

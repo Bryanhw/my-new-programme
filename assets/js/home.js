@@ -117,7 +117,7 @@
    * --------------------------------------------------------------- */
   function renderIdentity() {
     if (!C.isReady()) {
-      identityEl.innerHTML = '<a href="login.html">先去设置</a>';
+      identityEl.innerHTML = '<a href="login.html">设置昵称</a>';
       return;
     }
     C.getIdentity().then(function (id) {

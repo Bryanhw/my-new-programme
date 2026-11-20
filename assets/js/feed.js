@@ -34,7 +34,12 @@
 
   var loading = false;
   var loaded = [];     // 已经拿到的那批（筛词只在这批里找）
-  var keyword = "";    // 当前筛的词（空 = 不筛）
+  var keyword = "";    // 当前搜/筛的词（空 = 不筛）
+  /* 第 75 轮（评审 P1-6）：keyword 非空时优先走全站搜索；
+     RPC 还没部署（C.searchPosts 返回 null）才退回「只筛已加载的几条」。
+     searchMode 只影响文案和要不要在本地再过一遍，不影响数据来源。 */
+  var searchMode = false;
+  var searching = false;
   var topic = "";      // 当前筛的话题（空 = 全部；不带话题的分享也在「全部」里）
   var seq = 0;         // 每次 load 自增：晚到的计数不许回填到新的一轮里
   var touched = false; // 这批卡片用户已经动过（点赞/展开评论）：不再整体重画
@@ -71,33 +76,17 @@
   keyword = params.q || "";
   topic = params.topic || "";
 
-  /* F1/B4：分享直链 feed.html?post=<id> —— 打开后滚到那条并高亮。
-     站点没有帖子详情页（post.html 是发布页），所以这里只做「至少高亮」这件事：
-     给那条卡片多戴一个 class，滚过去，并说清它是被人分享进来的。 */
+  /* 第 77 轮（P1-6 后半）：?post= 是「帖子详情页」出现之前的老地址。
+     站内的复制链接、提醒、「我的评论」都已改指 detail.html?id=，所以走到这里的
+     基本是别人手上的老链接 —— 直接升级过去，别让人停在广场还要自己再点一次。
+     老链接不会失效，只是多一跳；id 是好是坏交给详情页去说（它有三种兜底文案）。 */
   var targetId = params.post || "";
-  var targetScrolled = false;
-
-  /** 给分享进来的那条卡片多戴一个 class（高亮交给 CSS） */
-  function markTarget(html) {
-    return html.indexOf('<article class="card post"') === 0
-      ? html.replace('<article class="card post"', '<article class="card post post-target"')
-      : html;
-  }
-
-  /** 提示 + 滚动。找不到时如实说明原因，不假装高亮过了。 */
-  function noteTarget(found) {
-    if (found) {
-      C.showNotice(noticeEl, "info", "这条是同学分享给你的，已经高亮。");
-    } else {
-      C.showNotice(noticeEl, "info",
-        "分享链接里的那条现在看不到了 —— 可能已经下架，或者还没通过审核。");
-    }
-    if (targetScrolled) return;
-    var el = feedEl.querySelector ? feedEl.querySelector(".post-target") : null;
-    if (el && el.scrollIntoView) {
-      el.scrollIntoView({ block: "center" });
-      targetScrolled = true;
-    }
+  if (targetId) {
+    var detailUrl = "detail.html?id=" + encodeURIComponent(String(targetId));
+    var pageLocation = (typeof window !== "undefined" && window.location) || null;
+    if (pageLocation && typeof pageLocation.replace === "function") pageLocation.replace(detailUrl);
+    else if (pageLocation) pageLocation.href = detailUrl;
+    return;
   }
 
   function circleId() { return C.getCircle(); }
@@ -124,21 +113,6 @@
     for (var i = 0; i < (posts || []).length; i++) {
       if (posts[i] && posts[i].id) seen[posts[i].id] = 1;
     }
-  }
-
-  /** 分享链接那条不在这批里（更早、或被圈子挡住）时：按 id 单独问一次服务端，
-   *  取到就补进这批的最前面，跟正常卡片一起画 —— 这样高亮、滚动、计数都走同一条路。
-   *  取不到就是真的看不到（下架 / 没通过审核），由 noteTarget 如实说，不再两头猜。 */
-  function ensureTargetLoaded() {
-    if (!targetId) return Promise.resolve();
-    var i;
-    for (i = 0; i < loaded.length; i++) {
-      if (loaded[i] && loaded[i].id === targetId) return Promise.resolve();
-    }
-    if (!C.getPostById) return Promise.resolve();
-    return C.getPostById(targetId).then(function (post) {
-      if (post) loaded = [post].concat(loaded);
-    }).catch(function () {});
   }
 
   /* ---------------------------------------------------------------
@@ -310,20 +284,24 @@
   function renderFilter() {
     if (!filterEl) return;
     if (!keyword) { filterEl.hidden = true; filterEl.innerHTML = ""; return; }
-    var hit = C.filterPostsByTerm(loaded, keyword).length;
     filterEl.hidden = false;
+    var scope;
+    if (searching) {
+      scope = "正在全站找「<strong>" + C.escapeHtml(keyword) + "</strong>」…";
+    } else if (searchMode) {
+      scope = "全站提到「<strong>" + C.escapeHtml(keyword) + "</strong>」的分享：" + shownCount + " 条";
+    } else {
+      scope = "正在找提到「<strong>" + C.escapeHtml(keyword) + "</strong>」的分享：在已加载的 " +
+        loaded.length + " 条里找到 " + C.filterPostsByTerm(loaded, keyword).length + " 条";
+    }
     filterEl.innerHTML =
       '<div class="filter-bar">' +
-        "<span>正在找提到「<strong>" + C.escapeHtml(keyword) + "</strong>」的分享：在已加载的 " +
-        loaded.length + " 条里找到 " + hit + " 条</span>" +
+        "<span>" + scope + "</span>" +
         '<button class="link-plain" type="button" id="clear-term">清掉这个词</button>' +
       "</div>";
     var clear = document.getElementById("clear-term");
     if (clear) {
-      clear.addEventListener("click", function () {
-        keyword = "";
-        renderAll();
-      });
+      clear.addEventListener("click", function () { runSearch(""); });
     }
   }
 
@@ -335,12 +313,21 @@
     if (!posts.length) {
       if (countEl) countEl.textContent = "";
       if (keyword) {
+        var kw = C.escapeHtml(keyword);
         feedEl.innerHTML =
           '<div class="empty">' +
             '<div class="empty-icon">🔍</div>' +
-            '<div class="empty-title">已加载的分享里没有提到「' + C.escapeHtml(keyword) + "」的</div>" +
-            '<div class="empty-text">这里只筛当前已经加载出来的那几条，' +
-              "不是全站搜索 —— 清掉这个词就能看回全部。</div>" +
+            '<div class="empty-title">' +
+              (searchMode
+                ? "全站还没有提到「" + kw + "」的分享"
+                : "已加载的分享里没有提到「" + kw + "」的") +
+            "</div>" +
+            '<div class="empty-text">' +
+              (searchMode
+                ? "换个词试试 —— 少写两个字、或者用大家都说的那个说法，命中会多一些。"
+                : "这里只筛当前已经加载出来的那几条，不是全站搜索 —— 清掉这个词就能看回全部。") +
+            "</div>" +
+            '<button class="btn btn-soft btn-block mt-16" type="button" data-clear-term>清掉这个词</button>' +
           "</div>";
         return;
       }
@@ -383,14 +370,9 @@
         '<a class="btn btn-primary btn-block mt-16" href="post.html">✏️ 我要分享</a>';
       return;
     }
-    var hit = false;
     feedEl.innerHTML = posts.map(function (p) {
-      var card = C.renderPostCard(p);
-      if (!targetId || p.id !== targetId) return card;
-      hit = true;
-      return markTarget(card);
+      return C.renderPostCard(p);
     }).join("");
-    if (targetId) noteTarget(hit);
     renderCount();
   }
 
@@ -400,6 +382,10 @@
   function renderCount() {
     if (!countEl) return;
     if (!shownCount) { countEl.textContent = ""; return; }
+    if (searchMode) {
+      countEl.textContent = "全站搜到 " + shownCount + " 条" + (topic ? "（#" + topic + "）" : "");
+      return;
+    }
     var id = circleId();
     countEl.textContent = (hasMore ? "已显示 " : "共 ") + shownCount + " 条分享" +
       (topic ? "（#" + topic + "）" : "") +
@@ -407,8 +393,78 @@
   }
 
   function renderAll() {
+    // 搜索结果已经由服务端匹配过，不要再拿本地规则过一遍
+    renderList(filterByTopic(searchMode ? loaded : C.filterPostsByTerm(loaded, keyword)));
     renderFilter();
-    renderList(filterByTopic(C.filterPostsByTerm(loaded, keyword)));
+  }
+
+  /* ---------------------------------------------------------------
+   * 第 75 轮（评审 P1-6）：跨全站搜索
+   *   · term 为空 = 退出搜索，回到普通 feed
+   *   · RPC 没部署 = 退回「只筛已加载」，并明说这不是全站
+   *   · 结果一次取回（最多 100 条），所以搜索模式下没有「看更早的」
+   * --------------------------------------------------------------- */
+  function runSearch(term) {
+    keyword = String(term == null ? "" : term);
+    searching = false;
+
+    if (!keyword) {
+      searchMode = false;
+      load();
+      return;
+    }
+    if (!C.searchPosts) {          // 老版本 core：保持原来的本地筛词
+      searchMode = false;
+      renderAll();
+      return;
+    }
+
+    searchMode = true;
+    searching = true;
+    touched = false;
+    var mySeq = ++seq;
+    renderFilter();
+    feedEl.innerHTML = skeletonList();
+    hasMore = false;
+    loadingMore = false;
+    reachedEnd = false;
+    renderMore();
+
+    C.searchPosts(keyword, 100).then(function (posts) {
+      if (mySeq !== seq) return null;
+      if (posts === null) {        // RPC 还没跑迁移：如实退回普通加载
+        searchMode = false;
+        searching = false;
+        C.showNotice(noticeEl, "warn", "全站搜索还没开通，现在只筛已加载的这几条。");
+        load();
+        return null;
+      }
+      loaded = posts || [];
+      seen = {};
+      markSeen(loaded);
+      cursor = "";
+      hasMore = false;
+      reachedEnd = true;
+      appendedPages = 0;
+      searching = false;
+      renderAll();
+      renderTopics();
+      renderMore();
+      return C.attachEngagement ? C.attachEngagement(loaded) : null;
+    }).then(function () {
+      if (mySeq !== seq || !searchMode) return;
+      // 计数晚到：只补数字，不整体重画（用户可能已经在结果里展开了评论）
+      if (C.fillCountsInDom) C.fillCountsInDom(loaded);
+      if (!touched) renderAll();
+    }).catch(function (err) {
+      if (mySeq !== seq) return;
+      searching = false;
+      feedEl.innerHTML =
+        '<div class="notice notice-error">搜索失败：' + C.escapeHtml(err.message) + "</div>" +
+        '<div class="text-center mt-16"><button class="btn btn-soft" id="clear-term">清掉这个词</button></div>';
+      var back = document.getElementById("clear-term");
+      if (back) back.addEventListener("click", function () { runSearch(""); });
+    });
   }
 
   function load() {
@@ -440,8 +496,6 @@
       seen = {};
       markSeen(loaded);
       hasMore = loaded.length >= FEED_PAGE && !!cursor;
-      // 分享直链：那条可能不在这批里 → 先补进来再画，省得先画一遍再插一条
-      return ensureTargetLoaded();
     }).then(function () {
       renderBar();
       renderTopics();
@@ -487,7 +541,8 @@
       moreBtn.textContent = loadingMore ? "正在加载更早的…" : "看更早的分享";
     }
     if (moreNoteEl) {
-      var done = reachedEnd && shownCount > 0;
+      // 搜索结果是一次取回的，没有「更早的」这回事
+      var done = reachedEnd && shownCount > 0 && !searchMode;
       moreNoteEl.hidden = !done;
       moreNoteEl.textContent = done ? "没有更早的分享了 —— 已经看到最后一条。" : "";
     }
@@ -596,9 +651,8 @@
       var btn = e.target.closest ? e.target.closest("[data-term]") : null;
       if (!btn) return;
       var term = btn.getAttribute("data-term") || "";
-      keyword = (term === keyword) ? "" : term;   // 再点一下 = 取消
-      renderFilter();
-      renderList(C.filterPostsByTerm(loaded, keyword));
+      /* 第 75 轮：热词直接走全站搜索；再点一下同一个词 = 清掉 */
+      runSearch(term === keyword ? "" : term);
       renderHot();
     });
   }
@@ -616,6 +670,10 @@
     // 用户已经动过这批卡片（点赞 / 展开评论 / 看图）：计数回来时不要再整体重画，
     // 否则刚点开的评论会被收回去。点完这一下，数字留在原地就够了。
     touched = true;
+
+    // 搜索空态里的「清掉这个词」：退出搜索，回普通 feed
+    var clearTerm = e.target.closest ? e.target.closest("[data-clear-term]") : null;
+    if (clearTerm) { runSearch(""); return; }
 
     // 卡片上的 #话题：在广场里就地切换筛选，不重新加载页面（其它页面上它就是个
     // 普通链接，跳到 feed.html?topic=…）。切完地址栏也换成同一个样子，
@@ -685,6 +743,11 @@
   if (!C.isReady()) {
     feedEl.innerHTML = C.setupCard();
     if (refreshBtn) refreshBtn.disabled = true;
+  } else if (keyword && C.searchPosts) {
+    /* 从首页热词 / 分享链接带着 ?q= 进来：直接全站搜，不必先画一遍 feed */
+    renderBar();
+    renderNote();
+    runSearch(keyword);
   } else {
     load();
   }

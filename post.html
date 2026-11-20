@@ -28,7 +28,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>分享此刻 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=517ab875">
+<link rel="stylesheet" href="assets/css/style.css?v=4454a8db">
 </head>
 <body>
 
@@ -42,7 +42,7 @@
     </a>
     <a class="link-plain" href="feed.html">先逛逛</a>
     <button class="header-signout" type="button" hidden>退出登录</button>
-    <a class="header-login" href="login.html" aria-label="登录或注册">
+    <a class="header-login" href="login.html?next=post.html" aria-label="登录或注册">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none"
            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="8.2" r="3.6"/>
@@ -96,7 +96,7 @@
           <span class="menu-text"><b>全部提醒</b><small>评论 · 一起听 · 私信</small></span>
           <span class="menu-badge" id="menu-badge" hidden></span>
         </a>
-        <a class="menu-item" data-tab="login" href="login.html">
+        <a class="menu-item" data-tab="login" href="login.html?next=post.html">
           <span class="menu-icon">🔑</span>
           <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
         </a>
@@ -141,11 +141,13 @@
     <div class="field">
       <span class="label">加一张照片（可选）</span>
 
-      <div class="upload" id="upload-box">
-        <div class="upload-icon">🖼</div>
-        <div class="upload-text">点击选择图片，或把图片拖到这里</div>
-        <div class="hint">支持 jpg / png / gif / webp，最大 5MB；上传前会自动压到最长边 1600px，省流量</div>
-      </div>
+      <!-- 第 73 轮（评审 8.4）：上传区原来是 div + click，键盘用户完全选不了图。
+           改成真正的 button（Enter / Space 原生可用），CSS 外观保持不变。 -->
+      <button class="upload" type="button" id="upload-box">
+        <span class="upload-icon" aria-hidden="true">🖼</span>
+        <span class="upload-text">点击选择图片，或把图片拖到这里</span>
+        <span class="hint">支持 jpg / png / gif / webp，最大 5MB；上传前会自动压到最长边 1600px，省流量</span>
+      </button>
       <input type="file" id="image" accept="image/*">
 
       <div class="preview hidden" id="preview-box">
@@ -182,6 +184,9 @@
     <a class="tabbar-item" data-tab="home" href="index.html">
       <span class="tabbar-icon">🏠</span><span>首页</span>
     </a>
+    <a class="tabbar-item" data-tab="feed" href="feed.html">
+      <span class="tabbar-icon">🌿</span><span>广场</span>
+    </a>
     <a class="tabbar-item tabbar-center" data-tab="post" href="post.html">
       <span class="tabbar-icon">✏️</span><span class="tabbar-label">发布</span>
     </a>
@@ -216,8 +221,9 @@
   <p class="footer-line">把今天的心事和光，留在这里</p>
   <p class="footer-note">发出去之前，记得别写到别人的隐私</p>
   <p class="footer-legal">
-    本网页含有 AI 生成的产物，未侵犯版权；用户发言不代表网站所有者的观点；
-    网站所有者将对不合规的帖子进行下架处理；烦请用户谨慎发言。
+    © 校园拾光 · 内容版权归原作者所有；如认为内容侵权或不当，
+    请通过「意见反馈」联系我们，我们会尽快核实处理。<br>
+    用户发言不代表网站所有者观点；不合规内容将下架。
   </p>
 </footer>
 
@@ -225,7 +231,7 @@
 
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/app.js?v=16a1a2ec"></script>
-<script src="assets/js/post.js?v=5c8ad7bc"></script>
+<script src="assets/js/app.js?v=66aca8bf"></script>
+<script src="assets/js/post.js?v=ef888860"></script>
 </body>
 </html>

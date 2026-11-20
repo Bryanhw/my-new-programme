@@ -38,6 +38,37 @@
   var DONE_SECONDS = 3;
   var alreadyLeaveTimer = null;
 
+  /* ---------------------------------------------------------------
+   * 第 74 批（评审 P0-2）：登录/注册完成后回到刚才那一页
+   *   发布页把人送来时会带 ?next=post.html —— 登录完直接回发布页，
+   *   写了一半的内容还在（草稿存在本机）。
+   *   只认本站的 xxx.html（可带 #锚点）：绝对地址、//host、反斜杠、
+   *   .. 穿越一律忽略，免得被人拿来做开放重定向。
+   * --------------------------------------------------------------- */
+  var SAFE_NEXT = /^[a-z0-9][a-z0-9_-]*\.html(?:[?#][^\s"'<>\\]*)?$/i;
+
+  function readNext() {
+    var raw = "";
+    try {
+      var m = /[?&]next=([^&#]*)/.exec(String(window.location.search || ""));
+      if (m) raw = decodeURIComponent(m[1].replace(/\+/g, " "));
+    } catch (e) { raw = ""; }
+    if (!raw || raw.charAt(0) === "/" || raw.indexOf("..") >= 0) return "";
+    return SAFE_NEXT.test(raw) ? raw : "";
+  }
+
+  function nextTarget(fallback) {
+    return readNext() || fallback;
+  }
+
+  /** 三条成功路径的统一出口：有 ?next= 就回去，没有就按原来的去处走 */
+  function finish(title, fallbackSub, withNextSub) {
+    var next = readNext();
+    showDone(title, next ? (withNextSub || "正在回到刚才那一页…") : fallbackSub,
+      next || "feed.html");
+  }
+
+
   document.title = "登录 / 注册 · " + C.SITE_NAME;
   C.markTabbar("");
 
@@ -91,11 +122,14 @@
         /* V4-1：已登录用户再进登录页 —— 停留 3 秒后自动离开（默认回首页），
            卡上「去我的」「退出登录」先动手就会取消这次自动离开。 */
         alreadyLeaveTimer = setTimeout(function () {
-          window.location.href = "index.html";
+          window.location.href = nextTarget("index.html");
         }, DONE_SECONDS * 1000);
       } else {
-        C.showNotice(noticeEl, "info", "你已经登录了，正在回到我的页…");
-        setTimeout(function () { window.location.href = "profile.html"; }, 1200);
+        var back = nextTarget("profile.html");
+        C.showNotice(noticeEl, "info", back === "profile.html"
+          ? "你已经登录了，正在回到我的页…"
+          : "你已经登录了，正在回到刚才那一页…");
+        setTimeout(function () { window.location.href = back; }, 1200);
       }
     });
   }
@@ -165,7 +199,7 @@
     setLoading(loginBtn, true, "正在登录…");
 
     var flow = C.signIn(loginPhone.value, loginPass.value).then(function () {
-      showDone("✅ 您已登录", "正在进入内容广场…", "feed.html");
+      finish("✅ 您已登录", "正在进入内容广场…");
     }).catch(function (err) {
       var msg = err.message || "登录失败";
       // 登录失败最常见的两种死路：没账号、忘了密码 —— 都指到面板下方的「登不进去？」
@@ -222,12 +256,14 @@
       .then(function (secErr) {
         /* 密保是唯一的自助找回通道：没存上要在完成卡上如实提醒去「我的」补，
            不能让人觉得已经存上了；3 秒由 showDone 统一驱动，别再各写各的。 */
-        showDone(
+        finish(
           "✅ 您已登录",
           secErr
             ? "注册成功，但密保没存上：" + secErr + "。登录后记得在「我的」里补一次。"
             : "注册成功，欢迎来到 " + C.SITE_NAME + "！",
-          "feed.html"
+          secErr
+            ? "注册成功，正在回到刚才那一页。密保没存上：" + secErr + "，登录后到「我的」补一次。"
+            : null
         );
       })
       .catch(function (err) {
@@ -250,7 +286,7 @@
     setLoading(anonBtn, true, "正在进入…");
 
     var flow = C.signInAnonymously().then(function () {
-      showDone("✓ 已匿名进入", "现在就可以浏览和分享（也可以随时注册账号）", "feed.html");
+      finish("✓ 已匿名进入", "现在就可以浏览和分享（也可以随时注册账号）");
     }).catch(function (err) {
       C.showNotice(noticeEl, "error", err.message);
       setLoading(anonBtn, false, "🌙 先匿名看看，不注册");
