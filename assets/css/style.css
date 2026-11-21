@@ -2577,6 +2577,32 @@ body.modal-open { overflow: hidden; }
 }
 
 /* 广场顶部的圈子条 */
+/* 第 82 轮（评审 §4.6）：只看关注的筛选条 —— 和城市圈同一套纸面语法。
+   flex 会盖掉 [hidden]，所以单独把 hidden 写回 none。 */
+.follow-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 10px 14px;
+  margin: 14px 0 0;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.follow-bar[hidden] { display: none; }
+.follow-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.follow-only input { accent-color: var(--brand); }
+.follow-bar .circle-bar-note { margin: 0; flex-basis: 100%; }
+
 .circle-bar {
   background: var(--surface);
   border: 1.5px solid var(--line);

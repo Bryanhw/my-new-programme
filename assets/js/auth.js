@@ -230,7 +230,7 @@
     var issues = [];
     if (!C.isValidPhone(regPhone.value)) issues.push({ id: "reg-phone", msg: "请输入 11 位手机号" });
     if (!regSchool.value.trim()) issues.push({ id: "reg-school", msg: "请填写你的学校" });
-    if (!regPass.value || regPass.value.length < 6) issues.push({ id: "reg-password", msg: "密码至少 6 位" });
+    if (!regPass.value || regPass.value.length < 8) issues.push({ id: "reg-password", msg: "密码至少 8 位" });
     // 密保是唯一的自助找回通道，所以注册时必填（不想填就自己去「我的」补）
     if (!regSecQ || !regSecQ.value) issues.push({ id: "reg-security-q", msg: "选一个密保问题：忘密码时只能靠它" });
     if (!regSecA.value.replace(/\s/g, "")) issues.push({ id: "reg-security-a", msg: "填一下密保答案（忘密码时要用）" });

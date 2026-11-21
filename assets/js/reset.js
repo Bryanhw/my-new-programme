@@ -57,7 +57,7 @@
       return;
     }
     if (!passEl.value || passEl.value.length < 6) {
-      C.showNotice(noticeEl, "warn", "新密码至少 6 位");
+      C.showNotice(noticeEl, "warn", "新密码至少 8 位");
       passEl.focus();
       return;
     }

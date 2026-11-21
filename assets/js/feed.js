@@ -27,6 +27,9 @@
   var moreWrapEl = document.getElementById("load-more-wrap");
   var moreBtn = document.getElementById("load-more");
   var moreNoteEl = document.getElementById("load-more-note");
+  var followBarEl = document.getElementById("follow-bar");
+  var followEl = document.getElementById("follow-only");
+  var followNoteEl = document.getElementById("follow-note");
 
   document.title = "同学们的分享 · " + C.SITE_NAME;
   C.markTabbar("feed");
@@ -43,6 +46,11 @@
   var topic = "";      // 当前筛的话题（空 = 全部；不带话题的分享也在「全部」里）
   var seq = 0;         // 每次 load 自增：晚到的计数不许回填到新的一轮里
   var touched = false; // 这批卡片用户已经动过（点赞/展开评论）：不再整体重画
+  /* 第 82 轮（评审 §4.6）：关注关系以前只有一个数字，没有去处。
+     勾上「只看我关注的人」后，只在**当前已加载的这批**里筛 —— 和热词 / 话题
+     同一个口径，界面会如实写明；关注列表第一次勾选时才查（不拖慢首屏）。 */
+  var onlyFollowing = false;
+  var followingIds = null; // 我关注的人的帖子 id；null = 还没拉过
 
   /* 翻页（1-1）：一屏 50 条，更早的按 created_at 游标一批批往下取。
      用游标、不用 offset —— offset 在「翻页期间有人发新帖」时会重复行 / 漏行。 */
@@ -124,6 +132,57 @@
   function filterByTopic(posts) {
     if (!topic) return posts;
     return posts.filter(function (p) { return topicOf(p).indexOf(topic) >= 0; });
+  }
+
+  /* ---------------- 只看关注（第 82 轮 / 评审 §4.6） ----------------
+   * 关注按钮以前只贡献一个数字。这里把它接到广场：勾上之后只筛当前已加载的
+   * 那批，点「看更早的」会继续往下找 —— 与热词/话题筛选完全同一个口径，
+   * 不假装是全站过滤。关注关系和作者编号只在 app.js 里查，广场只收帖子 id；
+   * 匿名内容不在那份 id 里，匿名墙不动。 */
+  function filterByFollowing(posts) {
+    if (!onlyFollowing || !followingIds) return posts;
+    var set = {};
+    for (var i = 0; i < followingIds.length; i++) set[followingIds[i]] = 1;
+    return posts.filter(function (p) { return p && p.id && set[p.id]; });
+  }
+
+  /** 取「我关注的人发过的帖子 id」。未登录 / 视图没建时返回 null。 */
+  function loadFollowingIds() {
+    if (!C.listFollowingPostIds) return Promise.resolve(null);
+    return C.listFollowingPostIds(300).then(function (ids) {
+      return ids === null ? null : (ids || []);
+    }).catch(function () { return null; });
+  }
+
+  function renderFollowNote() {
+    if (!followNoteEl) return;
+    if (!onlyFollowing) {
+      followNoteEl.hidden = true;
+      followNoteEl.textContent = "";
+      return;
+    }
+    followNoteEl.hidden = false;
+    followNoteEl.textContent = "只在当前已加载的 " + loaded.length +
+      " 条里筛出关注的人；点「看更早的分享」会继续往下找。";
+  }
+
+  /** 切换「只看关注」：先按已知的 id 集合重画，没有集合就去拉一次。 */
+  function setFollowing(on) {
+    onlyFollowing = !!on;
+    if (followEl) followEl.checked = onlyFollowing;
+    renderAll();
+    renderMore();
+    if (!onlyFollowing || followingIds !== null) return;
+    loadFollowingIds().then(function (ids) {
+      if (ids === null) {
+        setFollowing(false);
+        C.showNotice(noticeEl, "warn", "先登录，才能只看关注的人。");
+        setTimeout(function () { C.hideNotice(noticeEl); }, 5000);
+        return;
+      }
+      followingIds = ids;
+      renderAll();
+    });
   }
 
   /** 这批里出现过的话题（按约定顺序）+ 当前选中的那个（外部链接带来的也算） */
@@ -312,6 +371,29 @@
     shownCount = posts.length;
     if (!posts.length) {
       if (countEl) countEl.textContent = "";
+      // 只看关注：先说清楚是「没关注人」还是「这批里恰好没有」，
+      // 别让人以为关注流坏了。
+      if (onlyFollowing) {
+        if (!followingIds || !followingIds.length) {
+          feedEl.innerHTML =
+            '<div class="empty">' +
+              '<div class="empty-icon">🌱</div>' +
+              '<div class="empty-title">还没有关注任何人</div>' +
+              '<div class="empty-text">在别人的主页点「关注」，TA 的分享就会出现在这里。</div>' +
+            "</div>" +
+            '<button class="btn btn-soft btn-block mt-16" type="button" data-follow-off>先看看全部</button>';
+        } else {
+          feedEl.innerHTML =
+            '<div class="empty">' +
+              '<div class="empty-icon">🫧</div>' +
+              '<div class="empty-title">已加载的分享里没有关注的人</div>' +
+              '<div class="empty-text">这里只筛当前已经加载出来的 ' + loaded.length +
+                " 条，不是全站 —— 点下面「看更早的分享」继续往下找，或者先看看全部。</div>" +
+            "</div>" +
+            '<button class="btn btn-primary btn-block mt-16" type="button" data-follow-off>先看看全部</button>';
+        }
+        return;
+      }
       if (keyword) {
         var kw = C.escapeHtml(keyword);
         feedEl.innerHTML =
@@ -388,14 +470,16 @@
     }
     var id = circleId();
     countEl.textContent = (hasMore ? "已显示 " : "共 ") + shownCount + " 条分享" +
+      (onlyFollowing ? "（只看关注）" : "") +
       (topic ? "（#" + topic + "）" : "") +
       (id && !onlyCircle() && !appendedPages ? "（" + C.circleName(id) + "的在前面）" : "");
   }
 
   function renderAll() {
     // 搜索结果已经由服务端匹配过，不要再拿本地规则过一遍
-    renderList(filterByTopic(searchMode ? loaded : C.filterPostsByTerm(loaded, keyword)));
+    renderList(filterByTopic(filterByFollowing(searchMode ? loaded : C.filterPostsByTerm(loaded, keyword))));
     renderFilter();
+    renderFollowNote();
   }
 
   /* ---------------------------------------------------------------
@@ -602,7 +686,7 @@
         var next = oldestCursor(batch);
         if (next) cursor = next;             // 游标只往更旧的方向走
         for (var j = 0; j < fresh.length; j++) loaded.push(fresh[j]);
-        var show = filterByTopic(C.filterPostsByTerm(fresh, keyword));
+        var show = filterByTopic(filterByFollowing(C.filterPostsByTerm(fresh, keyword)));
         appendCards(show);
         shownCount += show.length;
         appendedPages++;
@@ -646,6 +730,11 @@
       load();
     });
   }
+  if (followEl) {
+    followEl.addEventListener("change", function () {
+      setFollowing(followEl.checked);
+    });
+  }
   if (hotEl) {
     hotEl.addEventListener("click", function (e) {
       var btn = e.target.closest ? e.target.closest("[data-term]") : null;
@@ -674,6 +763,10 @@
     // 搜索空态里的「清掉这个词」：退出搜索，回普通 feed
     var clearTerm = e.target.closest ? e.target.closest("[data-clear-term]") : null;
     if (clearTerm) { runSearch(""); return; }
+
+    // 只看关注空态里的「先看看全部」
+    var followOff = e.target.closest ? e.target.closest("[data-follow-off]") : null;
+    if (followOff) { setFollowing(false); return; }
 
     // 卡片上的 #话题：在广场里就地切换筛选，不重新加载页面（其它页面上它就是个
     // 普通链接，跳到 feed.html?topic=…）。切完地址栏也换成同一个样子，
@@ -739,6 +832,13 @@
 
   if (refreshBtn) refreshBtn.addEventListener("click", load);
   if (moreBtn) moreBtn.addEventListener("click", loadMore);
+
+  /* 登录后才给出「只看关注」——未登录时这个筛选没有意义 */
+  if (followBarEl) {
+    C.getProfile().then(function (profile) {
+      if (profile) followBarEl.hidden = false;
+    }).catch(function () {});
+  }
 
   if (!C.isReady()) {
     feedEl.innerHTML = C.setupCard();

@@ -673,7 +673,7 @@ def run_b():
     it = load("login.html", "mock-login")
     js(it, "document.getElementById('reg-phone').value = '123';"
            "document.getElementById('reg-school').value = 'X';"
-           "document.getElementById('reg-password').value = 'secret1';"
+           "document.getElementById('reg-password').value = 'secret12';"
            "document.getElementById('register-form').dispatch('submit',"
            " { target: document.getElementById('register-form'), preventDefault: function(){} });")
     calls = json.loads(js(it, "JSON.stringify(__calls)"))
@@ -686,7 +686,7 @@ def run_b():
            "document.getElementById('reg-phone').value = '13900139000';"
            "document.getElementById('reg-school').value = 'Test Univ';"
            "document.getElementById('reg-nickname').value = 'RegNick';"
-           "document.getElementById('reg-password').value = 'secret1';"
+           "document.getElementById('reg-password').value = 'secret12';"
            "document.getElementById('register-form').dispatch('submit',"
            " { target: document.getElementById('register-form'), preventDefault: function(){} });")
     calls = json.loads(js(it, "JSON.stringify(__calls)"))
@@ -2044,7 +2044,7 @@ it = load("login.html", "mock-login")
 js(it, PICK_SEC_JS +
        "document.getElementById('reg-phone').value = '13900139001';"
        "document.getElementById('reg-school').value = %s;" % json.dumps(ZH_UESTC_SHORT) +
-       "document.getElementById('reg-password').value = 'secret1';"
+       "document.getElementById('reg-password').value = 'secret12';"
        "document.getElementById('register-form').dispatch('submit',"
        " { target: document.getElementById('register-form'), preventDefault: function(){} });")
 calls = json.loads(js(it, "JSON.stringify(__calls)"))
@@ -2057,7 +2057,7 @@ it = load("login.html", "mock-login")
 js(it, PICK_SEC_JS +
        "document.getElementById('reg-phone').value = '13900139002';"
        "document.getElementById('reg-school').value = %s;" % json.dumps(ZH_UNKNOWN) +
-       "document.getElementById('reg-password').value = 'secret1';"
+       "document.getElementById('reg-password').value = 'secret12';"
        "document.getElementById('register-form').dispatch('submit',"
        " { target: document.getElementById('register-form'), preventDefault: function(){} });")
 check("an unknown school still registers as typed",
@@ -2067,7 +2067,7 @@ check("an unknown school still registers as typed",
 it = load("login.html", "mock-login")
 js(it, "document.getElementById('reg-phone').value = '13900139003';"
        "document.getElementById('reg-school').value = '   ';"
-       "document.getElementById('reg-password').value = 'secret1';"
+       "document.getElementById('reg-password').value = 'secret12';"
        "document.getElementById('register-form').dispatch('submit',"
        " { target: document.getElementById('register-form'), preventDefault: function(){} });")
 calls = json.loads(js(it, "JSON.stringify(__calls)"))
@@ -2521,7 +2521,7 @@ REG_FILL = (
     "document.getElementById('reg-phone').value = '13900139010';"
     "document.getElementById('reg-school').value = 'Test Univ';"
     "document.getElementById('reg-nickname').value = 'SecNick';"
-    "document.getElementById('reg-password').value = 'secret1';"
+    "document.getElementById('reg-password').value = 'secret12';"
 )
 REG_SUBMIT = ("document.getElementById('register-form').dispatch('submit',"
               " { target: document.getElementById('register-form'),"
@@ -2676,7 +2676,7 @@ js(it, "document.getElementById('reg-phone').value = '123';"
 err = auth_errors_html(it)
 check("a register with all five gaps lists them all at once",
       "5 处要改" in err and "请输入 11 位手机号" in err
-      and "请填写你的学校" in err and "密码至少 6 位" in err
+      and "请填写你的学校" in err and "密码至少 8 位" in err
       and "选一个密保问题" in err and "填一下密保答案" in err,
       err[:160])
 check("...and no account is attempted while the form is invalid",

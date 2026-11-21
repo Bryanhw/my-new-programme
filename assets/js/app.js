@@ -230,7 +230,7 @@ window.Campus = (function () {
     if (!client) return Promise.reject(new Error(configError));
     phone = normalizePhone(phone);
     if (!isValidPhone(phone)) return Promise.reject(new Error("请输入 11 位手机号"));
-    if (!password || password.length < 6) return Promise.reject(new Error("密码至少 6 位"));
+    if (!password || password.length < 8) return Promise.reject(new Error("密码至少 8 位"));
     if (!school || !school.trim()) return Promise.reject(new Error("请填写学校名称"));
 
     return client.auth.signUp({
@@ -296,7 +296,7 @@ window.Campus = (function () {
     var m = String(msg || "");
     if (/Invalid login credentials/i.test(m)) return "手机号或密码不正确";
     if (/User already registered/i.test(m)) return "这个手机号已经注册过了，直接登录试试";
-    if (/Password should be at least/i.test(m)) return "密码太短了，至少 6 位";
+    if (/Password should be at least/i.test(m)) return "密码太短了，至少 8 位";
     if (/Anonymous sign-ins are disabled/i.test(m)) return "项目未开启匿名登录";
     if (/Email not confirmed/i.test(m)) return "账号尚未确认，请在 Supabase 后台关闭 Confirm email";
     if (/rate limit|too many/i.test(m)) return "操作太频繁了，稍等一会儿再试";
@@ -557,6 +557,32 @@ window.Campus = (function () {
         posts.forEach(function (p) { p.author_public_uid = null; });
         return posts;
       });
+  }
+
+  /** 第 82 轮（评审 §4.6）：广场「只看关注」用。
+   *  返回「我关注的人发过的帖子 id」集合（最多 limit 条）；未登录 / 视图没建时返回 null。
+   *  关注关系与作者公开编号都只在这里出现 —— 卡片脚本（home/feed/post/faq）
+   *  一个字都不碰它们，匿名墙那条红线保持原样。 */
+  function listFollowingPostIds(limit) {
+    if (!client) return Promise.resolve(null);
+    var cap = Math.max(1, Math.min(500, limit || 300));
+    return getProfile().then(function (profile) {
+      if (!profile || !profile.public_uid) return null;
+      return client.from("follows_public")
+        .select("followee_uid")
+        .eq("follower_uid", profile.public_uid)
+        .then(function (res) {
+          var followees = ((res && res.data) || []).map(function (r) { return r.followee_uid; });
+          if (!followees.length) return [];
+          return client.from("post_authors_public")
+            .select("post_id")
+            .in("author_public_uid", followees)
+            .limit(cap)
+            .then(function (r2) {
+              return ((r2 && r2.data) || []).map(function (row) { return row.post_id; });
+            });
+        });
+    }).catch(function () { return null; });
   }
 
   /* 给一批帖子标上「这条是我发的」（is_mine）。
@@ -3781,7 +3807,7 @@ window.Campus = (function () {
       return Promise.reject(new Error("答案最多 " + SECURITY_ANSWER_MAX + " 个字"));
     }
     if (!newPassword || newPassword.length < 6) {
-      return Promise.reject(new Error("新密码至少 6 位"));
+      return Promise.reject(new Error("新密码至少 8 位"));
     }
 
     var url = String(cfg.SUPABASE_URL).replace(/\/+$/, "") + "/functions/v1/" + RESET_FUNCTION_NAME;
@@ -4228,6 +4254,8 @@ window.Campus = (function () {
     // V5-4：关注/取关等轻量操作用的提示条（announce 的别名，语义更短）
     toast: announce,
     attachAuthors: attachAuthors,
+    // 第 82 轮：广场「只看关注」的帖子 id 集合（关注关系只在这里查）
+    listFollowingPostIds: listFollowingPostIds,
     anonCodeOf: anonCodeOf,
     anonName: anonName,
     // D1：服务端稳定洞号（形状不对时返回空串）+ 「这个库有没有迁移过」的探测结果

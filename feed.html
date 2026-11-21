@@ -29,7 +29,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <title>同学们的分享 · 校园拾光</title>
-<link rel="stylesheet" href="assets/css/style.css?v=4021d14d">
+<link rel="stylesheet" href="assets/css/style.css?v=6129bb00">
 </head>
 <body>
 
@@ -148,6 +148,16 @@
     <div class="chips" id="circle-hot"></div>
   </section>
 
+  <!-- 第 82 轮（评审 §4.6）：关注关系以前只有一个数字，没有去处。
+       这里补一个「只看我关注的人」的纯前端筛选 —— 只筛当前已加载的这批，
+       和热词/话题筛选同一个口径，界面会如实写明范围。登录后才出现。 -->
+  <section class="follow-bar" id="follow-bar" hidden>
+    <label class="follow-only">
+      <input type="checkbox" id="follow-only"> 只看我关注的人
+    </label>
+    <p class="circle-bar-note" id="follow-note" hidden></p>
+  </section>
+
   <div id="feed-filter" hidden></div>
 
   <!-- 话题标签（C3）：只在「已加载的这批里真的有人打过标签」时才出现，
@@ -205,8 +215,8 @@
 <script src="assets/js/campuses.js?v=e0ed4bde"></script>
 <script src="assets/js/circles.js?v=f6e3aaf5"></script>
 <script src="assets/js/hotwords.js?v=631fd476"></script>
-<script src="assets/js/app.js?v=b042ecfd"></script>
-<script src="assets/js/feed.js?v=fb1fa851"></script>
+<script src="assets/js/app.js?v=7f8b9eed"></script>
+<script src="assets/js/feed.js?v=158b595b"></script>
 <script src="assets/js/birthday.js?v=1b36fa5a"></script>
 </body>
 </html>

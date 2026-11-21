@@ -4332,6 +4332,36 @@ check("R81/footer: 每个产品页页脚都链到隐私页",
       not _r81_footer_missing, _r81_footer_missing)
 
 print()
+print("R82) 广场「只看关注」（纯前端筛选，匿名墙不动）")
+
+_r82_feed_html = read(os.path.join(ROOT, "feed.html"))
+check("R82/feed.html: 筛选条与勾选框都在，默认隐藏",
+      '<section class="follow-bar" id="follow-bar" hidden>' in _r82_feed_html
+      and 'id="follow-only"' in _r82_feed_html
+      and 'id="follow-note"' in _r82_feed_html)
+
+_r82_feed_js = read(os.path.join(JS_DIR, "feed.js"))
+check("R82/feed.js: 只筛已加载的那批，且自己不新增查询",
+      "function filterByFollowing(posts)" in _r82_feed_js
+      and ".from(" not in _r82_feed_js
+      and "C.listFollowingPostIds" in _r82_feed_js)
+check("R82/feed.js: 空态分得清「没关注人」和「这批里没有」",
+      "还没有关注任何人" in _r82_feed_js
+      and "已加载的分享里没有关注的人" in _r82_feed_js
+      and "data-follow-off" in _r82_feed_js)
+check("R82/feed.js: 登录后才显示筛选条",
+      "followBarEl.hidden = false" in _r82_feed_js)
+
+_r82_app = sources["app.js"]
+check("R82/app: 关注关系与作者编号只在 app.js 里查",
+      "function listFollowingPostIds(limit)" in _r82_app
+      and 'from("follows_public")' in _r82_app
+      and "listFollowingPostIds: listFollowingPostIds" in _r82_app)
+
+check("R82/css: 筛选条有样式，hidden 真的隐藏",
+      ".follow-bar {" in css_src and ".follow-bar[hidden] { display: none; }" in css_src)
+
+print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:
     print("  FAILED: " + f)
