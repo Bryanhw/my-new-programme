@@ -19,38 +19,109 @@
 
 begin;
 
--- 1.1 先看清楚要删谁（这一步永远安全）
-select u.id, u.phone, u.created_at,
+-- 1.1 目标：站主确认过的 4 个测试账号（E2E x2 + 13900000011/12）
+--     ⚠ 不要改回「phone like '139000000%'」：phone 登录已停用，auth.users.phone
+--     全是 null，那个条件一行也匹配不到（旧版脚本因此从未生效）。
+--     用显式 id 是为了「只删确认过的账号」，避免误伤以后新建的号段号。
+create temp table _e2e_accounts on commit drop as
+select * from (values
+  ('3a305f29-70be-435b-ad62-46f403e8b64d'::uuid),   -- 13900000001 E2E Tester
+  ('b44e85db-09f2-4e42-af4d-94aab4701861'::uuid),   -- 13900000002 E2E Reporter
+  ('fc341710-049b-4570-8ac3-c62e35903893'::uuid),   -- 13900000011
+  ('124b89fc-90c1-4fb1-a524-8cfbc176eff3'::uuid)    -- 13900000012
+) v(id);
+
+-- 1.1b 先看清楚要删谁
+select u.id, u.phone, u.email, u.created_at,
        (select count(*) from public.posts p where p.author_id = u.id) as posts,
        (select count(*) from public.comments c where c.author_id = u.id) as comments
   from auth.users u
- where u.phone like '139000000%'
- order by u.phone;
+ where u.id in (select id from _e2e_accounts)
+ order by u.created_at;
 
--- 1.2 他们写的内容：评论/举报的作者是 on delete set null，
---     不会随账号消失，必须自己删；删帖子时 likes / reports / comments
---     （post_id 上的 cascade）会跟着走。
+-- 1.1c 安全闸：这 4 个号必须是 0 帖 0 评论，否则整体中止
+do $$
+declare
+  n_posts int;
+  n_comments int;
+begin
+  select count(*) into n_posts from public.posts where author_id in (select id from _e2e_accounts);
+  select count(*) into n_comments from public.comments where author_id in (select id from _e2e_accounts);
+  if n_posts > 0 or n_comments > 0 then
+    raise exception '目标账号有内容（posts=% comments=%），已中止：先人工确认这些内容要不要留',
+      n_posts, n_comments;
+  end if;
+end $$;
+
+-- 1.2 文本 uid 引用（follows / notifications / 私信 不随 auth.users 级联，必须手删）
+--     这几张表若还没部署就跳过，避免整段事务因 relation 不存在而失败
+create temp table _e2e_uids on commit drop as
+select public_uid from public.profiles
+ where id in (select id from _e2e_accounts)
+   and public_uid is not null;
+
+do $$
+begin
+  if to_regclass('public.follows') is not null then
+    delete from public.follows
+     where follower_uid in (select public_uid from _e2e_uids)
+        or followee_uid in (select public_uid from _e2e_uids);
+  end if;
+
+  if to_regclass('public.notifications') is not null then
+    delete from public.notifications
+     where user_uid in (select public_uid from _e2e_uids);
+  end if;
+
+  if to_regclass('public.direct_messages') is not null then
+    delete from public.direct_messages
+     where sender_uid in (select public_uid from _e2e_uids)
+        or recipient_uid in (select public_uid from _e2e_uids);
+  end if;
+
+  if to_regclass('public.message_reports') is not null then
+    delete from public.message_reports
+     where reporter_uid in (select public_uid from _e2e_uids);
+  end if;
+end $$;
+
+-- 1.3 uuid 引用：评论/举报的作者是 on delete set null，不会随账号消失，先删；
+--     likes / hugs / security_answers / profiles 虽是 cascade，显式删更清楚
 delete from public.comments
- where author_id in (select id from auth.users where phone like '139000000%');
+ where author_id in (select id from _e2e_accounts);
 
 delete from public.reports
- where reporter_id in (select id from auth.users where phone like '139000000%');
+ where reporter_id in (select id from _e2e_accounts);
 
 delete from public.posts
- where author_id in (select id from auth.users where phone like '139000000%');
+ where author_id in (select id from _e2e_accounts);
 
--- 1.3 最后删账号：profiles / likes / hugs / drift / security_answers
---     都是 on delete cascade，会一起清掉。
+delete from public.likes
+ where user_id in (select id from _e2e_accounts);
+
+delete from public.hugs
+ where user_id in (select id from _e2e_accounts);
+
+delete from public.security_answers
+ where user_id in (select id from _e2e_accounts);
+
+delete from public.profiles
+ where id in (select id from _e2e_accounts);
+
+-- 1.4 最后删账号
 delete from auth.users
- where phone like '139000000%';
+ where id in (select id from _e2e_accounts);
 
--- 1.4 清理结果（应为 0；public_profiles 视图不含 phone，匿名账号本来就不在里面）
-select count(*) as leftover_test_accounts
-  from auth.users
- where phone like '139000000%';
+-- 1.5 核对：三个数都应为 0
+select
+  (select count(*) from auth.users where id in (select id from _e2e_accounts))               as users_left,
+  (select count(*) from public.profiles where id in (select id from _e2e_accounts))           as profiles_left,
+  (select count(*) from public.follows
+    where follower_uid in (select public_uid from _e2e_uids)
+       or followee_uid in (select public_uid from _e2e_uids))                                as follows_left;
 
 rollback;
--- commit;   -- ← 确认上面 DELETE 的行数无误后，把上一行 rollback 换成这一行
+-- commit;   -- ← 确认上面「1.5 核对」三个数都是 0，再把上一行 rollback 换成这一行
 
 
 -- =====================================================================
@@ -204,10 +275,15 @@ select tgname, tgrelid::regclass as on_table
  where tgname in ('posts_rate_limit', 'comments_rate_limit')
    and not tgisinternal;
 
--- 4.3 测试账号清干净了吗
+-- 4.3 测试账号清干净了吗（应为 0）
 select count(*) as leftover_test_accounts
   from auth.users
- where phone like '139000000%';
+ where id in (
+   '3a305f29-70be-435b-ad62-46f403e8b64d',
+   'b44e85db-09f2-4e42-af4d-94aab4701861',
+   'fc341710-049b-4570-8ac3-c62e35903893',
+   '124b89fc-90c1-4fb1-a524-8cfbc176eff3'
+ );
 
 
 -- =====================================================================
