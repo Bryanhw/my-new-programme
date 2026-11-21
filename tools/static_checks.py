@@ -65,7 +65,7 @@ for name in js_files:
         check("parse " + name, False, str(e)[:200])
 # The shipped script set is pinned on purpose: adding a file is a decision
 # (it must be loaded by a page and covered by a test), not an accident.
-EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "campus-picker.js", "campuses.js", "circles.js",
+EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "boot-diag.js", "campus-picker.js", "campuses.js", "circles.js",
                "config.js", "detail.js", "drift.js", "faq.js", "feed.js", "feedback.js", "home.js",
                "hotwords.js", "messages.js", "moderation.js", "music.js", "notifications.js", "post.js",
                "profile.js", "reset.js"]
@@ -4187,6 +4187,80 @@ check("R79/驳回理由: 作者看得到，通知也带上",
       "reject_reason" in _r79_sql
       and "p.reject_reason" in _r79_sql
       and "未通过审核：" in _r79_sql)
+
+# ---------------------------------------------------------------
+# R80（评审 P1-8）：CSP / 自定义域名 / 监控
+# ---------------------------------------------------------------
+print()
+print("R80) P1-8: CSP + custom domain + monitoring")
+
+_r80_csp = []
+for _page in PAGES:
+    _h = read(os.path.join(ROOT, _page))
+    _m = re.search(r'<meta http-equiv="Content-Security-Policy" content="([^"]+)">', _h)
+    _r80_csp.append(_m.group(1) if _m else None)
+
+check("R80/CSP: 每个产品页都有，且是同一份策略",
+      all(_r80_csp) and len(set(_r80_csp)) == 1,
+      [p for p, x in zip(PAGES, _r80_csp) if not x])
+
+_csp = _r80_csp[0] or ""
+_script_directive = _csp.split("script-src", 1)[-1].split(";")[0]
+
+check("R80/CSP: 脚本只许本站，不放 unsafe-inline / unsafe-eval",
+      "script-src 'self'" in _csp
+      and "unsafe-inline" not in _script_directive
+      and "unsafe-eval" not in _csp)
+
+check("R80/CSP: 关掉 object / 防 base 劫持 / 禁站外表单",
+      "object-src 'none'" in _csp
+      and "base-uri 'self'" in _csp
+      and "form-action 'self'" in _csp)
+
+check("R80/CSP: 网络连接只放行本站与 Supabase",
+      "connect-src 'self' https://*.supabase.co" in _csp)
+
+check("R80/CSP: 播放器只放行 B 站与网易云",
+      "frame-src https://player.bilibili.com https://music.163.com" in _csp)
+
+_r80_inline = []
+for _page in PAGES:
+    _h = read(os.path.join(ROOT, _page))
+    for _m in re.finditer(r"<script\b([^>]*)>", _h):
+        if "src=" not in _m.group(1):
+            _r80_inline.append(_page)
+check("R80/内联脚本: 产品页一个都不剩（否则会被 CSP 拦）",
+      not _r80_inline, sorted(set(_r80_inline)))
+
+check("R80/诊断条: profile.html 的脚本已外移成 boot-diag.js",
+      'src="assets/js/boot-diag.js' in read(os.path.join(ROOT, "profile.html"))
+      and "boot-diag.js" in EXPECTED_JS)
+
+_mon = sources["app.js"]
+check("R80/上报: 只报异常与未处理的 Promise，每页最多 5 条",
+      "initErrorMonitor" in _mon
+      and 'addEventListener("error"' in _mon
+      and 'addEventListener("unhandledrejection"' in _mon
+      and "MONITOR_LIMIT = 5" in _mon
+      and "/rest/v1/client_errors" in _mon
+      and 'msg.indexOf("Script error") === 0' in _mon)
+
+_msql = read(os.path.join(ROOT, "docs", "supabase-monitor.sql"))
+check("R80/上报: 匿名只能写、读不了，全站每小时封顶",
+      "create table if not exists public.client_errors" in _msql
+      and "revoke all on public.client_errors from anon, authenticated;" in _msql
+      and "grant insert on public.client_errors to anon, authenticated;" in _msql
+      and "grant select on public.client_errors to service_role;" in _msql
+      and "2000" in _msql
+      and "client_errors_insert" in _msql)
+
+_doc = read(os.path.join(ROOT, "docs", "deploy-custom-domain.md"))
+check("R80/手册: 域名 / 安全头 / uptime 三步齐全",
+      "Cloudflare" in _doc
+      and "Transform Rules" in _doc
+      and "frame-ancestors 'none'" in _doc
+      and "UptimeRobot" in _doc
+      and "CNAME" in _doc)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

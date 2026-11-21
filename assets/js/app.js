@@ -3996,8 +3996,87 @@ window.Campus = (function () {
   /* ------------------------------------------------------------------
    * 11. 导出
    * ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------
+   * 第 79 轮（P1-8）：前端错误上报
+   * ------------------------------------------------------------------
+   * 只报我们自己代码的问题：脚本异常 + 没兜住的 Promise 拒绝。
+   * 每个页面最多 5 条，同一句话只报一次；跨域脚本那句 "Script error." 直接丢。
+   * 落到 client_errors：匿名只能 insert，读不了（见 docs/supabase-monitor.sql）。
+   * ------------------------------------------------------------------ */
+  var MONITOR_LIMIT = 5;
+  var monitorOn = false;
+
+  function initErrorMonitor() {
+    if (monitorOn || !window) return;
+    monitorOn = true;
+
+    var base = String(cfg.SUPABASE_URL || "").replace(/\/+$/, "");
+    var key = cfg.SUPABASE_ANON_KEY || "";
+    if (!base || !key || typeof fetch !== "function") return;
+    if (typeof window.addEventListener !== "function") return;
+
+    var seen = {};
+    var sent = 0;
+
+    function send(kind, message, detail) {
+      if (sent >= MONITOR_LIMIT) return;
+      var msg = String(message || "").replace(/\s+/g, " ").trim().slice(0, 300);
+      if (!msg || msg.indexOf("Script error") === 0) return;
+      var sig = kind + "|" + msg;
+      if (seen[sig]) return;
+      seen[sig] = 1;
+      sent += 1;
+
+      var loc = window.location || {};
+      var nav = window.navigator || {};
+      var page = String(loc.pathname || loc.href || "");
+      var qi = page.indexOf("?");
+      if (qi >= 0) page = page.slice(0, qi);
+
+      try {
+        fetch(base + "/rest/v1/client_errors", {
+          method: "POST",
+          headers: {
+            apikey: key,
+            Authorization: "Bearer " + key,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal"
+          },
+          body: JSON.stringify({
+            page: page.slice(0, 120),
+            kind: kind,
+            message: msg,
+            detail: String(detail || "").slice(0, 600),
+            ua: String(nav.userAgent || "").slice(0, 200)
+          }),
+          keepalive: true,
+          cache: "no-store"
+        })["catch"](function () {});
+      } catch (e) {
+        /* 上报失败就算了，绝不因此再抛一次 */
+      }
+    }
+
+    window.addEventListener("error", function (e) {
+      if (!e) return;
+      var msg = e.message || (e.error && e.error.message) || "";
+      var where = "";
+      if (e.filename) where = String(e.filename).split("/").pop() || "";
+      if (e.lineno) where += ":" + e.lineno;
+      send("error", msg, where);
+    });
+
+    window.addEventListener("unhandledrejection", function (e) {
+      var r = e && e.reason;
+      send("reject", (r && r.message) || String(r || ""), "");
+    });
+  }
+
+
   return {
-    // 环境
+
+    // 第 79 轮（P1-8）：错误上报（app.js 末尾自己调用一次）
+    initErrorMonitor: initErrorMonitor,    // 环境
     isReady: isReady,
     getConfigError: getConfigError,
     client: function () { return client; },
@@ -4178,3 +4257,6 @@ window.Campus = (function () {
     isBirthdayToday: isBirthdayToday
   };
 })();
+
+/* 第 79 轮（P1-8）：挂上错误上报。放在最后一行，等 Campus 就绪再跑。 */
+try { window.Campus.initErrorMonitor(); } catch (e) {}

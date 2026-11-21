@@ -119,6 +119,8 @@ my-new-programme/
     ├── supabase-nickname-sync.sql    昵称同步：改昵称后刷新历史分享 / 评论的署名
     ├── supabase-nickname-sync-flat.sql  上面那份的粘贴版
     ├── supabase-staff.sql            审核台：is_admin 角色 + 审计表 + 申诉 + staff_* RPC
+├── supabase-monitor.sql          前端错误上报：只能写不能读的表 + 每小时封顶
+├── deploy-custom-domain.md       域名 / Cloudflare 安全头 / UptimeRobot 操作手册
 ├── supabase-feedback.sql         意见反馈：只进不出的表（谁能写、只有站主怎么读）
     ├── supabase-feedback-flat.sql    上面那份的粘贴版
     ├── supabase-anon-code.sql        稳定洞号：`posts.anon_code` 生成列 + 列授权 + `my_posts` 重建
@@ -551,6 +553,29 @@ window.CAMPUS_CONFIG = {
 和本机那台 `review-console`（桌面上的「审核台」快捷方式）的分工：本机台用 `service_role`，
 能看反馈、能碰任何表，只在你自己的电脑上；线上审核台走 `is_admin + RPC`，
 手机能用、每个动作都留痕。两边改的是同一批表（`posts.status` / `reports.status`），不会打架。
+
+## 安全头、域名与监控（第 79 轮 / P1-8）
+
+**页面级 CSP 已经全站生效**：14 个产品页用的是同一份策略（`check.html` 是排障页，不在内）。
+
+- `script-src 'self'` —— 内联脚本一律不执行。为此把 `profile.html` 里那段首屏诊断脚本
+  搬进了 [`assets/js/boot-diag.js`](assets/js/boot-diag.js)；
+- `connect-src` 只认本站和 Supabase，`img-src` / `media-src` 只认 https；
+- `frame-src` 只放行 B 站和网易云的播放器；
+- `object-src 'none'`、`base-uri 'self'`、`form-action 'self'`、`upgrade-insecure-requests`。
+
+`style-src` 里留了 `'unsafe-inline'`：页面大量用 `style="..."` 做单点微调，去掉会整片变形；
+样式注入的风险远小于脚本注入，这个取舍是有意的。
+
+GitHub Pages 不能设响应头，所以 HSTS、`frame-ancestors`、`nosniff`、`Referrer-Policy`
+这四项得等域名前置 Cloudflare。完整步骤（DNS 记录表、CNAME 何时加、安全头取值、
+UptimeRobot 四个监控、验收清单）都在
+[`docs/deploy-custom-domain.md`](docs/deploy-custom-domain.md)。
+
+**前端报错也看得到了**：`window.error` 和 `unhandledrejection` 会上报到
+`public.client_errors` —— 每个页面最多 5 条、同一句话只报一次、跨域脚本那句
+`Script error.` 直接丢。匿名只能写、读不了，全站每小时封顶 2000 条。
+建表脚本：[`docs/supabase-monitor.sql`](docs/supabase-monitor.sql)。
 
 ## 提醒中心（第 68 轮）
 
