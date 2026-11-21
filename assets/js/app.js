@@ -3598,6 +3598,21 @@ window.Campus = (function () {
     }).catch(function () { link.hidden = true; });
   }
 
+  /* 第 80 轮（P1-9）：当前账号是否已注销（软删）。每页只查一次，结果缓存。 */
+  var _meDeletedChecked = false;
+  var _meDeleted = false;
+  function isMeDeleted() {
+    if (_meDeletedChecked) return Promise.resolve(_meDeleted);
+    _meDeletedChecked = true;
+    if (!client) return Promise.resolve(false);
+    return client.rpc("is_me_deleted").then(function (res) {
+      _meDeleted = !!(res && res.data);
+      return _meDeleted;
+    }).catch(function () {
+      return false;   /* 服务没就绪时不要误把在线用户登出 */
+    });
+  }
+
   (function initHeaderLogin() {
     if (typeof document.querySelectorAll !== "function") return;
     var outs = document.querySelectorAll(".header-signout");
@@ -3628,6 +3643,21 @@ window.Campus = (function () {
           outs[j].hidden = !signedIn;              /* 有会话（登录或匿名）才显示退出 */
         }
         refreshAdminEntry(id);                     /* 管理员才露「审核台」 */
+        /* 第 80 轮（P1-9）：已注销账号即便旧 token 还在也被登出，避免残存会话 */
+        if (id.user && !id.isAnonymous) {
+          isMeDeleted().then(function (del) {
+            if (del) {
+              var box = document.getElementById("boot-diag");
+              if (box) {
+                box.textContent = "此账号已注销，已被登出。";
+                box.classList.remove("hidden");
+              }
+              signOut().then(function () {
+                window.location.href = "index.html";
+              });
+            }
+          });
+        }
       });
     }
     sync();
@@ -4254,7 +4284,10 @@ window.Campus = (function () {
     saveProfile: saveProfile,
     isValidBirthday: isValidBirthday,
     todayMMDD: todayMMDD,
-    isBirthdayToday: isBirthdayToday
+    isBirthdayToday: isBirthdayToday,
+
+    // 第 80 轮（P1-9）：账号软删判定（注销后残留会话被登出）
+    isMeDeleted: isMeDeleted
   };
 })();
 

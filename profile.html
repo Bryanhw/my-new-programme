@@ -104,7 +104,8 @@
           <span class="menu-icon">🔑</span>
           <span class="menu-text"><b>登录 / 注册</b><small>换设备也能找回内容</small></span>
         </a>
-        <a class="menu-item" data-tab="about" href="index.html#about">
+        <a class="menu-item" data-tab="privacy" href="privacy.html"><span class="menu-icon">🛡</span><span class="menu-text"><b>隐私 · 协议</b><small>隐私政策、注销与导出</small></span></a>
+<a class="menu-item" data-tab="about" href="index.html#about">
           <span class="menu-icon">🌤</span>
           <span class="menu-text"><b>关于这里</b><small>这是个什么样的地方</small></span>
         </a>
@@ -239,6 +240,31 @@
     </p>
   </section>
 
+  <section class="card" id="account-card">
+    <h3 class="section-title mb-16">🗂 我的数据
+      <a class="section-more link-plain" href="privacy.html">隐私政策</a>
+    </h3>
+    <p class="hint" style="margin-bottom:12px">账号是你的，内容也是。可以把自己留下的东西一次性拿回去，也可以彻底注销。</p>
+
+    <button class="btn btn-ghost btn-block" type="button" id="acct-export">⬇ 导出我的全部数据（JSON）</button>
+    <p class="hint mt-8">
+      会把你的资料、发布、评论、私信、通知、点赞与关注打包成一个 JSON 文件下载到本机，随时可看。
+    </p>
+
+    <button class="btn btn-danger btn-block mt-16" type="button" id="acct-delete">🗑 注销账号</button>
+    <div class="field mt-12 hidden" id="acct-delete-panel" role="alert">
+      <p class="hint" style="color:#C0392B;margin-bottom:8px">
+        注销后你的<strong>网名 / 手机号 / 密保</strong>会被移除，帖子与评论内容保留但作者显示为
+        <strong>「已注销用户」</strong>。私信与关注会被删除，点赞保留。此操作<strong>不可撤销</strong>。
+      </p>
+      <label class="label" for="acct-delete-word">输入「注销」两个字确认</label>
+      <input class="input" id="acct-delete-word" type="text" maxlength="8"
+        placeholder="注销" autocomplete="off">
+      <button class="btn btn-danger btn-block" type="button" id="acct-delete-confirm">确认注销</button>
+      <button class="btn btn-ghost btn-block" type="button" id="acct-delete-cancel">先不了，我留着</button>
+    </div>
+  </section>
+
   <section id="mine-card">
     <div class="section-head mt-24">
       <h2 class="section-title">📮 我的</h2>
@@ -359,7 +385,7 @@
   <p class="footer-legal">
     © 校园拾光 · 内容版权归原作者所有；如认为内容侵权或不当，
     请通过「意见反馈」联系我们，我们会尽快核实处理。<br>
-    用户发言不代表网站所有者观点；不合规内容将下架。
+    用户发言不代表网站所有者观点；不合规内容将下架。<br><a class="link-plain" href="privacy.html">隐私政策 · 用户协议 · 内容规范</a>
   </p>
 </footer>
 
@@ -368,8 +394,8 @@
 <script src="assets/js/boot-diag.js?v=b1f258b8"></script>
 <script src="assets/js/config.js?v=07936165"></script>
 <script src="assets/vendor/supabase.js?v=dff1e545"></script>
-<script src="assets/js/app.js?v=4309a97a"></script>
-<script src="assets/js/profile.js?v=eccf819a"></script>
+<script src="assets/js/app.js?v=b042ecfd"></script>
+<script src="assets/js/profile.js?v=4307c0a7"></script>
 <script src="assets/js/birthday.js?v=1b36fa5a"></script>
 </body>
 </html>

@@ -65,6 +65,15 @@
   var secSave    = document.getElementById("sec-save");
   var secEdit    = document.getElementById("sec-edit");
 
+  /* 第 80 轮（P1-9）：账号卡片 —— 导出数据 / 注销账号 */
+  var accountCard   = document.getElementById("account-card");
+  var acctExport    = document.getElementById("acct-export");
+  var acctDelete    = document.getElementById("acct-delete");
+  var acctDeletePanel = document.getElementById("acct-delete-panel");
+  var acctDeleteWord = document.getElementById("acct-delete-word");
+  var acctDeleteConfirm = document.getElementById("acct-delete-confirm");
+  var acctDeleteCancel = document.getElementById("acct-delete-cancel");
+
   /* 第 57 轮：头像（只在「我的」页展示，帖子卡片不上头像——见 app.js saveAvatar 的注释） */
   var avatarActions = document.getElementById("avatar-actions");
   var avatarRemove  = document.getElementById("avatar-remove");
@@ -348,6 +357,7 @@
       reportsCard.classList.add("hidden");
       if (secCard) secCard.classList.add("hidden");
       if (profileCard) profileCard.classList.add("hidden");
+      if (accountCard) accountCard.classList.add("hidden");
       return;
     }
 
@@ -365,11 +375,14 @@
         reportsCard.classList.add("hidden");
         if (secCard) secCard.classList.add("hidden");
         if (profileCard) profileCard.classList.add("hidden");
+        if (accountCard) accountCard.classList.add("hidden");
         return;
       }
 
       currentUser = id.user;
       currentIsAnon = !!id.isAnonymous;
+
+      setupAccountCard();   // 第 80 轮（P1-9）：导出数据 / 注销账号
 
       // 匿名访客也能设置昵称：设置后，没有勾选匿名的分享就会用这个名字署名
       if (id.isAnonymous) anonTip.classList.remove("hidden");
@@ -1154,6 +1167,103 @@
         profileSave.textContent = "保存资料";
       });
     });
+  }
+
+  /* -------------------------------------------------------------------
+   * 第 80 轮（P1-9）账号卡片：导出我的数据 / 注销账号（软删）
+   * ------------------------------------------------------------------- */
+
+  /* 把对象拼成一个 JSON 文件下载到本机 */
+  function acctDownloadJSON(name, obj) {
+    var blob = new Blob([JSON.stringify(obj, null, 2)], {
+      type: "application/json;charset=utf-8"
+    });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 1000);
+  }
+
+  function setupAccountCard() {
+    if (!accountCard) return;
+
+    var busy = false;
+
+    if (acctExport) {
+      acctExport.addEventListener("click", function () {
+        if (busy) return;
+        C.hideNotice(noticeEl);
+        busy = true;
+        acctExport.disabled = true;
+        acctExport.innerHTML = "<span class='spinner'></span> 整理中…";
+        C.client().rpc("export_my_data").then(function (res) {
+          if (res && res.error) {
+            throw new Error(((res.error.message) || "导出的服务还没就绪"));
+          }
+          var stamp = new Date();
+          var d = String(stamp.getFullYear()).slice(2) +
+            ("0" + (stamp.getMonth() + 1)).slice(-2) +
+            ("0" + stamp.getDate()).slice(-2);
+          acctDownloadJSON("xiaoyuan-shiguang-data-" + d + ".json", res.data);
+          C.showNotice(noticeEl, "ok", "已导出，去手机「下载」或电脑「下载」里找这个文件。");
+        }).catch(function (err) {
+          C.showNotice(noticeEl, "error", "导出失败：" + ((err && err.message) || "请稍后重试"));
+        }).then(function () {
+          busy = false;
+          acctExport.disabled = false;
+          acctExport.textContent = "⬇ 导出我的全部数据（JSON）";
+        });
+      });
+    }
+
+    function togglePanel(show) {
+      if (!acctDeletePanel) return;
+      acctDeletePanel.classList.remove("hidden");
+      if (!show) acctDeletePanel.classList.add("hidden");
+      if (acctDeleteWord) acctDeleteWord.value = "";
+      if (show && acctDeleteWord) acctDeleteWord.focus();
+    }
+
+    if (acctDelete) {
+      acctDelete.addEventListener("click", function () { togglePanel(true); });
+    }
+    if (acctDeleteCancel) {
+      acctDeleteCancel.addEventListener("click", function () { togglePanel(false); });
+    }
+
+    if (acctDeleteConfirm) {
+      acctDeleteConfirm.addEventListener("click", function () {
+        var word = (acctDeleteWord && acctDeleteWord.value || "").replace(/\s/g, "");
+        if (word !== "注销") {
+          C.showNotice(noticeEl, "warn", "请先输入「注销」两个字，再按确认。");
+          if (acctDeleteWord) acctDeleteWord.focus();
+          return;
+        }
+        if (busy) return;
+        C.hideNotice(noticeEl);
+        busy = true;
+        acctDeleteConfirm.disabled = true;
+        acctDeleteConfirm.innerHTML = "<span class='spinner'></span> 处理中…";
+        C.client().rpc("delete_my_account").then(function (res) {
+          if (res && res.error) {
+            throw new Error(((res.error.message) || "注销的服务还没就绪"));
+          }
+          C.showNotice(noticeEl, "ok", "已注销。你的内容保留在站上，作者显示为「已注销用户」。");
+          return C.signOut().then(function () {
+            window.location.href = "index.html";
+          });
+        }).catch(function (err) {
+          busy = false;
+          acctDeleteConfirm.disabled = false;
+          acctDeleteConfirm.textContent = "确认注销";
+          C.showNotice(noticeEl, "error", "注销失败：" + ((err && err.message) || "请稍后重试"));
+        });
+      });
+    }
   }
 
   boot();

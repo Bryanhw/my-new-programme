@@ -5369,6 +5369,80 @@ check("P7: 管理员不会看到「只给管理员」那句话",
       js(it, "document.getElementById('mod-gate').hidden") is True)
 
 
+print("P9) 隐私政策 / 注销账号（软删）/ 数据导出（P1-9）")
+# 源码契约：SQL 里软删标记与三个 RPC 都在
+_p9_sql = read(os.path.join(ROOT, "docs", "supabase-account.sql"))
+check("P9: SQL 加软删列 deleted_at",
+      "deleted_at" in _p9_sql and "timestamptz" in _p9_sql)
+check("P9: SQL 提供三个 RPC：判定 / 导出 / 注销",
+      "is_me_deleted" in _p9_sql
+      and "export_my_data" in _p9_sql
+      and "delete_my_account" in _p9_sql)
+check("P9: 注销是软删并脱敏署名",
+      "deleted_at" in _p9_sql and "已注销用户" in _p9_sql)
+
+# profile 页：账号卡 UI 元素齐全
+_p9_pro = read(os.path.join(ROOT, "profile.html"))
+for _pid in ["acct-export", "acct-delete", "acct-delete-panel",
+             "acct-delete-word", "acct-delete-confirm", "acct-delete-cancel"]:
+    check("P9: 「我的数据」卡有 #%s" % _pid, 'id="%s"' % _pid in _p9_pro)
+
+# profile.js：导出与注销流程
+_p9_projs = read(os.path.join(ROOT, "assets", "js", "profile.js"))
+check("P9: profile.js 接导出 RPC 并下载 JSON",
+      "acctDownloadJSON" in _p9_projs and '"export_my_data"' in _p9_projs
+      and "createObjectURL" in _p9_projs)
+check("P9: profile.js 注销要输「注销」二字，成功后登出回首页",
+      "setupAccountCard" in _p9_projs
+      and '"delete_my_account"' in _p9_projs
+      and "注销" in _p9_projs
+      and "signOut()" in _p9_projs
+      and "index.html" in _p9_projs)
+
+# app.js：已注销账号的会话被登出
+_p9_app = read(os.path.join(ROOT, "assets", "js", "app.js"))
+check("P9: app.js 判定已注销并登出",
+      "isMeDeleted" in _p9_app
+      and 'rpc("is_me_deleted")' in _p9_app
+      and "此账号已注销，已被登出" in _p9_app
+      and "isMeDeleted: isMeDeleted" in _p9_app)
+
+# 行为测试：is_me_deleted 判定（页面登录态的 sync 在 stub 里被 querySelectorAll=[] 短路，
+# 所以直接调导出的 Campus.isMeDeleted 验证三态）
+_p9_it = load("feed.html", "mock-logged", pre="__mockOpts.rpcResult = 1;")
+js(_p9_it, "Campus.isMeDeleted().then(function (r) { __r = r; });")
+_p9_calls = js(_p9_it, "JSON.stringify(__calls)")
+check("P9: 已注销账号被识别（查询 is_me_deleted）", "is_me_deleted" in _p9_calls,
+      _p9_calls[:240])
+check("P9: is_me_deleted 返回 1 时判定为已注销", js(_p9_it, "__r") is True,
+      js(_p9_it, "__r"))
+
+_p9_it2 = load("feed.html", "mock-logged")   # 未设置 rpcResult，默认 0
+js(_p9_it2, "Campus.isMeDeleted().then(function (r) { __r2 = r; });")
+check("P9: is_me_deleted 返回 0 时判定为未注销", js(_p9_it2, "__r2") is False,
+      js(_p9_it2, "__r2"))
+
+# 函数还没部署（PGRST202）时不能误判已注销
+_p9_it3 = load("feed.html", "mock-logged", pre="__mockOpts.rpcMissing = true;")
+js(_p9_it3, "Campus.isMeDeleted().then(function (r) { __r3 = r; });")
+check("P9: 服务未部署时不把在线用户当已注销", js(_p9_it3, "__r3") is False,
+      js(_p9_it3, "__r3"))
+
+# privacy.html 存在且内容齐全
+_p9_priv = read(os.path.join(ROOT, "privacy.html"))
+check("P9: privacy.html 讲了隐私 / 协议 / 规范 / 注销 / 导出",
+      "隐私政策" in _p9_priv and "用户协议" in _p9_priv
+      and "内容规范" in _p9_priv and "注销" in _p9_priv and "导出" in _p9_priv)
+# 每个产品页页脚都链到隐私页
+_p9_footer_missing = [
+    p for p in ("index.html", "feed.html", "detail.html", "post.html", "login.html",
+                "reset.html", "profile.html", "faq.html", "feedback.html", "messages.html",
+                "music.html", "drift.html", "notifications.html", "moderation.html", "privacy.html")
+    if 'href="privacy.html"' not in read(os.path.join(ROOT, p))
+]
+check("P9: 每个产品页页脚都链到隐私页", not _p9_footer_missing, _p9_footer_missing)
+
+
 print()
 print("=" * 70)
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))

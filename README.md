@@ -121,6 +121,7 @@ my-new-programme/
     ├── supabase-staff.sql            审核台：is_admin 角色 + 审计表 + 申诉 + staff_* RPC
 ├── supabase-monitor.sql          前端错误上报：只能写不能读的表 + 每小时封顶
 ├── deploy-custom-domain.md       域名 / Cloudflare 安全头 / UptimeRobot 操作手册
+├── supabase-account.sql          第 80 轮：软删标记 + 注销 / 导出 / 已注销判定三个 RPC
 ├── supabase-feedback.sql         意见反馈：只进不出的表（谁能写、只有站主怎么读）
     ├── supabase-feedback-flat.sql    上面那份的粘贴版
     ├── supabase-anon-code.sql        稳定洞号：`posts.anon_code` 生成列 + 列授权 + `my_posts` 重建
@@ -553,6 +554,31 @@ window.CAMPUS_CONFIG = {
 和本机那台 `review-console`（桌面上的「审核台」快捷方式）的分工：本机台用 `service_role`，
 能看反馈、能碰任何表，只在你自己的电脑上；线上审核台走 `is_admin + RPC`，
 手机能用、每个动作都留痕。两边改的是同一批表（`posts.status` / `reports.status`），不会打架。
+
+## 隐私政策、注销与数据导出（第 80 轮 / P1-9）
+
+评审 P1-9 要的是「用户可注销并导出自己的内容」。这轮给了三件事：
+
+- **隐私政策 / 用户协议 / 内容规范**：[`privacy.html`](privacy.html) 一页讲清
+  收什么、公开到什么程度、怎么导出 / 注销、内容规范与数据保留。
+  14 个产品页的页脚和菜单里都有入口。
+- **注销账号（软删）**：点「我的 → 我的数据 → 注销账号」，要键入「注销」二字才放行。
+  注销后 `profiles.deleted_at` 打上标记，手机号、密保、私信、关注被移除；
+  之前发的帖子和评论**内容保留**、署名显示为「已注销用户」，用来让同学们的作品
+  不因作者注销而从站上消失（点赞也保留）。
+- **残留会话被登出**：`app.js` 每页自动查一次 `is_me_deleted()`，已注销账号哪怕
+  旧 token 还在也会被登出回首页，不装其它设备的残存会话。
+- **数据导出**：同一张卡片「导出我的全部数据」把资料、发布、评论、私信、通知、
+  点赞、关注打包成一个 JSON 下载到本机。
+
+数据层在 [`docs/supabase-account.sql`](docs/supabase-account.sql)（幂等）：
+
+- `profiles.deleted_at timestamptz` 软删标记；
+- `is_me_deleted()`：判断当前账号是否已注销；
+- `export_my_data()`：security definer，把本人数据打包成 JSONB；
+- `delete_my_account()`：security definer 事务——打标记、脱敏署名、清私信/关注/通知/密保。
+
+⏳ 待站主执行 `docs/supabase-account.sql`；执行前注销 / 导出按钮会提示「服务未就绪」。
 
 ## 安全头、域名与监控（第 79 轮 / P1-8）
 

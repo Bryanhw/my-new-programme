@@ -16,7 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root 
 JS_DIR = os.path.join(ROOT, "assets", "js")
 PAGES = ["index.html", "feed.html", "detail.html", "post.html", "login.html", "reset.html",
          "profile.html", "faq.html", "feedback.html", "messages.html", "music.html",
-         "drift.html", "notifications.html", "moderation.html"]
+         "drift.html", "notifications.html", "moderation.html", "privacy.html"]
 PAGE_SCRIPTS = {
     "index.html": "home.js",
     "feed.html": "feed.js",
@@ -32,6 +32,7 @@ PAGE_SCRIPTS = {
     "drift.html": "drift.js",
     "notifications.html": "notifications.js",
     "moderation.html": "moderation.js",
+    "privacy.html": "privacy.js",
 }
 
 failures = []
@@ -68,7 +69,7 @@ for name in js_files:
 EXPECTED_JS = ["app.js", "auth.js", "birthday.js", "boot-diag.js", "campus-picker.js", "campuses.js", "circles.js",
                "config.js", "detail.js", "drift.js", "faq.js", "feed.js", "feedback.js", "home.js",
                "hotwords.js", "messages.js", "moderation.js", "music.js", "notifications.js", "post.js",
-               "profile.js", "reset.js"]
+               "privacy.js", "profile.js", "reset.js"]
 check("the shipped js file set is exactly the expected one", js_files == EXPECTED_JS,
       js_files)
 
@@ -176,7 +177,7 @@ for page in MENU_PAGES:
           'class="nav-btn"' in head and "M4 7h16M4 12h16M4 17h16" in head)
     check("sheet markup inside the header on " + page,
           'class="menu-sheet"' in head and "menu-text" in head)
-    check("10 secondary items on " + page, html.count('class="menu-item"') == 10,
+    check("11 secondary items on " + page, html.count('class="menu-item"') == 11,
           html.count('class="menu-item"'))
     # 第 69 轮：「全部提醒」在登录前面（登录页自己没有登录项，对齐「回到首页」）
     t_notif = head.find('href="notifications.html"')
@@ -4261,6 +4262,72 @@ check("R80/手册: 域名 / 安全头 / uptime 三步齐全",
       and "frame-ancestors 'none'" in _doc
       and "UptimeRobot" in _doc
       and "CNAME" in _doc)
+
+# ---------------------------------------------------------------
+# R81（评审 P1-9）：隐私政策 / 注销账号（软删）/ 数据导出
+# ---------------------------------------------------------------
+print()
+print("R81) P1-9: privacy policy + soft deletion + data export")
+
+_r81_sql = read(os.path.join(ROOT, "docs", "supabase-account.sql"))
+check("R81/SQL: 软删标记 deleted_at 加在 profiles",
+      'alter table public.profiles' in _r81_sql
+      and 'add column if not exists deleted_at timestamptz' in _r81_sql)
+check("R81/SQL: 三个核心 RPC 契约齐全",
+      "is_me_deleted" in _r81_sql
+      and "export_my_data" in _r81_sql
+      and "delete_my_account" in _r81_sql
+      and "security definer" in _r81_sql)
+check("R81/SQL: 注销走事务，帖子评论署名改为「已注销用户」",
+      "delete_my_account" in _r81_sql
+      and "已注销用户" in _r81_sql
+      and "begin;" in _r81_sql.replace("\n\n", " ") or "begin" in _r81_sql)
+
+_r81_pro_html = read(os.path.join(ROOT, "profile.html"))
+_r81_pro_js = read(os.path.join(JS_DIR, "profile.js"))
+check("R81/UI: profile.html 有「我的数据」卡(导出 + 注销 + 确认输入)",
+      'id="acct-export"' in _r81_pro_html
+      and 'id="acct-delete"' in _r81_pro_html
+      and 'id="acct-delete-panel"' in _r81_pro_html
+      and 'id="acct-delete-word"' in _r81_pro_html
+      and 'id="acct-delete-confirm"' in _r81_pro_html
+      and 'id="acct-delete-cancel"' in _r81_pro_html)
+check("R81/UI: 注销要输入「注销」二字才发，成功后登出回首页",
+      'setupAccountCard' in _r81_pro_js
+      and '"export_my_data"' in _r81_pro_js
+      and '"delete_my_account"' in _r81_pro_js
+      and "acctDownloadJSON" in _r81_pro_js
+      and "signOut()" in _r81_pro_js
+      and "index.html" in _r81_pro_js)
+
+_r81_app = sources["app.js"]
+check("R81/app: 已注销账号被登出（is_me_deleted 拦截 + 导出）",
+      "isMeDeleted" in _r81_app
+      and 'rpc("is_me_deleted")' in _r81_app
+      and "isMeDeleted: isMeDeleted" in _r81_app
+      and "此账号已注销，已被登出" in _r81_app)
+
+check("R81/privacy: privacy.html 入清单，有专属脚本",
+      "privacy.html" in PAGES
+      and PAGE_SCRIPTS.get("privacy.html") == "privacy.js"
+      and "privacy.js" in EXPECTED_JS
+      and 'src="assets/js/privacy.js' in read(os.path.join(ROOT, "privacy.html")))
+
+_r81_priv = read(os.path.join(ROOT, "privacy.html"))
+check("R81/privacy: 隐私政策 / 用户协议 / 内容规范 / 注销说明齐全",
+      "隐私政策" in _r81_priv
+      and "用户协议" in _r81_priv
+      and "内容规范" in _r81_priv
+      and "注销" in _r81_priv
+      and "导出" in _r81_priv
+      and "已注销用户" in _r81_priv)
+
+_r81_footer_missing = [
+    p for p in PAGES
+    if 'href="privacy.html"' not in read(os.path.join(ROOT, p))
+]
+check("R81/footer: 每个产品页页脚都链到隐私页",
+      not _r81_footer_missing, _r81_footer_missing)
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
