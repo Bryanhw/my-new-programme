@@ -204,15 +204,22 @@ def build(check_only):
     svg = svg_text()
     png32 = (32, render(32, rounded=True, opaque=False))
     touch = (180, render(180, rounded=False, opaque=True))
+    # 第 81 轮：manifest.webmanifest 需要 192 / 512 两档（Android 主屏 / 启动图）。
+    # 与 apple-touch-icon 同一张不透明图，只是尺寸不同。
+    png192 = (192, render(192, rounded=False, opaque=True))
+    png512 = (512, render(512, rounded=False, opaque=True))
     wanted = [
         (os.path.join(IMG_DIR, "favicon.svg"), svg.encode("utf-8"), 6),
         (os.path.join(IMG_DIR, "favicon-32.png"), None, 32),
         (os.path.join(IMG_DIR, "apple-touch-icon.png"), None, 180),
+        (os.path.join(IMG_DIR, "icon-192.png"), None, 192),
+        (os.path.join(IMG_DIR, "icon-512.png"), None, 512),
     ]
     # 图片走内存比对：--check 时不该产生任何写入
     import tempfile
     tmp = tempfile.mkdtemp(prefix="dw-icons-")
-    for name, (size, rows) in [("favicon-32.png", png32), ("apple-touch-icon.png", touch)]:
+    for name, (size, rows) in [("favicon-32.png", png32), ("apple-touch-icon.png", touch),
+                               ("icon-192.png", png192), ("icon-512.png", png512)]:
         write_png(os.path.join(tmp, name), size, rows, opaque=(name != "favicon-32.png"))
 
     problems = []
@@ -234,8 +241,8 @@ def build(check_only):
                     f.write(payload)
                 written.append(name)
 
-    # 结构自检：位图两张都要能按自己的头部解出来（见 verify_png 里的注释）
-    for name in ("favicon-32.png", "apple-touch-icon.png"):
+    # 结构自检：位图都要能按自己的头部解出来（见 verify_png 里的注释）
+    for name in ("favicon-32.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png"):
         why = verify_png(os.path.join(IMG_DIR, name))
         if why:
             problems.append("%s: %s" % (name, why))
@@ -251,7 +258,8 @@ def build(check_only):
         print("icons regenerated: %s" % ", ".join(written))
     else:
         print("icons already up to date")
-    for name in ("favicon.svg", "favicon-32.png", "apple-touch-icon.png"):
+    for name in ("favicon.svg", "favicon-32.png", "apple-touch-icon.png",
+                 "icon-192.png", "icon-512.png"):
         p = os.path.join(IMG_DIR, name)
         print("  %-22s %7d bytes" % (name, os.path.getsize(p)))
     return 0

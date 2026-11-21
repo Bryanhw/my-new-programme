@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# 功能性页面不必进搜索索引
+Disallow: /moderation.html
+Disallow: /profile.html
+Disallow: /notifications.html
+Disallow: /messages.html
+Disallow: /login.html
+Disallow: /reset.html
+Disallow: /assets/vendor/
+
+Sitemap: https://bryanhw.github.io/my-new-programme/sitemap.xml

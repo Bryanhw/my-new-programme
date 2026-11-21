@@ -1974,6 +1974,25 @@ R34 原本只认「字面量 `padding-bottom: 112px`」，现在认「`calc(` �
 - **八个页面都有**。八页页脚结构完全一致：改文案要八处一起改（别只改一处，
   否则各页说法不一致），新增页面时也要同步补上这一段。
 
+## 兜底页、可安装与首屏可点性（第 81 轮 / P2 收尾）
+
+评审里最后一整条「PWA / 404 / SEO」缺口在这一轮补齐：
+
+- **`404.html`** —— GitHub 默认 404 会直接亮出「There isn't a GitHub Pages site here」。
+  现在由站内页面接管：品牌头、一句「这一页走丢了」、回广场 / 回首页两个出口、页脚与隐私链接。
+  页面带 `<base href="/my-new-programme/">`，因为 404 会在**任意深度的 URL** 下被返回，
+  相对路径会按原路径解析而失效；固定 base 把 `assets/` 与入口都锚回站点根。另有 `robots: noindex`。
+- **`robots.txt`** —— 放开公开页，屏蔽 `profile / notifications / messages / login / reset / moderation`
+  与 `assets/vendor/`，并指向 sitemap。
+- **`sitemap.xml`** —— 8 个公开页，`lastmod` 与本次发布时间一致。
+- **`manifest.webmanifest`** —— `standalone`、主题色 `#CB9243`、`start_url "./"`、192/512 两档图标。
+  `tools/make_icons.py` 同步扩展，`icon-192.png` / `icon-512.png` 与 favicon 同一份几何、可随时重跑生成。
+- **首屏两颗 pill** —— 评审说它们「看着能点却点不动」。本轮把 `<span>` 换成真实链接，
+  点一下直接进发布页，署名还是匿名在那里选；补了 `aria-label`、去下划线、悬停微亮。
+
+页面清单守卫（R45）把 `404.html` 与排障用的 `check.html` 一起排除在产品页之外。
+校验：`static_checks` **1484/0**、`run_tests` **1206/0**、`version_assets --check` OK。
+
 ## License
 
 MIT

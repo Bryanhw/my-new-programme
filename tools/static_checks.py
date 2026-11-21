@@ -3027,8 +3027,10 @@ check("R45: the hint is a real control - pointer, ring on focus, nothing pinned 
       and re.search(r"\.keys-hint-btn:focus-visible\s*\{[^}]*var\(--ring-focus\)", css) is not None,
       "")
 
-# check.html 是线上自检页（排障用），不属于产品页面，不计入页面清单
-_r45_html = sorted(f for f in os.listdir(ROOT) if f.endswith(".html") and f != "check.html")
+# check.html 是线上自检页（排障用）、404.html 是错误兜底页（第 81 轮加上），
+# 两者都不属于产品页面，不计入页面清单
+_r45_html = sorted(f for f in os.listdir(ROOT)
+                   if f.endswith(".html") and f not in ("check.html", "404.html"))
 check("R45: no new page was added for this",
       _r45_html == sorted(PAGES), _r45_html)
 
