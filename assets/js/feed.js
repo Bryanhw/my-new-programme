@@ -185,6 +185,19 @@
     });
   }
 
+  /* 卡片上的「关注」快捷键（app.js 委托）成功后会广播这个事件：
+     关注关系变了，广场缓存的帖子 id 集合就地作废；筛选开着就马上重拉重筛。 */
+  document.addEventListener("campus:follows-changed", function () {
+    followingIds = null;
+    if (onlyFollowing) {
+      loadFollowingIds().then(function (ids) {
+        if (ids === null) { setFollowing(false); return; }
+        followingIds = ids;
+        renderAll();
+      });
+    }
+  });
+
   /** 这批里出现过的话题（按约定顺序）+ 当前选中的那个（外部链接带来的也算） */
   function topicsInBatch() {
     var out = [];

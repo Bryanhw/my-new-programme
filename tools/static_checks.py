@@ -4361,6 +4361,25 @@ check("R82/app: 关注关系与作者编号只在 app.js 里查",
 check("R82/css: 筛选条有样式，hidden 真的隐藏",
       ".follow-bar {" in css_src and ".follow-bar[hidden] { display: none; }" in css_src)
 
+print("R83) 卡片作者区「关注」快捷键（壳在 app.js，匿名墙红线不松）")
+_r83_app = sources["app.js"]
+check("R83/app: 按钮壳随卡片渲染，hidden 占位 + 事件委托，无动态 id",
+      'class="post-follow js-post-follow"' in _r83_app
+      and 'data-uid="' in _r83_app
+      and "paintFollowShortcuts" in _r83_app
+      and "toggleFollowAuthor: toggleFollowAuthor" in _r83_app)
+check("R83/app: 复用既有 follow_user / unfollow_user，成功后广播缓存失效事件",
+      '"follow_user"' in _r83_app and '"unfollow_user"' in _r83_app
+      and "campus:follows-changed" in _r83_app)
+_r83_feed = read(os.path.join(JS_DIR, "feed.js"))
+check("R83/feed.js: 广场只听缓存失效事件，关注关系照旧只在 app.js 查",
+      "campus:follows-changed" in _r83_feed
+      and "follows_public" not in _r83_feed
+      and ".from(" not in _r83_feed)
+check("R83/css: 关注按钮有样式，hidden 真的隐藏",
+      ".post-follow {" in css_src
+      and ".post-follow[hidden] { display: none; }" in css_src)
+
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
 for f in failures:

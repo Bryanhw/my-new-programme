@@ -585,6 +585,90 @@ window.Campus = (function () {
     }).catch(function () { return null; });
   }
 
+  /* 第 82 轮验收反馈：卡片作者区的「关注」快捷键。
+   * 按钮壳由 renderPostCard 渲染（hidden 占位、无动态 id，点击走事件委托），
+   * 状态在这里批刷：每批渲染后防抖扫描一遍「还没显形的按钮」，
+   * 一次查询已知会谁，而不是一卡一查。未登录 / 匿名会话 / 自己发的帖
+   * 保持隐藏；关注关系照旧只在 app.js 里出现，匿名墙不动。 */
+  function paintFollowBtn(btn, following) {
+    btn.hidden = false;
+    btn.setAttribute("data-following", following ? "1" : "0");
+    btn.textContent = following ? "已关注" : "+ 关注";
+    btn.setAttribute("aria-label", following ? "取消关注这位作者" : "关注这位作者");
+  }
+
+  function paintFollowShortcuts() {
+    var btns = document.querySelectorAll("button.js-post-follow[hidden]");
+    if (!btns || !btns.length) return;
+    getProfile().then(function (profile) {
+      if (!profile || !profile.public_uid) return;  // 未登录 / 匿名会话：保持隐藏
+      var uids = [];
+      for (var i = 0; i < btns.length; i++) {
+        var uid = btns[i].getAttribute("data-uid") || "";
+        if (uid && uid !== profile.public_uid && uids.indexOf(uid) < 0) uids.push(uid);
+      }
+      if (!uids.length) return;
+      client.from("follows_public")
+        .select("followee_uid")
+        .eq("follower_uid", profile.public_uid)
+        .in("followee_uid", uids)
+        .then(function (res) {
+          var followed = {};
+          ((res && res.data) || []).forEach(function (r) { followed[r.followee_uid] = 1; });
+          for (var i = 0; i < btns.length; i++) {
+            var b = btns[i];
+            var uid2 = b.getAttribute("data-uid") || "";
+            if (uid2 && uid2 !== profile.public_uid) paintFollowBtn(b, !!followed[uid2]);
+          }
+        })
+        .catch(function () { /* 视图还没建：保持隐藏，不影响阅读 */ });
+    }).catch(function () { /* 配置没就绪：保持隐藏 */ });
+  }
+
+  var followPaintTimer = null;
+  function paintFollowShortcutsSoon() {
+    if (followPaintTimer) clearTimeout(followPaintTimer);
+    followPaintTimer = setTimeout(paintFollowShortcuts, 60);
+  }
+
+  /** 关注 / 取关一个作者（走既有 RPC）。独立导出，方便测试与将来复用。 */
+  function toggleFollowAuthor(uid, following) {
+    if (!client) return Promise.reject(new Error("配置没就绪"));
+    return client.rpc(following ? "unfollow_user" : "follow_user", { p_followee_uid: uid })
+      .then(function (r) {
+        if (r && r.error) throw new Error((r.error && r.error.message) || "操作失败");
+        return true;
+      });
+  }
+
+  /* 点击委托：按钮在重渲染时会整批重建，所以不用一卡一绑。
+   * 成功后广播 campus:follows-changed，广场的「只看关注」缓存据此失效。 */
+  (function bindFollowShortcut() {
+    document.addEventListener("click", function (e) {
+      var t = e.target;
+      var btn = t && t.closest ? t.closest("button.js-post-follow") : null;
+      if (!btn || btn.hidden || btn.getAttribute("data-busy") === "1") return;
+      var uid = btn.getAttribute("data-uid") || "";
+      if (!uid) return;
+      var following = btn.getAttribute("data-following") === "1";
+      btn.setAttribute("data-busy", "1");
+      toggleFollowAuthor(uid, following)
+        .then(function () {
+          btn.removeAttribute("data-busy");
+          paintFollowBtn(btn, !following);
+          announce(following ? "已取消关注" : "已关注");
+          try {
+            document.dispatchEvent(new CustomEvent("campus:follows-changed",
+              { detail: { uid: uid, following: !following } }));
+          } catch (err) { /* 老浏览器不支持 CustomEvent：状态已更新，事件可缺 */ }
+        })
+        .catch(function (err) {
+          btn.removeAttribute("data-busy");
+          announce("没成功：" + ((err && err.message) || "网络或服务暂时不可用"));
+        });
+    });
+  })();
+
   /* 给一批帖子标上「这条是我发的」（is_mine）。
    * 判定走视图 my_posts：真实库里由 auth.uid() 在服务端过滤，未登录查得空集
    * 所以全是 false；视图/迁移没跑时查询会失败，这里同样降级成全 false
@@ -3025,6 +3109,13 @@ window.Campus = (function () {
       // 私信页自己会提示先登录，不会漏发。
       html += '<a class="post-dm" href="messages.html?with=' + authorUid +
         '" aria-label="给这个作者发私信">私信</a>';
+      // 第 82 轮验收反馈：作者区再给一个「关注」快捷键，与「私信」同排。
+      // 先渲染成隐藏占位，状态由 paintFollowShortcuts 防抖批刷（登录 / 非本人才显示）；
+      // 匿名帖 author_public_uid 恒 null，这里同样不出现，匿名墙不动。
+      html += '<button type="button" class="post-follow js-post-follow" data-uid="' +
+        escapeHtml(post.author_public_uid) + '" data-following="0" hidden></button>';
+      // 整批卡片渲染完后由防抖器统一批刷一次状态（60ms 合批）
+      paintFollowShortcutsSoon();
     }
     html += "</div>";
     html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + "</div>";
@@ -4254,6 +4345,7 @@ window.Campus = (function () {
     // V5-4：关注/取关等轻量操作用的提示条（announce 的别名，语义更短）
     toast: announce,
     attachAuthors: attachAuthors,
+  toggleFollowAuthor: toggleFollowAuthor,
     // 第 82 轮：广场「只看关注」的帖子 id 集合（关注关系只在这里查）
     listFollowingPostIds: listFollowingPostIds,
     anonCodeOf: anonCodeOf,

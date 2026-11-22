@@ -4121,6 +4121,28 @@ js(it, "__r = {}; Campus.client().rpc('my_public_uid').then(function (r) { __r.d
 check("an anonymous account has no public uid (my_public_uid is null)",
       js(it, "__r.d") is None, js(it, "__r.d"))
 
+print("- R83: follow shortcut toggle reuses the same RPCs")
+it = load("feed.html", "mock-logged")
+ev(it, M1_SEED)
+js(it, "__r = {}; Campus.toggleFollowAuthor('xyz789', false)"
+       ".then(function(v){ __r.v = v; }, function(e){ __r.err = String(e.message); });")
+check("toggleFollowAuthor follows via follow_user",
+      ["rpc", "follow_user"] in json.loads(js(it, "JSON.stringify(__calls)"))
+      and js(it, "__r.v") is True,
+      js(it, "__r.err"))
+js(it, "__r = {}; Campus.toggleFollowAuthor('xyz789', true)"
+       ".then(function(v){ __r.v = v; }, function(e){ __r.err = String(e.message); });")
+check("toggleFollowAuthor unfollows via unfollow_user",
+      ["rpc", "unfollow_user"] in json.loads(js(it, "JSON.stringify(__calls)"))
+      and js(it, "__r.v") is True,
+      js(it, "__r.err"))
+_r83_it = load("feed.html", "mock-logged", pre="__mockOpts.rpcMissing = true;")
+js(_r83_it, "__r = {}; Campus.toggleFollowAuthor('xyz789', false)"
+            ".then(function(v){ __r.v = v; }, function(e){ __r.err = String(e.message); });")
+check("missing rpc fails loudly, not silently",
+      js(_r83_it, "__r.v") is None and str(js(_r83_it, "__r.err")) != "None",
+      js(_r83_it, "__r.err"))
+
 print("- M1: follow_user enforces the red lines (public only, no self, must exist)")
 it = load("feed.html", "mock-logged")
 ev(it, M1_SEED)

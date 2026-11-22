@@ -3283,6 +3283,31 @@ body.modal-open { overflow: hidden; }
 }
 .post-dm:hover { text-decoration: none; filter: brightness(0.96); }
 
+/* 第 82 轮验收反馈：卡片作者区的「关注」快捷键 —— 与「私信」同排的浅胶囊。
+   按钮壳随卡片渲染（hidden 占位），状态由 app.js 防抖批刷：登录 / 非本人才显形。 */
+.post-follow {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--brand-text);
+  background: var(--brand-ghost);
+  border: 1px solid var(--brand-soft);
+  border-radius: 999px;
+  vertical-align: baseline;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.post-follow:hover { filter: brightness(0.96); }
+.post-follow[hidden] { display: none; }
+.post-follow[data-following="1"] {
+  color: var(--ink-soft);
+  background: transparent;
+  border-color: transparent;
+}
+
 /* 公开主页：头部横向排布（左头像，右昵称+@UID/学校） */
 .public-head {
   display: flex;
