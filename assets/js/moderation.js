@@ -119,6 +119,13 @@
 
   function queueCard(p) {
     var reps = p.report_open ? ' · <b>' + p.report_open + " 条待处理举报</b>" : "";
+    var aiLabel = { pass: "通过", flag: "存疑", reject: "建议驳回" };
+    var ai = p.ai_verdict
+      ? ' · <span class="mod-ai' +
+        (p.ai_verdict === "pass" ? " ok" : p.ai_verdict === "reject" ? " bad" : "") +
+        '" title="' + esc(p.ai_reason || "AI 没有写理由") + '">AI 预审（文字）：' +
+        esc(aiLabel[p.ai_verdict] || p.ai_verdict) + "</span>"
+      : "";
     var img = p.image_path
       ? '<img class="mod-img" src="' + esc(C.imageUrl ? C.imageUrl(p.image_path) : p.image_path) +
         '" alt="这条分享配的图" loading="lazy">'
@@ -132,7 +139,7 @@
       "</div>" +
       '<p class="mod-body">' + esc((p.content || "").slice(0, 220)) + "</p>" +
       img +
-      '<div class="mod-meta">' + badge(p.status) + reps +
+      '<div class="mod-meta">' + badge(p.status) + reps + ai +
         (p.reject_reason ? " · 上次驳回：" + esc(p.reject_reason) : "") +
       "</div>" +
       '<div class="mod-acts">' +
@@ -183,7 +190,8 @@
   function auditRow(a) {
     var what = {
       approve: "通过", reject: "驳回", restore: "打回待审",
-      appeal_submit: "提交申诉", appeal_accept: "受理申诉", appeal_reject: "驳回申诉"
+      appeal_submit: "提交申诉", appeal_accept: "受理申诉", appeal_reject: "驳回申诉",
+      ai_review: "AI 预审"
     }[a.action] || a.action;
     return '<div class="mod-log">' +
       '<span class="mod-log-time">' + when(a.created_at) + "</span>" +

@@ -3918,6 +3918,9 @@ body.modal-open { overflow: hidden; }
 .mod-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; background: rgba(203, 146, 67, 0.14); font-size: var(--fs-xs); }
 .mod-badge.ok { background: rgba(77, 140, 92, 0.16); }
 .mod-badge.bad { background: rgba(178, 72, 72, 0.14); }
+.mod-ai { display: inline-block; padding: 1px 8px; border-radius: 999px; background: rgba(88, 116, 165, 0.14); font-size: var(--fs-xs); cursor: help; }
+.mod-ai.ok { background: rgba(77, 140, 92, 0.16); }
+.mod-ai.bad { background: rgba(178, 72, 72, 0.14); }
 .mod-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .mod-reasons { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--ink-line); display: flex; flex-wrap: wrap; gap: 8px; }
 .mod-chip { border: 1px solid var(--ink-line); background: transparent; border-radius: 999px; padding: 6px 12px; font-size: var(--fs-xs); cursor: pointer; color: var(--ink-soft); }
