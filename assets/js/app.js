@@ -232,6 +232,10 @@ window.Campus = (function () {
     if (!isValidPhone(phone)) return Promise.reject(new Error("请输入 11 位手机号"));
     if (!password || password.length < 8) return Promise.reject(new Error("密码至少 8 位"));
     if (!school || !school.trim()) return Promise.reject(new Error("请填写学校名称"));
+    // 第 82 轮验收反馈：昵称 15 字上限，注册入口先挡一遍（卡片展示另有省略号兜底）
+    if (nickname && nickname.trim().length > 15) {
+      return Promise.reject(new Error("昵称最多 15 个字"));
+    }
 
     return client.auth.signUp({
       email: phoneToEmail(phone),
@@ -3091,34 +3095,38 @@ window.Campus = (function () {
     html += '<div class="post-head">';
     html += avatarHtml(post);
     html += '<div class="post-meta">';
-    html += '<div class="post-name">' + postNameHtml(post, name);
+    // 第 82 轮验收反馈：昵称包进 post-name-text —— flex 行里唯一可收缩项，
+    // 长昵称出省略号而不是把后面的入口挤出去；老数据超长也照裁。
+    html += '<div class="post-name">' +
+      '<span class="post-name-text">' + postNameHtml(post, name) + "</span>";
     html += statusTag(post.status);
+    var authorUid = post.author_public_uid
+      ? encodeURIComponent(post.author_public_uid) : null;
     // V5-4：非匿名帖的作者公开UID入口（attachAuthors 从 post_authors_public 取）
     // —— 匿名帖 author_public_uid 恒为 null，这里自然不出现，匿名墙不动。
-    if (post.author_public_uid) {
-      var authorUid = encodeURIComponent(post.author_public_uid);
+    if (authorUid) {
       // 第 63 轮：GitHub Pages 给 HTML 发的 Cache-Control 是 max-age=600，
       // 发版后点进来还是旧页（旧页又引用旧 JS），于是「修了也看不到」。
       // 带上时间戳参数，每次点击都绕过 HTML 缓存，拿到当前线上页。
       html += '<a class="post-author-uid" href="profile.html?uid=' +
         authorUid + '&r=' + Date.now() +
         '" aria-label="进入发布者主页">@' + escapeHtml(post.author_public_uid) + '</a>';
-      // 第 62 轮：作者区直接给一个「私信」入口（参考小红书 / B 站）——
-      // 不用先进主页再点「发私信」。匿名帖 author_public_uid 恒 null，
-      // 这里同样不出现，匿名墙一动不动；点进去若未登录 / 未实名，
-      // 私信页自己会提示先登录，不会漏发。
-      html += '<a class="post-dm" href="messages.html?with=' + authorUid +
-        '" aria-label="给这个作者发私信">私信</a>';
-      // 第 82 轮验收反馈：作者区再给一个「关注」快捷键，与「私信」同排。
-      // 先渲染成隐藏占位，状态由 paintFollowShortcuts 防抖批刷（登录 / 非本人才显示）；
-      // 匿名帖 author_public_uid 恒 null，这里同样不出现，匿名墙不动。
-      html += '<button type="button" class="post-follow js-post-follow" data-uid="' +
-        escapeHtml(post.author_public_uid) + '" data-following="0" hidden></button>';
       // 整批卡片渲染完后由防抖器统一批刷一次状态（60ms 合批）
       paintFollowShortcutsSoon();
     }
     html += "</div>";
-    html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + "</div>";
+    // 第 82 轮验收反馈：「私信 / 关注」从名字行挪到学校 · 时间行末尾右对齐
+    // —— 名字行只留昵称（可收缩省略）+ 状态标签 + @洞号，再长的昵称也盖不住入口；
+    // 匿名帖两个入口照旧不出现，匿名墙一动不动；未登录 / 未实名点私信，
+    // 私信页自己会提示先登录。
+    var subExtra = "";
+    if (authorUid) {
+      subExtra += '<a class="post-dm" href="messages.html?with=' + authorUid +
+        '" aria-label="给这个作者发私信">私信</a>';
+      subExtra += '<button type="button" class="post-follow js-post-follow" data-uid="' +
+        escapeHtml(post.author_public_uid) + '" data-following="0" hidden></button>';
+    }
+    html += '<div class="post-sub">' + meta.map(function (x) { return "<span>" + x + "</span>"; }).join("<span>·</span>") + subExtra + "</div>";
     html += "</div>";                       // 关 .post-meta
     html += moreMenuHtml(post);             // F1：「⋯」在卡片右上角
     html += "</div>";                       // 关 .post-head
@@ -3397,14 +3405,14 @@ window.Campus = (function () {
    * 保存昵称（注册用户和匿名访客都能用：RLS 的 profiles_update_self 只允许改自己那一行）
    * 保存成功后顺带调用数据库函数 sync_my_display_name，把本人历史帖子 / 评论的
    * 署名刷成新昵称（只改自己、不动匿名内容；函数还没部署时忽略失败，不影响改名本身）。
-   * @param {string} nickname 最多 20 个字，空字符串表示清空
+   * @param {string} nickname 最多 15 个字，空字符串表示清空
    * @returns {Promise<{name: string, synced: number|null}>}
    */
   function saveNickname(nickname) {
     if (!client) return Promise.reject(new Error(configError));
 
     var name = String(nickname == null ? "" : nickname).trim();
-    if (name.length > 20) return Promise.reject(new Error("昵称最多 20 个字"));
+    if (name.length > 15) return Promise.reject(new Error("昵称最多 15 个字"));
 
     return getIdentity().then(function (id) {
       if (!id.user) throw new Error("请先登录或匿名进入，再设置昵称");

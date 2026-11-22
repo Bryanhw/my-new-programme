@@ -961,8 +961,8 @@
     C.hideNotice(noticeEl);
 
     var value = nickInput.value.trim();
-    if (value.length > 20) {
-      C.showNotice(noticeEl, "warn", "昵称最多 20 个字");
+    if (value.length > 15) {
+      C.showNotice(noticeEl, "warn", "昵称最多 15 个字");
       return;
     }
 

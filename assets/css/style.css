@@ -1006,12 +1006,31 @@ main:focus { outline: none; }
   text-overflow: ellipsis;
 }
 
+/* 第 82 轮验收反馈：昵称本体是 flex 行里唯一可收缩项 —— 长昵称出省略号，
+   状态标签与 @洞号 是不收缩项，始终完整可见（老数据超长也照裁）。 */
+.post-name .post-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.post-name .tag,
+.post-name .post-author-uid {
+  flex: none;
+}
+
 .post-sub {
   font-size: var(--fs-sm);
   color: var(--text-faint);
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* 第 82 轮验收反馈：私信 / 关注入口挂在 meta 行末尾右对齐 ——
+   名字行只留身份信息，再长的昵称也盖不住入口；匿名帖不渲染，行高不变。 */
+.post-sub .post-dm {
+  margin-left: auto;
 }
 
 .tag {

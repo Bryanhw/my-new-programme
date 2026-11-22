@@ -544,6 +544,20 @@ def run_b():
     check("no timer errors", json.loads(js(it, "JSON.stringify(__logs)")) == [],
           json.loads(js(it, "JSON.stringify(__logs)")))
 
+    print("- nickname length guard (R84: 15 chars max)")
+    NICK16 = "昵" * 16
+    _r84_it = it
+    js(_r84_it, "document.getElementById('nickname-input').value = '" + NICK16 + "';"
+                "document.getElementById('nickname-form').dispatch('submit',"
+                " { target: document.getElementById('nickname-form'), preventDefault: function(){} });")
+    check("16-char nickname is rejected by the form",
+          js(_r84_it, "__mockOpts.store.profiles[0].nickname") == "NewNick",
+          js(_r84_it, "__mockOpts.store.profiles[0].nickname"))
+    js(_r84_it, "__r = {}; Campus.signUp('13900000000', 'secret12', '测试大学', '" + NICK16 + "')"
+                ".then(function(v){ __r.v = v; }, function(e){ __r.err = String(e.message); });")
+    check("16-char nickname at signup is rejected",
+          "15" in str(js(_r84_it, "__r.err")), js(_r84_it, "__r.err"))
+
     print("- anon session behaviour")
     it = load("profile.html", "mock-anon")
     check("anon tip visible", js(it, "document.getElementById('anon-tip').hidden") is False)

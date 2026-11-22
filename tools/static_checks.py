@@ -2390,8 +2390,18 @@ check("R33: 钢印用的是字号令牌", "font-size: var(--fs-xs)" in _stamp)
 check("R33: 钢印不能被选中（它是编号，不是正文）", "user-select: none" in _stamp)
 
 # 卡片署名：编号包一层 span，但文字仍然来自 anonName（S1 红线不动）
+# R84 起昵称本体另包 post-name-text（可收缩省略），这里只锁「署名走 postNameHtml、
+# 且在名字行容器里、先于状态标签」的意图，不再锁拼接的行形式。
+# 切片限定在 renderPostCard 内 —— postNameHtml(post, name) 在函数定义处也会出现，
+# 全局 find 会误拿定义行。
+_r33_card_a = appjs.find("function renderPostCard")
+_r33_card_b = appjs.find("moreMenuHtml(post)", _r33_card_a)
+_r33_card = appjs[_r33_card_a:_r33_card_b] if (_r33_card_a != -1 and _r33_card_b != -1) else ""
 check("R33: 卡片署名走 postNameHtml",
-      "html += '<div class=\"post-name\">' + postNameHtml(post, name);" in appjs)
+      '<div class="post-name">' in _r33_card
+      and "postNameHtml(post, name)" in _r33_card
+      and _r33_card.find("postNameHtml(post, name)") > _r33_card.find('<div class="post-name">')
+      and _r33_card.find('<div class="post-name">') < _r33_card.find("statusTag(post.status)"))
 check("R33: postNameHtml 只包编号，不另造写法",
       'text.lastIndexOf("#")' in appjs and "/^[0-9A-Za-z]{3,12}$/" in appjs)
 check("R33: anonName 仍然返回纯文本（举报回执还要用）",
@@ -4379,6 +4389,36 @@ check("R83/feed.js: 广场只听缓存失效事件，关注关系照旧只在 ap
 check("R83/css: 关注按钮有样式，hidden 真的隐藏",
       ".post-follow {" in css_src
       and ".post-follow[hidden] { display: none; }" in css_src)
+
+print("R84) 卡片头改版：昵称 15 字上限 + 私信/关注挪到 meta 行")
+_r84_app = sources["app.js"]
+_r84_a = _r84_app.find("function renderPostCard")
+_r84_b = _r84_app.find("moreMenuHtml(post)", _r84_a)
+_r84_card = _r84_app[_r84_a:_r84_b] if (_r84_a != -1 and _r84_b != -1) else ""
+check("R84/app: 昵称本体包进可收缩省略号容器（老数据超长也照裁）",
+      "post-name-text" in _r84_card
+      and _r84_card.find("post-name-text") < _r84_card.find("statusTag(post.status)"))
+check("R84/app: 名字行不再放私信/关注，两个入口挂在 post-sub 行",
+      'post-sub">' in _r84_card and "+ subExtra +" in _r84_card
+      and "post-dm" in _r84_card and "js-post-follow" in _r84_card
+      and _r84_card[:_r84_card.find("var subExtra")].find("post-dm") == -1
+      and _r84_card[:_r84_card.find("var subExtra")].find("js-post-follow") == -1)
+check("R84/app: 昵称 15 字上限在注册与改名两条路径都挡住",
+      "nickname.trim().length > 15" in _r84_app
+      and "name.length > 15" in _r84_app
+      and "昵称最多 15 个字" in _r84_app)
+_r84_login = read(os.path.join(ROOT, "login.html"))
+_r84_prof = read(os.path.join(ROOT, "profile.html"))
+check("R84/html: 两个昵称输入框 maxlength 都是 15（旧 20 清干净）",
+      'maxlength="15"' in _r84_login and 'maxlength="15"' in _r84_prof
+      and 'maxlength="20"' not in _r84_login and 'maxlength="20"' not in _r84_prof)
+check("R84/css: 昵称收缩省略 + 标签/洞号不收缩 + 私信右对齐",
+      ".post-name .post-name-text" in css_src
+      and "text-overflow: ellipsis" in css_src.split(".post-name .post-name-text")[1][:200]
+      and ".post-name .tag," in css_src
+      and ".post-sub .post-dm" in css_src)
+check("R84/profile.js: 表单侧 15 字校验同步",
+      "value.length > 15" in read(os.path.join(JS_DIR, "profile.js")))
 
 print()
 print("checks run: %d   failures: %d" % (checks[0], len(failures)))
